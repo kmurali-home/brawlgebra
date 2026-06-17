@@ -1,0 +1,14 @@
+# Render Blueprint — hosts the BRAWLGEBRA online relay.
+# It serves the game over HTTP *and* relays netplay over WebSocket on one URL,
+# so you + friends just open the Render URL and enter a room code.
+#
+# Deploy: Render dashboard → New + → Blueprint → connect this GitHub repo → Apply.
+# Free tier works (the service spins down when idle, ~30–60s cold start on first hit).
+services:
+  - type: web
+    name: brawlgebra-relay
+    runtime: node
+    plan: free
+    buildCommand: "true"          # zero-dependency server — nothing to install or build
+    startCommand: "node netserver.js"
+    # Render sets PORT automatically; netserver.js reads process.env.PORT.
