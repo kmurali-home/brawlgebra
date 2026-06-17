@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+
+# desktop build (Tauri)
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# os / editor
+.DS_Store
+*.log

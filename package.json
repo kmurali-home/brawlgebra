@@ -1,0 +1,20 @@
+{
+  "name": "mental-kombat",
+  "version": "1.0.0",
+  "description": "Brawlgebra — a math-powered fighting game with online 5-player rumble.",
+  "private": true,
+  "scripts": {
+    "start": "node netserver.js",
+    "prep": "node scripts/prep-dist.js",
+    "tauri": "tauri",
+    "desktop:dev": "npm run prep && tauri dev",
+    "desktop:build": "npm run prep && tauri build",
+    "desktop:icon": "tauri icon assets/app-icon.png"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2"
+  }
+}
