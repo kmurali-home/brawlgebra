@@ -722,10 +722,11 @@ const DIFF = {
   taglines:['arithmetic warm-up','mental-math sprint','algebra · fractions · negatives'],
   set(n){ this.level=n; SFX.ui(); },
   cpu(){ const lv=(game.mode==='story'&&game.cpuTier!=null)?game.cpuTier:this.level; return [
-    {telMul:1.5, cool:[110,180], dmgMul:0.75, speed:1.4, blockP:0.10, regen:0.10, punishP:0.30, baitP:0.00, burstP:0.20},
-    {telMul:1.0, cool:[70,130],  dmgMul:1.0,  speed:1.9, blockP:0.22, regen:0.17, punishP:0.58, baitP:0.05, burstP:0.42},
-    {telMul:0.65,cool:[45,90],   dmgMul:1.3,  speed:2.4, blockP:0.40, regen:0.26, punishP:0.85, baitP:0.10, burstP:0.64},
-    {telMul:0.58,cool:[42,84],   dmgMul:1.3,  speed:2.5, blockP:0.44, regen:0.27, punishP:0.88, baitP:0.11, burstP:0.68},  // TIER 3 — the climactic foes (Overflow, the Equals) press harder; math stays at the chapter's level for fairness
+    // react = frames of reaction lag (lower = faster = harder, more punishing); burstReact = frames you can combo before it breaks out; baitP = chance to feint
+    {telMul:1.5, cool:[110,180], dmgMul:0.75, speed:1.4, regen:0.10, react:20, burstReact:999, baitP:0.00},
+    {telMul:1.0, cool:[70,130],  dmgMul:1.0,  speed:1.9, regen:0.17, react:13, burstReact:40,  baitP:0.05},
+    {telMul:0.65,cool:[45,90],   dmgMul:1.3,  speed:2.4, regen:0.26, react:8,  burstReact:22,  baitP:0.10},
+    {telMul:0.58,cool:[42,84],   dmgMul:1.3,  speed:2.5, regen:0.27, react:6,  burstReact:14,  baitP:0.12},  // TIER 3 — the climactic foes (Overflow, the Equals) react fastest; math stays at the chapter's level for fairness
   ][lv]; },
 };
 // Escalating math: tier grows with difficulty AND within a round (heat), unlocking
@@ -2127,16 +2128,37 @@ function controlCPU(c){
   if(!p){ c.moveX=0; return; }
   c.dmgMul = cfg.dmgMul*c.char.dmg; // persona power × difficulty
   c.moveX = 0; c.wantBlock = c.blockHold>0;
-  if((c.comboedHits||0)>=2 && c.stun>0 && Math.random()<cfg.burstP && c.burst()) return;  // contest the player's combo
+  // COMBO ESCAPE — once you've chained it a few hits, the foe breaks out after a difficulty-scaled window (learnable: you learn how long YOUR combo lasts before it bursts)
+  if((c.comboedHits||0)>=2 && c.stun>0){
+    c.burstT=(c.burstT||0)+1;
+    if(c.burstT>=cfg.burstReact && c.burst()){ c.burstT=0; return; }
+  } else c.burstT=0;
   // MATH-ECONOMY MIRROR — when disengaged + low on aura the CPU stops to "solve" (a visible, whiff-punishable refuel beat you can rush)
   if(c.thinkT>0){ c.thinkT--; c.moveX=0; if(c.thinkT<=0){ c.addAura(30); floatText(c.x,c.y-150,'+ SOLVED','#7ae8ff',13); } return; }
   if(!c.canAct()) return;
   const dist = Math.abs(p.x-c.x), dir = p.x>c.x?1:-1;
   if(dist>180 && c.aura<50 && c.aiThink>16 && c.grounded && Math.random()<0.014){ c.thinkT=30; c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }
   c.aiThink--;
-  // shield reaction to the player's startup
-  if(p.attack && (p.attack.ph==='wind') && dist<130 && c.blockHold<=0 && Math.random()<cfg.blockP)
-    c.blockHold = rnd(14,26);
+  const canAfford = t => Math.round(ATK[t].cost*c.char.costMul)<=c.aura;
+  const pRec  = p.attack && p.attack.ph==='rec';
+  const pWind = p.attack && p.attack.ph==='wind';
+  // ── REACTION ENGINE — the foe RESPONDS to your real frames after a difficulty-scaled delay, then acts reliably.
+  //    Learnable & conditionable: a fast enough attack beats its block; spacing so it whiffs the punish; baiting its block with a feint. NOT a coin-flip. ──
+  let opening=null;
+  if(!p.grounded && p.vy>0.4 && dist<122 && c.grounded) opening='antiair';                 // jump-in falling into range
+  else if(pRec && dist<128 && c.grounded) opening='punish';                                 // committed/whiffed in range = free punish
+  else if(pWind && dist<142 && c.grounded && c.blockHold<=0) opening='block';               // your startup → put up a guard
+  if(opening){
+    if(c.reactKind!==opening){ c.reactKind=opening; c.reactT = (opening==='antiair'? Math.max(2,cfg.react-4) : cfg.react); }
+    else if(c.reactT>0) c.reactT--;
+  } else { c.reactKind=null; c.reactT=0; }
+  if(c.reactKind && c.reactT<=0 && c.grounded){
+    const k=c.reactKind; c.reactKind=null;
+    if(k==='block'){ c.blockHold=rnd(16,28); c.wantBlock=true; return; }                     // reliably guards once it reads your startup — frame-trap it or stagger your timing
+    if(k==='antiair' && canAfford('kick')){ c.cpuAttack('kick',Math.round(28*Math.max(0.55,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); c.addAura(cfg.regen); return; }
+    if(k==='punish'){ let type=dist>92?'kick':'punch'; if(!canAfford(type)) type='punch';
+      if(canAfford(type)){ c.cpuAttack(type,Math.round((type==='punch'?24:32)*Math.max(0.5,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); c.addAura(cfg.regen); return; } }
+  }
   if(c.blockHold>0) return;
   const hidden = isConcealed(p,c);
   // scavenge: contest pickups when hungry and closer than the player
@@ -2152,12 +2174,7 @@ function controlCPU(c){
     if((seek.gy||GROUND)<GROUND-40 && Math.abs(seek.x-c.x)<90 && c.grounded){ c.vy=-12.4; c.grounded=false; }
     c.addAura(cfg.regen*(hidden?2.2:1)); return;
   }
-  if(hidden){ // lost sight — stalk slowly, bank aura double-time
-    c.moveX = dir*0.10*cfg.speed;
-    hopCover(c);
-    c.addAura(cfg.regen*2.2);
-    return;
-  }
+  if(hidden){ c.moveX = dir*0.10*cfg.speed; hopCover(c); c.addAura(cfg.regen*2.2); return; }  // lost sight — stalk slowly, bank aura double-time
   // spacing
   if(dist>125) c.moveX = dir*0.22*cfg.speed;
   else if(dist<68) c.moveX = -dir*0.16*cfg.speed;
@@ -2168,66 +2185,36 @@ function controlCPU(c){
     let stepPf=null;
     for(const pf of PLATFORMS)
       if(pf.y<c.y-20 && pf.y>c.y-130 && (!stepPf || Math.abs(pf.x-c.x)<Math.abs(stepPf.x-c.x))) stepPf=pf;
-    if(stepPf){
-      c.moveX=(stepPf.x>c.x?1:-1)*0.25*cfg.speed;
-      if(Math.abs(stepPf.x-c.x)<70){ c.vy=-12.4; c.grounded=false; }
-    }
+    if(stepPf){ c.moveX=(stepPf.x>c.x?1:-1)*0.25*cfg.speed; if(Math.abs(stepPf.x-c.x)<70){ c.vy=-12.4; c.grounded=false; } }
   }
-  // ── fighting-game brain: read what the player is DOING, don't just throw telegraphs ──
-  const pRec  = p.attack && p.attack.ph==='rec';
-  const pWind = p.attack && p.attack.ph==='wind';
-  const canAfford = t => Math.round(ATK[t].cost*c.char.costMul)<=c.aura;
-  // 1) WHIFF-PUNISH — player stuck in recovery within range = a free hit (reacts, bypasses the cooldown)
-  if(pRec && dist<120 && c.grounded && Math.random()<cfg.punishP){
-    let type = dist>90?'kick':'punch'; if(!canAfford(type)) type='punch';
-    if(canAfford(type)){
-      c.cpuAttack(type, Math.round((type==='punch'?26:34)*Math.max(0.5,cfg.telMul)));   // quicker than a neutral poke
-      c.aiThink = rnd(cfg.cool[0], cfg.cool[1]); c.addAura(cfg.regen); return;
-    }
-  }
-  // 2) ANTI-AIR — player is falling into range, meet the jump-in with a kick
-  if(!p.grounded && p.vy>0.4 && dist<120 && c.grounded && canAfford('kick')){
-    c.cpuAttack('kick', Math.round(30*Math.max(0.55,cfg.telMul)));
-    c.aiThink = rnd(cfg.cool[0], cfg.cool[1]); c.addAura(cfg.regen); return;
-  }
-  // 3) HARD pressure — if the player just burned a solve-dodge, a fast strike beats the cooldown: they must BLOCK
-  if(DIFF.level>=2 && dist<140 && c.aiThink<=0 && p.dodgeCd>12 && c.grounded && Math.random()<0.5){
-    let type = Math.random()<0.6?'punch':'kick'; if(!canAfford(type)) type='punch';
-    if(canAfford(type)){
-      c.cpuAttack(type, type==='punch'?18:26);   // near true-speed — no time to math-dodge, block or eat it
-      c.aiThink = rnd(cfg.cool[0], cfg.cool[1]); c.addAura(cfg.regen); return;
-    }
-  }
-  // 4) SHIMMY BAIT — sometimes dance out of the player's startup to bait the whiff, then punish next beat
+  // FEINT — occasionally step out of your startup to bait a whiff, then punish next beat (a mix-up, kept unpredictable on purpose)
   if(pWind && dist<120 && dist>66 && c.grounded && Math.random()<cfg.baitP){
     c.moveX = -dir*0.34*cfg.speed; hopCover(c); c.addAura(cfg.regen); return;
   }
+  // HARD pressure — if you just spent a solve-dodge, a fast strike beats the cooldown: you must BLOCK (a deterministic punish on the dodge window)
+  if(DIFF.level>=2 && dist<140 && c.aiThink<=0 && p.dodgeCd>12 && c.grounded){
+    let type = (c.char.dmg||1)>=1.08?'kick':'punch'; if(!canAfford(type)) type='punch';
+    if(canAfford(type)){ c.cpuAttack(type, type==='punch'?18:26); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]); c.addAura(cfg.regen); return; }
+  }
   // ranged personas open fire from distance (lance/sigil kits)
   const ranged = c.char.spKind==='spear'||c.char.spKind==='sigil';
-  if(ranged && c.aiThink<=0 && dist>=150 && dist<520 && c.aura>=Math.round(ATK.special.cost*c.char.costMul) && Math.random()<0.6){
-    c.cpuAttack('special', Math.round(80*cfg.telMul));
-    SFX.charge();
-    c.aiThink = rnd(cfg.cool[0]+30, cfg.cool[1]+40);
+  if(ranged && c.aiThink<=0 && dist>=150 && dist<520 && c.aura>=Math.round(ATK.special.cost*c.char.costMul)){
+    c.cpuAttack('special', Math.round(80*cfg.telMul)); SFX.charge(); c.aiThink = rnd(cfg.cool[0]+30, cfg.cool[1]+40);
   }
-  // commit to an attack — always telegraphed (the player's math window). WEIGHTED BY ARCHETYPE so each foe plays differently
-  // instead of a uniform coin-flip: zoners favor specials, brutes favor heavy kicks, technicians jab.
+  // commit to an attack on cadence — always telegraphed (your math window). The CHOICE of move varies by archetype for variety.
   if(c.aiThink<=0 && dist<150){
-    const ranged = c.char.spKind==='spear'||c.char.spKind==='sigil';
-    const spChance = ranged?0.62 : c.char.spKind==='slam'?0.5 : 0.38;
+    const rngd = c.char.spKind==='spear'||c.char.spKind==='sigil';
+    const spChance = rngd?0.62 : c.char.spKind==='slam'?0.5 : 0.38;
     const kickChance = (c.char.dmg||1)>=1.08?0.58:0.4;   // heavy hitters lean on the longer, harder kick
     if(c.aura>=Math.round(ATK.special.cost*c.char.costMul) && Math.random()<spChance){
-      c.cpuAttack('special', Math.round(95*cfg.telMul));
-      SFX.charge();
-      c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
+      c.cpuAttack('special', Math.round(95*cfg.telMul)); SFX.charge(); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
     } else {
       let type = Math.random()<kickChance?'kick':'punch';
       if(Math.round(ATK[type].cost*c.char.costMul)>c.aura) type='punch'; // save up when broke
-      c.cpuAttack(type, Math.round((type==='punch'?48:66)*cfg.telMul));
-      c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
+      c.cpuAttack(type, Math.round((type==='punch'?48:66)*cfg.telMul)); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
     }
   }
-  // CHAOS regenerates aura innately; you have to earn yours with math
-  c.addAura(cfg.regen);
+  c.addAura(cfg.regen);   // CHAOS regenerates aura innately; you earn yours with math
 }
 function hopCover(c){ // jump cover that blocks the path
   if(!c.grounded || !c.moveX) return;
@@ -4290,8 +4277,8 @@ function wrapLines(s,maxW){
 const CS_SPEED=0.62;   // characters revealed per frame (typewriter)
 function lineSpeed(line){ return CS_SPEED*((line&&line.slow)||1); }   // a line can type slower (line.slow<1) for weight
 const SCENE_TINT={ monastery:['#0b0a12','#15100a','#1d140b'], difference:['#06101a','#0a1a26','#0e2230'], schism:['#08060f','#0f0a1c','#170f28'],
-  overflow:['#130406','#20070a','#2c0a0d'], equals:['#050507','#08080e','#0e0e18'], void:['#020208','#070417','#100a24'] };
-const SCENE_GLOW={ monastery:'255,150,60', difference:'120,200,255', schism:'150,110,255', overflow:'255,80,60', equals:'255,159,42', void:'120,90,255' };
+  overflow:['#130406','#20070a','#2c0a0d'], equals:['#050507','#08080e','#0e0e18'], void:['#020208','#070417','#100a24'], giraffe:['#0a0a16','#12100c','#1c1610'] };
+const SCENE_GLOW={ monastery:'255,150,60', difference:'120,200,255', schism:'150,110,255', overflow:'255,80,60', equals:'255,159,42', void:'120,90,255', giraffe:'255,164,74' };
 function drawMarginalia(){   // the margin note: parchment scrap, ink scratches, and a coffee ring over a hidden name
   const nx=60, ny=21, solved=game.storyProg>=STORY.length;
   ctx.save();
@@ -4333,6 +4320,16 @@ function csProps(scene, glow){   // each order's hall, drawn in silhouette — e
   } else if(scene==='equals'){        // SOLOMON — everything erased but one patient line at the bottom of the page
     ctx.fillStyle='rgba('+glow+',0.45)';
     ctx.fillRect(W*0.18, H*0.5, W*0.64, 3); ctx.fillRect(W*0.18, H*0.5+11, W*0.64, 3);
+  } else if(scene==='giraffe'){       // GIRAFFE INTERLUDE — the unexpected creature wandered into the firelight (the whole point of the beat)
+    ctx.save(); ctx.translate(W*0.46, gy+6); ctx.fillStyle='rgba(58,40,22,0.92)';   // warm dusk silhouette, lit by the fire
+    for(const lx of [-44,-24,30,50]){ rr(lx,-92,9,92,3); ctx.fill(); }              // legs
+    rr(-50,-150,108,66,18); ctx.fill();                                             // body
+    ctx.save(); ctx.translate(40,-142); ctx.rotate(0.42); rr(-12,-176,24,184,9); ctx.fill(); ctx.restore();    // neck (leans up toward the head)
+    ctx.save(); ctx.translate(118,-300); ctx.rotate(0.42); rr(-14,-12,48,24,9); ctx.fill();                    // head
+    ctx.fillRect(-3,-26,5,16); ctx.fillRect(10,-26,5,16); ctx.restore();            // ossicones
+    ctx.fillStyle='rgba(28,18,8,0.55)';                                             // a few spots
+    for(const s of [[-30,-130],[-6,-118],[18,-138],[-22,-104]]){ ctx.beginPath(); ctx.arc(s[0],s[1],7,0,7); ctx.fill(); }
+    ctx.restore();
   } else {                            // fallback — the old arch + pillars
     for(const px of [70,250,710,890]) ctx.fillRect(px-24,40,48,H-130);
     ctx.beginPath(); ctx.moveTo(250,120); ctx.quadraticCurveTo(W/2,20,710,120); ctx.lineTo(710,60); ctx.lineTo(250,60); ctx.closePath(); ctx.fill();
@@ -4363,19 +4360,19 @@ function csBackdrop(scene){
 function drawCsFigure(char, x, groundY, facing, lit, a, phase, act){
   const f=cutsceneFighter(char); f.facing = (act==='turn')? -facing : facing;   // turn AWAY (won't look at you)
   try{ f.update(false); }catch(e){}
-  // BODY-ACTING: a per-line directive bends the procedural figure into a performance — no new art
-  let lean=0, dy=0, dx=0, sc=1.5;
-  if(act==='slump'){ lean=0.15; dy=6; }
-  else if(act==='broken'){ lean=0.27; dy=11; }       // grief / collapse
-  else if(act==='recoil'){ lean=-0.12; dx=facing*8; } // taken aback
-  else if(act==='loom'){ sc=1.66; lean=0.05; dy=-2; } // menace, swells forward
-  else if(act==='step'){ dx=-facing*14; }            // step back
+  // BODY-ACTING: bend the actual spine + hips (P.lean / P.crouch), not just rotate the whole plank
+  let koA=0, dy=0, dx=0, sc=1.5; const P=f.P;
+  if(act==='slump'){ P.lean+=0.28; P.crouch+=9; dy=4; koA=0.05; }
+  else if(act==='broken'){ P.lean+=0.5; P.crouch+=18; dy=7; koA=0.10; }   // grief: the spine curls + the hips sink
+  else if(act==='recoil'){ P.lean-=0.22; dx=facing*8; koA=-0.05; }        // taken aback: lean away
+  else if(act==='loom'){ P.lean+=0.12; P.crouch-=5; sc=1.66; dy=-2; }     // menace: tall + leaning in
+  else if(act==='step'){ dx=-facing*14; }
   const breath = (act==='broken'||act==='slump')? 0.5 : (act==='loom'? 1.4 : 1);   // slumped barely breathes; looming swells
   const bob=Math.sin(game.frame*0.05+phase*2.3)*3*breath + (lit?Math.sin(game.frame*0.22)*1.4*breath:0);
   const slide=(1-a)*46*(facing>0?-1:1);
   ctx.save(); ctx.translate(x+slide+dx, groundY+bob+dy); ctx.scale(sc,sc);
-  if(lit) drawPose(f,f.P,0,0,Math.max(0.2,a),null,lean);
-  else    drawPose(f,f.P,0,0,0.34,'#0d0b16',lean);   // dim silhouette
+  if(lit) drawPose(f,f.P,0,0,Math.max(0.2,a),null,koA);
+  else    drawPose(f,f.P,0,0,0.34,'#0d0b16',koA);   // dim silhouette
   ctx.restore();
 }
 function drawDialogue(){
@@ -5439,7 +5436,7 @@ const STORY=[
    {w:'YOU',c:ME,t:'You read this note often.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Four functions in one new kid. A note in a margin. Checked over by men who could not agree on lunch. Every new kid carries that note. Not one of them could ever do what it says.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'The elders call it a gift. The smarter ones call it a fake. I’m holding off until you’ve added two numbers without reaching for a third. So we start slow. We always start slow. MORE — but careful.'},
-   {w:'YOU',c:ME,t:'(low, to yourself) I signed your book downstairs. Didn’t read it twice. Didn’t argue the price. I don’t know why I was so sure of the pen. I’ve never been sure of anything.', slow:0.74, quiet:true},
+   {w:'YOU',c:ME,t:'(low, to yourself) I signed your book downstairs. Didn’t read it twice. Didn’t argue the price. I don’t know why I was so sure of the pen. I’ve never been sure of anything.', slow:0.74, quiet:true, youAct:'slump'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Before the Brotherhood teaches you to add, prove you can grow without grabbing. Grabbing runs in the family of — (he stops) — of the kind of man who raised me. I won’t say more about him. I’ll say it as a sum instead.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'When a column spills over, you do not keep the extra in your fist. You carry it to the next column, just once, and you set it down. Take only what the column owes you. I’d rather not hand you mine.'},
    {w:'YOU',c:ME,t:'I came to learn. Teach me.'}],
@@ -5488,7 +5485,7 @@ const STORY=[
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'A man who owns nothing has nothing to lose, the saying goes. I have always found that a comfort. I am only now, saying it out loud to you, hearing the other way it could be read.'},
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'No matter. Nothing in this world could turn me from him. Nothing.'}]},
 
- {title:'III · THE LONG DIVISION', diff:1, opp:3, points:4, theme:'div', rule:{tag:'read'},
+ {title:'III · THE LONG DIVISION', diff:1, opp:3, points:4, theme:'div',
   intro:[
    {w:'NARRATOR',c:N,t:'There is a fourth order that swears loyalty to no one: the Schism. The Divide keeps no friends, only secrets, and the ratios between them.'},
    {w:'NARRATOR',c:N,t:'Its dealer does not go looking for members. He waits at the seam of every whole number, where the cracks already run, and charges you to watch it break.'},
@@ -5678,7 +5675,7 @@ const STORY=[
    {w:'SOLOMON, the EQUALS',c:FX.james,t:'A great church built one brick a century. A man who owned nothing, and so was so easy to fill. A son who buried his father; a leftover who cannot forgive himself. I did not have to break a single one of you. I only had to wait at the bottom of the column you were already falling down.'},
    {w:'SOLOMON, the EQUALS',c:FX.james,t:'I am what every sum is trying to reach. I am the Solver. I am the Equals. That coffee ring on your precious note? You read all the way to the bottom of the page and stopped at a brown smudge. My name was the smudge. I have been sitting under it the whole time.', slow:0.72, sfx:'reveal', act:'loom'},
    {w:'SOLOMON, the EQUALS',c:FX.james,t:'But I am not cruel. I can offer the one thing you have never had, unknown — an answer. A place you resolve to. Belong to. You could stop being the stranger in every room. Just hold still, and let me solve you. Wouldn’t that be a relief?', slow:0.74, shot:'them'},
-   {w:'YOU',c:ME,t:'(it would. it really would.) ...No. A variable that resolves is just a number someone is finished with. I’d rather stay the question.', slow:0.76, hold:32, shot:'you'},
+   {w:'YOU',c:ME,t:'(it would. it really would.) ...No. A variable that resolves is just a number someone is finished with. I’d rather stay the question.', slow:0.76, hold:32, shot:'you', youAct:'recoil'},
    {w:'SOLOMON, the EQUALS',c:FX.james,t:'I have come to boil you all down to one answer. The same answer everything reaches in the end. Nothing. Even the unknown — no, ESPECIALLY the unknown. The one no one could ever solve boils down cleanest of all. To zero. Hold still.', slow:0.66, hold:30, quiet:true, sfx:'dread', act:'loom'},
    {w:'YOU',c:ME,t:'Every sum has two sides. You only ever counted one.'}],
   outro:[
@@ -5833,12 +5830,12 @@ function startColdOpen(){
 // THE GIRAFFE BEAT — a single quiet night, no fight, no reward, no plot business. Pure restraint (TLOU's move).
 function startGiraffe(){
   setMusic('plus'); game.storyCh=-1;
-  game.dlg={ after:'storymap', scene:'monastery', i:0, lines:[
+  game.dlg={ after:'storymap', scene:'giraffe', i:0, lines:[
     {w:'NARRATOR',c:N,t:'That night the war held its breath. No drill, no ledger, no lesson — just a low fire, and two tired people who had decided to sit by it.', slow:0.8, quiet:true, music:'plus'},
     {w:'ADDISON of the PLUS',c:FX.plus,t:'You don’t have to solve anything right now. I know that’s the hard part for you. The whole world keeps handing you a problem and calling it your destiny.', slow:0.8},
     {w:'YOU',c:ME,t:'I keep waiting to feel like the one in the note. Mostly I just feel like a kid who can’t stop counting.', slow:0.8},
     {w:'ADDISON of the PLUS',c:FX.plus,t:'Good. The day you feel like the prophecy is the day I’d worry. ...Lessing asked after you, by the way. He’s carving little tally marks again. Healthy ones, this time.', slow:0.78},
-    {w:'YOU',c:ME,t:'Does it get easier? Being the thing nobody can solve for?', slow:0.8, hold:34, shot:'you'},
+    {w:'YOU',c:ME,t:'Does it get easier? Being the thing nobody can solve for?', slow:0.8, hold:34, shot:'you', youAct:'slump'},
     {w:'ADDISON of the PLUS',c:FX.plus,t:'No. But you stop wanting it to. Some values aren’t meant to resolve, kid — they stay in the equation and keep it honest. ...Now drink your cocoa. Cold cocoa is a tragedy no math can fix.', slow:0.78, sfx:'warm', hold:36},
     {w:'NARRATOR',c:N,t:'And for one night, no one carried anything they hadn’t earned, no one took anything away, and the unknown sat by the fire and was, simply, a person.', slow:0.84, quiet:true, hold:54},
   ]};
