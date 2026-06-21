@@ -229,6 +229,28 @@ function duckMusic(){
   musG.gain.setValueAtTime(0.1, AC.currentTime);
   musG.gain.linearRampToValueAtTime(musicMuted?0:settings.music*0.8, AC.currentTime+1.6);
 }
+// ---- CUTSCENE DIRECTION: sustained music ducking + per-line emotional stingers (synth-only, no assets) ----
+function musicDuckHold(){ if(!AC||!musG) return; musG.gain.cancelScheduledValues(AC.currentTime); musG.gain.linearRampToValueAtTime(0.012, AC.currentTime+0.5); }
+function musicRestore(){ if(!AC||!musG) return; musG.gain.cancelScheduledValues(AC.currentTime); musG.gain.linearRampToValueAtTime(musicMuted?0:settings.music*0.8, AC.currentTime+0.9); }
+const STINGERS={
+  taps(){ tone('square',300,0.05,0.08); setTimeout(()=>{try{tone('square',300,0.05,0.08);}catch(e){}},150); },            // the blind-side signal: tap, tap
+  hollow(){ tone('sine',98,0.9,0.15,{f1:58}); hiss(0.5,0.03,{lo:80,hi:360}); },                                          // a gut goes hollow
+  heart(){ tone('sine',74,0.34,0.17,{f1:46}); },                                                                         // one low heartbeat
+  warm(){ tone('triangle',392,0.5,0.07,{f1:523}); tone('triangle',523,0.6,0.05,{f1:659}); },                            // a small warmth returns
+  reveal(){ tone('sawtooth',220,0.18,0.10,{f1:660}); setTimeout(()=>{try{tone('sine',55,1.1,0.16,{f1:40});}catch(e){}},120); }, // a bright catch, then the floor drops out
+  toll(){ tone('sawtooth',58.3,1.7,0.17,{f1:41.2}); tone('sine',43.65,1.7,0.12); hiss(0.7,0.04,{lo:50,hi:240}); },       // the Equals tolls at the bottom of the page
+  dread(){ tone('sawtooth',46,1.4,0.13,{f1:38}); hiss(0.8,0.04,{lo:60,hi:280}); },                                       // dread rises
+};
+function playStinger(k){ if(!k) return; audio(); const s=STINGERS[k]; if(s){ try{ s(); }catch(e){} } }
+function sfxSolveOp(op){   // DIEGETIC: each operation has its own little sound, so you HEAR which function you solved
+  if(!AC) return;
+  try{
+    if(op==='+'){ tone('triangle',523,0.07,0.045); setTimeout(()=>tone('triangle',659,0.09,0.045),58); }      // rising third — carry up
+    else if(op==='−'){ tone('triangle',587,0.07,0.045); setTimeout(()=>tone('triangle',440,0.10,0.045),58); } // falling — take away
+    else if(op==='×'){ tone('square',392,0.06,0.04); setTimeout(()=>tone('square',784,0.09,0.045),52); }       // octave up — doubling
+    else if(op==='÷'){ tone('sine',680,0.06,0.04); setTimeout(()=>tone('sine',510,0.09,0.04),48); }            // split interval — division
+  }catch(e){}
+}
 function musicTick(){
   if(!AC || musicMuted) return;
   const sd = 60/MUS.bpm/2; // 8th notes
@@ -323,16 +345,31 @@ addEventListener("keydown", e => {
     if(AC&&!musicMuted) MUS.next=AC.currentTime+0.05;
     return; }
 
+  if(game.state==='welcome'){   // first-run gate → learn to fight
+    if(k==='Enter'||k===' '){ game.seenHow=true; store('how',true); startTutorial(); SFX.ui(); }
+    else if(lk==='t'||k==='Escape'){ game.seenHow=true; store('how',true); game.state='title'; SFX.ui(); }   // skip
+    return;
+  }
   if(game.state==='title'){
     if(lk==='w'||k==='ArrowUp'){ game.menuIdx=(game.menuIdx+MENU.length-1)%MENU.length; SFX.ui(); }
     else if(lk==='s'||k==='ArrowDown'){ game.menuIdx=(game.menuIdx+1)%MENU.length; SFX.ui(); }
     else if(k==='Enter'||k===' ') menuActivate(game.menuIdx);
-    else if(lk==='v'||lk==='g') menuActivate(2);   // arcade
-    else if(lk==='n') menuActivate(4);
-    else if(lk==='h') menuActivate(5);
-    else if(lk==='o') menuActivate(6);
     else if(lk==='r'){ enterRecords(); }
     if(k==='1') DIFF.set(0); if(k==='2') DIFF.set(1); if(k==='3') DIFF.set(2);
+    return;
+  }
+  if(game.state==='modes'){   // sub-list of the deeper modes
+    const items=MODES_SUB;
+    if(lk==='w'||k==='ArrowUp'){ game.modeIdx=(game.modeIdx+items.length-1)%items.length; SFX.ui(); }
+    else if(lk==='s'||k==='ArrowDown'){ game.modeIdx=(game.modeIdx+1)%items.length; SFX.ui(); }
+    else if(k==='Enter'||k===' '){ menuActivateLabel(items[game.modeIdx][0]); }
+    else if(lk==='t'||k==='Escape'){ game.state='title'; SFX.ui(); }
+    return;
+  }
+  if(game.state==='rumbleChoose'){   // local vs online
+    if(lk==='w'||k==='ArrowUp'||lk==='s'||k==='ArrowDown'){ game.rumbleOnline=!game.rumbleOnline; SFX.ui(); }
+    else if(k==='Enter'||k===' '){ startRumbleChoice(); }
+    else if(lk==='t'||k==='Escape'){ game.state='title'; SFX.ui(); }
     return;
   }
   if(game.state==='records'){
@@ -374,8 +411,8 @@ addEventListener("keydown", e => {
     if(k==='Enter'||k===' '||k==='ArrowRight'){
       const d=game.dlg;
       if(d && !d.skip){   // first press while still typing → reveal the whole line
-        const full=d.lines[Math.min(d.i,d.lines.length-1)].t.length;
-        if(Math.floor((game.frame-(d.lineStart||game.frame))*CS_SPEED)<full){ d.skip=true; SFX.ui(); return; }
+        const ln=d.lines[Math.min(d.i,d.lines.length-1)], full=ln.t.length;
+        if(Math.floor((game.frame-(d.lineStart||game.frame))*lineSpeed(ln))<full){ d.skip=true; SFX.ui(); return; }
       }
       dlgAdvance();
     }
@@ -426,7 +463,7 @@ addEventListener("keydown", e => {
     }
     else if(lk==='t') enterTraining(FUNCS[0].key);
     else if(lk==='l') enterCodex();
-    else if(k==='Escape'){ setMusic('default'); game.state='title'; }
+    else if(k==='Escape'){ setMusic('default'); if(game._vsStage!=null){ game.stageIdx=game._vsStage; game._vsStage=null; } game.state='title'; }
     return;
   }
   if(game.state==='codex'){
@@ -446,7 +483,9 @@ addEventListener("keydown", e => {
   }
   if(game.state==='reward'){
     if(/^[1-4]$/.test(k) && game.rewardPts>0){ addFnXP(FUNCS[+k-1].key,80); game.rewardPts--; SFX.correct(); flash(0.08,FUNCS[+k-1].col); return; }
-    if(k==='Enter'||k===' '){ while(game.rewardPts>0){ addFnXP(FUNCS[rnd(0,3)].key,80); game.rewardPts--; } setMusic('default'); game.state='story'; SFX.ui(); return; }
+    if(k==='Enter'||k===' '){ while(game.rewardPts>0){ addFnXP(FUNCS[rnd(0,3)].key,80); game.rewardPts--; } SFX.ui();
+      if(game.giraffePending){ game.giraffePending=false; game.giraffeSeen=true; startGiraffe(); return; }   // detour through the quiet night
+      setMusic('default'); game.state='story'; return; }
     return;
   }
   if(game.state==='interlude'){
@@ -458,6 +497,7 @@ addEventListener("keydown", e => {
     return;
   }
   if(game.state==='howto'){
+    if(lk==='t'){ SFX.ui(); startTutorial(); game.pendingFight=null; return; }   // replay the training fight → ends back at title (pendingFight nulled)
     if(k==='Enter'||k===' '){ SFX.ui();
       if(game.howReturn==='fight') startMatch(); else if(game.howReturn==='story') game.state='story'; else game.state='title'; }
     return;
@@ -467,7 +507,7 @@ addEventListener("keydown", e => {
     if(lk==='a'||k==='ArrowLeft'){ game.charIdx=(game.charIdx+nSel-1)%nSel; SFX.ui(); }
     else if(lk==='d'||k==='ArrowRight'){ game.charIdx=(game.charIdx+1)%nSel; SFX.ui(); }
     else if(/^[1-5]$/.test(k) && +k<=nSel){ game.charIdx=+k-1; SFX.ui(); }
-    else if(lk==='e' && (game.mode==='cpu'||game.mode==='gauntlet')){ cycleArcade(); SFX.ui(); }
+    else if(lk==='e' && (game.mode==='cpu'||game.mode==='gauntlet'||game.practice)){ cycleArcade(); SFX.ui(); }
     else if(lk==='g'){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); }
     else if(k==='Enter'||k===' ') confirmPick();
     else if(lk==='t'||k==='Escape') game.state='title';
@@ -549,7 +589,9 @@ addEventListener("keydown", e => {
       else if(lk===KEYS.jump || k==='ArrowUp') net.inEdges.push('jump');
       return;
     }
-    if(lk==='r' && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.online && !p.ko && p.stun<=0){ enterRush(); return; }  // FOCUS full → SOLVE RUSH
+    if(game.practice && k==='Escape'){ game.practice=false; setMusic('default'); game.state='title'; SFX.ui(); return; }   // leave practice
+    if(game.practice && game.galaxy && lk==='b'){ enterGalaxyBurst(1); return; }   // PRACTICE: re-roll a burst on demand
+    if(lk==='r' && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.online && !game.galaxy && !p.ko && p.stun<=0){ enterRush(); return; }  // FOCUS full → SOLVE RUSH (standard mode only)
     // INPUT BUFFER — if an action can't fire this instant, remember the INTENT for ~6f and replay it the moment it's legal
     if(lk===KEYS.punch){ if(!p.tryAttack('punch')) p.bufferedInput={action:'punch',frame:game.frame}; }
     else if(lk===KEYS.kick){ if(!p.tryAttack('kick')) p.bufferedInput={action:'kick',frame:game.frame}; }
@@ -576,7 +618,22 @@ cv.addEventListener("mousemove", e=>{
 });
 cv.addEventListener("click", ()=>{
   audio();
-  if(game.state==='splash'){ game.state='title'; return; }
+  if(game.state==='splash'){ game.state=game.seenHow?'title':'welcome'; return; }
+  if(game.state==='welcome'){ game.seenHow=true; store('how',true); startTutorial(); return; }
+  if(game.state==='modes'){
+    const mr=game.modeRects||[];
+    for(let i=0;i<mr.length;i++){ const r=mr[i];
+      if(mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h){ menuActivateLabel(MODES_SUB[i][0]); return; } }
+    if(game.backRect && mouse.x>game.backRect.x&&mouse.x<game.backRect.x+game.backRect.w&&mouse.y>game.backRect.y&&mouse.y<game.backRect.y+game.backRect.h){ game.state='title'; SFX.ui(); }
+    return;
+  }
+  if(game.state==='rumbleChoose'){
+    const rr2=game.rumbleRects||[];
+    for(let i=0;i<rr2.length;i++){ const r=rr2[i];
+      if(mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h){ game.rumbleOnline=(i===1); startRumbleChoice(); return; } }
+    if(game.backRect && mouse.x>game.backRect.x&&mouse.x<game.backRect.x+game.backRect.w&&mouse.y>game.backRect.y&&mouse.y<game.backRect.y+game.backRect.h){ game.state='title'; SFX.ui(); }
+    return;
+  }
   if(game.state==='title'){
     for(let i=0;i<3;i++){ const r=diffRect(i);
       if(mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h){ DIFF.set(i); return; } }
@@ -664,11 +721,12 @@ const DIFF = {
   level:1, names:['EASY','NORMAL','HARD'],
   taglines:['arithmetic warm-up','mental-math sprint','algebra · fractions · negatives'],
   set(n){ this.level=n; SFX.ui(); },
-  cpu(){ return [
+  cpu(){ const lv=(game.mode==='story'&&game.cpuTier!=null)?game.cpuTier:this.level; return [
     {telMul:1.5, cool:[110,180], dmgMul:0.75, speed:1.4, blockP:0.10, regen:0.10, punishP:0.30, baitP:0.00, burstP:0.20},
     {telMul:1.0, cool:[70,130],  dmgMul:1.0,  speed:1.9, blockP:0.22, regen:0.17, punishP:0.58, baitP:0.05, burstP:0.42},
     {telMul:0.65,cool:[45,90],   dmgMul:1.3,  speed:2.4, blockP:0.40, regen:0.26, punishP:0.85, baitP:0.10, burstP:0.64},
-  ][this.level]; },
+    {telMul:0.58,cool:[42,84],   dmgMul:1.3,  speed:2.5, blockP:0.44, regen:0.27, punishP:0.88, baitP:0.11, burstP:0.68},  // TIER 3 — the climactic foes (Overflow, the Equals) press harder; math stays at the chapter's level for fairness
+  ][lv]; },
 };
 // Escalating math: tier grows with difficulty AND within a round (heat), unlocking
 // bigger operands, two-step expressions, squares and 2-digit×2-digit. Answers stay
@@ -1377,7 +1435,11 @@ class Fighter {
     dust(this.x,this.y,5,2.5); SFX.whoosh();
   }
   canCancelInto(type){   // a HIT-CONFIRMED normal can chain into a stronger move within its cancel window
-    const a=this.attack; if(!a || !(a.cancelOK>0)) return false;
+    const a=this.attack; if(!a) return false;
+    // GALAXY: free-flowing target combos — chain any normal into another (or special) ANY time mid-move, NO hit-confirm (max accessible)
+    if(game.galaxy && (a.type==='punch'||a.type==='kick'))
+      return type==='punch'||type==='kick'||type==='special';
+    if(!(a.cancelOK>0)) return false;
     if(type==='special') return a.type==='punch' || a.type==='kick';
     if(type==='kick')    return a.type==='punch';
     return false;
@@ -1390,13 +1452,15 @@ class Fighter {
     else if(type==='airkick') return false;
     const ov=this.char.atk&&this.char.atk[type];               // per-character identity normal
     const def=ov? Object.assign({},ATK[type],ov) : ATK[type];
-    if(!this.spend(ATK[type].cost)){ // EVERY attack spends aura up front — no aura, no swing. Math IS the weapon.
+    if(!game.galaxy && !this.spend(ATK[type].cost)){ // STANDARD: every swing spends aura. GALAXY: attacks are FREE (the gate is your unlocked combos, not aura)
       if(this===game.player) tip('noaura','No aura — solve a problem to power your strikes.');
       return false;
     }
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
     this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind};
-    this.hitThisSwing=false; SFX.whoosh(); return true;
+    this.hitThisSwing=false; SFX.whoosh();
+    if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
+    return true;
   }
   cpuAttack(type, telFrames){
     let def, kind;
@@ -1419,8 +1483,8 @@ class Fighter {
     if(!this.grounded) return false;
     const cancelling = this.attack && this.canCancelInto('special');   // cancel a confirmed normal into the special
     if(this.attack? !cancelling : !this.canAct()) return false;
-    if(!this.spend(ATK.special.cost * (this===game.player?pFn('specialCost'):1))) return false; // story: trained Multiply = cheaper
-    spendFx(this, Math.round(ATK.special.cost*this.char.costMul));
+    if(!game.galaxy && !this.spend(ATK.special.cost * (this===game.player?pFn('specialCost'):1))) return false; // GALAXY: free; STANDARD: spends aura
+    if(!game.galaxy) spendFx(this, Math.round(ATK.special.cost*this.char.costMul));
     // CHOOSE the strike: a held direction picks from your armed bank (← − poke · → × launcher · ↑ ÷ ranged · ↓ + guard-break); else the last-armed
     let op=null;
     if(this===game.player && this.bank){
@@ -1517,6 +1581,7 @@ class Fighter {
       game.burstChallenge={ans:rnd(1,9), t:100};
       tip('burst','Combo’d? Press the BURST digit over your head for a FREE escape — or '+keyLabel(KEYS.special)+' to spend aura.');
     }
+    if(this===game.enemy && this.comboedHits===2 && typeof reactBanter==='function') reactBanter('onCombo');   // player landed a combo → foe reacts
     if(this.dizzy>0) dmg*=1.18;
     dmg=Math.round(dmg);
     this.hp=Math.max(0,this.hp-dmg); this.chipDelay=26;
@@ -2210,6 +2275,8 @@ function resolveHits(att,def){
     if(att.chargedHit){ dmg *= 1.7; chain=true; att.chargedHit=false; }
     let overclocked=false;
     if((att.overclock||0)>game.frame){ dmg *= 1.25; overclocked=true; att.overclock=0; }  // OVERCLOCK — fast-solve bonus cashed on the swing
+    let gcombo=0;
+    if(att.attack && att.attack.galaxyComboMul){ gcombo=att.attack.galaxyComboMul; dmg *= gcombo; }  // GALAXY combo finisher — the unlocked string pays off big (×2..×5)
     dmg = Math.round(dmg);
     const res=def.takeHit(dmg,dir,hb.heavy);
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
@@ -2224,6 +2291,9 @@ function resolveHits(att,def){
     if(chain){ announce('CHAIN!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212,'CHAIN FINISHER','#ff9f2a',20); }
     else if(att.combo>=2) floatText(att.x,att.y-202,'COMBO ×'+att.combo,'#ffd34d',15+Math.min(9,att.combo));
     if(overclocked){ ring(cx,cy,'#ffd34d',46,4); floatText(cx,cy-30,'⚡',('#ffd34d'),22); }
+    if(gcombo){ const big=gcombo>=3; flash(0.22,'#ffd9f0'); addTrauma(0.45+gcombo*0.06); ring(cx,cy, big?'#ff7ac0':'#ffd34d', 70+gcombo*16, 7); slowmo(240,0.4);
+      floatText(def.x,def.y-212, '✦ COMBO ×'+gcombo, big?'#ff7ac0':'#ffd34d', 22+Math.min(8,gcombo*2));
+      if(att.attack && att.attack.galaxyLaunch){ def.vy=-13; def.grounded=false; def.stun=Math.max(def.stun,34); def.dizzy=Math.max(def.dizzy,80); } }  // bigger combos launch
     hitstop=Math.max(hitstop, hb.heavy?8:5);
     addTrauma(hb.heavy?0.45:0.25);
     cam.kickX = dir*(hb.heavy?5:2.5);
@@ -2294,10 +2364,14 @@ function applySolve(f, result, st, op){
     if(f===game.player && game.problem && game.problem.gambit){ f.aura=0; f.auraChipT=18; f.dizzy=46;  // GAMBIT bust — you bet your bank and lost it
       floatText(f.x,f.y-198,'GAMBIT LOST!','#ff4d5e',20); addTrauma(0.06); }
     floatText(f.x,f.y-170,'SCRAMBLED!','#ff4d5e',21); addTrauma(0.12); SFX.wrong();
+    if(f===game.player) reactBanter('onMiss');
+    if(f===game.player && game.chRule && game.chRule.tag==='subtract' && game.enemy && !game.enemy.ko){   // LESSING VIII: a sloppy answer leaves a false part standing — it heals him
+      game.enemy.hp=Math.min(game.enemy.char.hp, game.enemy.hp+6); floatText(game.enemy.x,game.enemy.y-172,'+ false part','#ff9f6a',14); }
     return 0;
   }
   st.correct++;
   f.streak++; f.streakAt=game.frame; st.maxStreak=Math.max(st.maxStreak||0,f.streak);
+  if(f===game.player && f.streak>0 && f.streak%5===0) reactBanter('onStreak');   // a long solve streak gets a reaction
   if(f.char.id==='oracle' && f.streak===5){
     floatText(f.x,f.y-212,'ASCENDED','#ffd34d',26); flash(0.12,'#ffd34d'); ring(f.x,f.y-90,'#ffd34d',80,5);
   }
@@ -2323,6 +2397,11 @@ function applySolve(f, result, st, op){
     if(f===game.player) game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+12);   // a clutch perfect-dodge charges FOCUS fast
     ring(f.x,f.y-90,'#ffd34d',70,5); announce('PERFECT DODGE','#ffd34d'); SFX.perfect();
   } else SFX.correct();
+  if(f===game.player && op) sfxSolveOp(op);   // hear which function you just used
+  if(f===game.player && game.chRule && game.enemy && !game.enemy.ko){   // per-foe rule: how you solve shapes the fight
+    if(game.chRule.tag==='subtract' && perfect){ game.enemy.hp=Math.max(0,game.enemy.hp-9); floatText(game.enemy.x,game.enemy.y-172,'− cleanly','#7ae8ff',14); }  // LESSING VIII: a clean solve cuts the false part away
+    else if(game.chRule.tag==='read' && op){ if(op===game.lastSolveOp){ game.enemy.addAura(14); floatText(game.enemy.x,game.enemy.y-150,'read.','#b48cff',13); } game.lastSolveOp=op; }  // KRISHNA: repeating an operator feeds the Schism
+  }
   // FUNCTION STRIKE: solving BANKS that operator's strike; you CHOOSE which to fire (hold a direction + special), so it's a read, not RNG
   if(op && FN_STRIKE[op] && !f.ko){
     f.bank=f.bank||{}; f.bank[op]=game.frame+300;   // each armed ~5s; you can hold several at once
@@ -2361,6 +2440,7 @@ function methodHint(p){   // a one-line "how" shown on a miss — teach the meth
 function submitFor(f, buf){ // local typed answer (offline, or a player's own seat)
   if(game.state==='rush') return rushSubmit(f,buf);
   if(game.state==='finisher') return finisherSubmit(f,buf);
+  if(game.galaxy) return '';   // GALAXY: no solving during the fight itself — only in the bursts
   if(game.state!=='fight'||game.paused||!buf||f.ko) return '';
   const st = f===game.player? game.stats : game.stats2;
   const isP1 = f===game.player;
@@ -2401,6 +2481,8 @@ function startMatch(){
   game.stats={asked:0,correct:0,perfects:0,maxStreak:0,dmg:0,auraEarned:0};
   game.stats2={asked:0,correct:0,perfects:0,maxStreak:0,dmg:0,auraEarned:0};
   game.opStats={}; game.missQ=[]; game.focusOp=null; game.burstChallenge=null; game.rushMeter=0; game.rush=null;  // per-match: mastery + spaced-rep + op-focus + math-burst + SOLVE RUSH
+  game.galaxyBurstsDone=0; game.galaxyBest=0; game.galaxyKit=buildGalaxyKit(game.galaxyLevel||1);   // GALAXY BRAIN: fresh randomized combo kit (scales w/ level) + best burst-solve count
+  game.hpFired={}; game.tauntCd=0; game.overflow=0; game.lastSolveOp=null;   // per-match: reset mid-fight beats, banter cooldown, and per-foe-rule state
   SFX.round();
   startRound();
 }
@@ -2426,6 +2508,7 @@ function startRound(){
   if(game.mode==='story' && game.enemy.char && TAUNTS[game.enemy.char.id]){   // round-start banter
     const arr=TAUNTS[game.enemy.char.id];
     game.taunt={who:game.enemy.name, txt:arr[rnd(0,arr.length-1)], col:game.enemy.glow, t:190};
+    game.tauntCd=game.frame+210;   // let the round-start line breathe before reactive banter
   }
   game.introT=120; game.state='intro';
 }
@@ -2437,7 +2520,7 @@ function startKO(loser, pit=false){
   const winner = loser===game.player? game.enemy : game.player;
   const winnerHuman = winner===game.player || game.mode2p;
   const matchPoint = game.mode==='gauntlet'? loser===game.enemy
-      : ((winner===game.player?game.pWins:game.eWins)+1)>=2;
+      : ((winner===game.player?game.pWins:game.eWins)+1)>=(game.galaxy?1:2);   // GALAXY = single decisive round
   if(!pit && winnerHuman && matchPoint){ // PROVE IT — solve the final problem to erase them
     game.state='finisher'; game.koLoser=loser; game.pitFinish=false;
     game.finT=360; game.finProblem=hardProblem();
@@ -2480,11 +2563,15 @@ function doQED(w){
 }
 // ── SOLVE RUSH (Option C) — fight to charge FOCUS, then spend a math-spurt to unleash a combo string ──
 const RUSH_MAX=100, RUSH_DUR=110, RUSH_CAP=12;   // meter cap · window (~6s real at 0.3x) · max combo hits (hard bound)
-function rushProblem(){                     // fast, EASY problems — momentum + flow, never a quiz (audience: 10–15)
+function rushProblem(){                     // fast problems — momentum + flow; in GALAXY they scale with your LEVEL
+  const gx=game.galaxy, lv=gx?clamp(game.galaxyLevel||1,1,5):1;
+  const hi=gx? 10+lv*5 : 19;                // bigger operands as you level up
+  const mulHi=gx? Math.min(12,4+lv*2) : 9;
   const k=rnd(0,2); let a,b,text,ans,op;
-  if(k===0){ a=rnd(2,19); b=rnd(2,19); ans=a+b; text=a+' + '+b; op='+'; }
-  else if(k===1){ a=rnd(8,19); b=rnd(2,a); ans=a-b; text=a+' − '+b; op='−'; }
-  else { a=rnd(2,9); b=rnd(2,9); ans=a*b; text=a+' × '+b; op='×'; }
+  if(k===0){ a=rnd(2,hi); b=rnd(2,hi); ans=a+b; text=a+' + '+b; op='+'; }
+  else if(k===1){ a=rnd(Math.ceil(hi*0.4),hi+4); b=rnd(2,a); ans=a-b; text=a+' − '+b; op='−'; }
+  else { a=rnd(2,mulHi); b=rnd(2,9); ans=a*b; text=a+' × '+b; op='×'; }
+  if(gx && lv>=4 && rnd(0,2)===0){ const c=rnd(2,9); ans+=c; text+=' + '+c; }   // LV4+: two-step problems
   return {text,ans,op};
 }
 function enterRush(){
@@ -2498,11 +2585,55 @@ function enterRush(){
   slowmo(900,0.3); flash(0.22,'#7ae8ff'); addTrauma(0.4); ring(p.x,p.y-80,'#7ae8ff',120,7);
   SFX.perfect();   // the big slamText banner is the cue — no redundant announce
 }
+// ── GALAXY BRAIN — the math happens in 2 bursts/match; your solve-count UNLOCKS combo tiers (sticky) ──
+const GBURST_DUR=130, GBURST_CAP=8;
+const GCOMBO_POOL = {   // button-string pools by length — the per-match kit draws from these so the combos are never the same twice
+  3:['PPK','KKP','PKK','KPP','KPK','PKP'],
+  4:['PKPK','PPKK','KPKP','PKKP','KPPK','KKPK'],
+  5:['PPKPK','KPKPK','PKKPK','PPKKP','KPPKP'],
+};
+function buildGalaxyKit(level){   // a FRESH, randomized set of unlockable combos; more + longer at higher levels
+  const lv=clamp(level||1,1,5);
+  const lens = lv<=1?[3,4] : lv===2?[3,4,4] : lv===3?[3,4,5] : lv===4?[3,4,4,5] : [4,4,5,5];
+  const used=new Set(), kit=[];
+  lens.forEach((len,i)=>{ const pool=(GCOMBO_POOL[len]||GCOMBO_POOL[3]).filter(p=>!used.has(p));
+    const pat=pool.length? pool[rnd(0,pool.length-1)] : 'PPK'; used.add(pat);
+    kit.push({pat, mul:2+i, thr:2+i*2}); });   // dmg ×2,3,4,5  ·  unlock at solved 2,4,6,8
+  return kit;
+}
+function galaxyTrackCombo(f, type){   // recognize the unlocked button-strings; stamp the FINISHER hit
+  const now=game.frame;
+  f.gseq=(f.gseq||[]).filter(s=> now-s.f<=55);            // a string resets after a ~0.9s gap
+  f.gseq.push({c: type==='punch'?'P':'K', f:now}); if(f.gseq.length>6) f.gseq.shift();
+  const tail=f.gseq.map(s=>s.c).join(''), best=game.galaxyBest||0, kit=game.galaxyKit||[];
+  let m=null;
+  for(const k of kit){ if(best>=k.thr && tail.endsWith(k.pat) && (!m || k.pat.length>m.pat.length)) m=k; }   // prefer the longest match
+  if(m && f.attack){ f.attack.galaxyComboMul=m.mul; f.attack.galaxyLaunch=m.mul>=3;
+    announce(m.pat.split('').join(' ')+'!', m.mul>=3?'#ff7ac0':'#ffd34d'); f.gseq=[]; }
+}
+function enterGalaxyBurst(n){
+  const p=game.player, e=game.enemy;
+  game.state='rush'; game.rush={t:GBURST_DUR, solved:0, kind:'galaxy', gn:n||1, startAt:game.frame};
+  ans1=''; p.bufferedInput=null;
+  game.problem=rushProblem(); game.problemAt=game.frame;
+  e.attack=null; e.stun=9999; e.moveX=0; e.wantBlock=false; e.blocking=false;
+  p.attack=null; p.stun=0; p.moveX=0; if(e) p.facing = e.x>p.x?1:-1;
+  slowmo(900,0.3); flash(0.2,'#b48cff'); addTrauma(0.4); ring(p.x,p.y-80,'#b48cff',120,7); SFX.perfect();
+}
 function rushSubmit(f,buf){
   const r=game.rush; if(!r || f!==game.player) return '';
   const p=game.player, e=game.enemy;
   if(buf!=='' && +buf===game.problem.ans){
     r.solved++;
+    if(r.kind==='galaxy'){   // GALAXY BURST — solving UNLOCKS combos, it does NOT attack
+      const kit=game.galaxyKit||[]; let just=null; for(const k of kit) if(r.solved===k.thr) just=k;   // a combo unlocked right now?
+      sparks(p.x,p.y-90,7,'#b48cff',4); ring(p.x,p.y-90,'#b48cff',34,3); addTrauma(0.14); SFX.correct(); slowmo(130,0.3);
+      floatText(p.x,p.y-160-Math.min(40,r.solved*4), just? just.pat.split('').join(' ')+' UNLOCKED!' : '+'+r.solved, '#c8a8ff', just?18:16);
+      r.t=Math.min(GBURST_DUR, r.t+8);
+      game.problem=rushProblem(); game.problemAt=game.frame; ans1='';
+      if(r.solved>=GBURST_CAP) exitRush();
+      return '';
+    }
     const dmg=5; e.hp=Math.max(0,e.hp-dmg); e.hpShown=Math.max(e.hp,e.hpShown); e.chipDelay=26; e.flashT=8; e.hurtT=12; r.dmg+=dmg;
     p.facing = e.x>p.x?1:-1;
     const tp = r.solved%2? 'punch':'kick';
@@ -2522,6 +2653,18 @@ function rushSubmit(f,buf){
 function exitRush(){
   const r=game.rush||{solved:0}; const p=game.player, e=game.enemy;
   game.state='fight'; e.stun=0;
+  if(r.kind==='galaxy'){                        // GALAXY BURST payoff — unlock combos (sticky across the 2 bursts) + refuel
+    game.galaxyBest=Math.max(game.galaxyBest||0, r.solved);
+    game.galaxyBurstsDone=(game.galaxyBurstsDone||0)+1;
+    p.aura=p.char.auraMax; p.auraShown=p.aura;
+    flash(0.22,'#b48cff'); addTrauma(0.5); ring(p.x,p.y-90,'#b48cff',150,8); slowmo(380,0.45);
+    const kit=game.galaxyKit||[], unlocked=kit.filter(k=>game.galaxyBest>=k.thr);
+    const top=unlocked[unlocked.length-1];
+    announce(top? top.pat.split('').join(' ')+' — UNLOCKED!' : 'solve more to unlock combos!', '#c8a8ff');
+    floatText(p.x,p.y-205, unlocked.length+'/'+kit.length+' COMBOS','#b48cff',24); SFX.special();
+    game.rush=null; game.problem=newProblem(0); ans1=''; game.fightAt=game.frame;
+    return;
+  }
   if(r.solved>0){                              // finishing flourish, scaled by how many you banked
     const big=6+r.solved*2;
     if(e.hp>0){ e.hp=Math.max(0,e.hp-big); e.hpShown=Math.max(e.hp,e.hpShown); e.flashT=10; e.hurtT=22; e.stun=Math.max(e.stun,28); e.vx=(e.x>p.x?1:-1)*12; if(e.grounded){e.vy=-6;e.grounded=false;} }
@@ -2533,20 +2676,41 @@ function exitRush(){
 }
 function drawRush(){
   const r=game.rush; if(!r) return;
+  const gx=r.kind==='galaxy';
+  const C = gx? '#b48cff' : '#7ae8ff', C2 = gx? '#d8c4ff' : '#bfe9ff';
   ctx.save();   // slow-time wash + drifting speed lines
-  ctx.fillStyle='rgba(10,20,40,0.22)'; ctx.fillRect(0,0,W,H);
-  ctx.globalAlpha=0.09; ctx.strokeStyle='#7ae8ff'; ctx.lineWidth=2;
+  ctx.fillStyle = gx? 'rgba(24,12,40,0.26)' : 'rgba(10,20,40,0.22)'; ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha=0.09; ctx.strokeStyle=C; ctx.lineWidth=2;
   for(let i=0;i<10;i++){ const yy=(i*73+(game.frame*6)%73); ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy+34); ctx.stroke(); }
   ctx.restore();
-  slamText('SOLVE RUSH', 118, 52, '#7ae8ff', clamp((game.frame-(r.startAt||0))/12,0,1));
-  if(r.solved>0) txtO('×'+r.solved+'  COMBO', W/2, 178, 30, '#ffd34d', {sw:5});
+  slamText(gx?'GALAXY BURST':'SOLVE RUSH', 116, gx?46:52, C, clamp((game.frame-(r.startAt||0))/12,0,1));
+  if(gx){
+    const kit=game.galaxyKit||[], best=Math.max(r.solved, game.galaxyBest||0);
+    txtO('BURST '+(r.gn||1)+'/2   ·   LV '+(game.galaxyLevel||1)+'   ·   solved '+r.solved, W/2, 176, 16, C2, {sw:0,mono:true});
+    // the unlock ladder — this match's actual randomized strings
+    kit.forEach((k,i)=>{ const on=best>=k.thr; ctx.globalAlpha=on?1:0.32;
+      txtO((on?'✓ ':'· ')+k.pat.split('').join(' ')+'  ('+k.thr+'+)  ×'+k.mul, W/2, 200+i*21, 13, on?C:'#8a8aa8', {sw:0,mono:true}); });
+    ctx.globalAlpha=1;
+  } else if(r.solved>0) txtO('×'+r.solved+'  COMBO', W/2, 178, 30, '#ffd34d', {sw:5});
   const cw=400, ch=92, cx=W/2, top=H-ch-16;
-  rr(cx-cw/2,top,cw,ch,16); ctx.fillStyle='rgba(6,16,30,0.92)'; ctx.fill();
-  ctx.lineWidth=3.5; ctx.strokeStyle=(game.frame>>2)%2?'#7ae8ff':'#bfe9ff'; ctx.stroke();
-  txtO('⚡ SOLVE FAST — KEEP THE COMBO GOING ⚡', cx, top+20, 11.5, '#bfe9ff', {sw:0});
+  rr(cx-cw/2,top,cw,ch,16); ctx.fillStyle = gx?'rgba(18,8,30,0.92)':'rgba(6,16,30,0.92)'; ctx.fill();
+  ctx.lineWidth=3.5; ctx.strokeStyle=(game.frame>>2)%2?C:C2; ctx.stroke();
+  txtO(gx?'⚡ SOLVE FAST — UNLOCK YOUR COMBOS ⚡':'⚡ SOLVE FAST — KEEP THE COMBO GOING ⚡', cx, top+20, 11.5, C2, {sw:0});
   txtO(game.problem.text+' = '+ans1+((game.frame/14|0)%2?'_':' '), cx, top+62, 34, '#fff', {mono:true,sw:0});
-  ctx.fillStyle='rgba(120,232,255,0.25)'; ctx.fillRect(cx-cw/2+14, top+ch-13, cw-28, 5);
-  ctx.fillStyle='#7ae8ff'; ctx.fillRect(cx-cw/2+14, top+ch-13, (cw-28)*clamp(r.t/RUSH_DUR,0,1), 5);
+  ctx.fillStyle = gx?'rgba(180,140,255,0.25)':'rgba(120,232,255,0.25)'; ctx.fillRect(cx-cw/2+14, top+ch-13, cw-28, 5);
+  ctx.fillStyle=C; ctx.fillRect(cx-cw/2+14, top+ch-13, (cw-28)*clamp(r.t/(gx?GBURST_DUR:RUSH_DUR),0,1), 5);
+}
+function drawGalaxyHUD(){   // GALAXY fight: this match's combo move-list, lit by what the bursts unlocked
+  const best=game.galaxyBest||0, kit=game.galaxyKit||[], cx=W/2, top=H-46;
+  ctx.save(); ctx.textAlign='center';
+  txtO('YOUR COMBO STRINGS  ·  LV '+(game.galaxyLevel||1)+(game.practice?'  ·  PRACTICE':''), cx, top, 10, '#9a8ad0', {sw:0,mono:true});
+  const segs=[['punch · kick',true,'#cfd6f2',0]].concat(kit.map(k=>[k.pat.split('').join('-'), best>=k.thr, k.mul>=3?'#ff7ac0':'#ffd34d', k.mul]));
+  ctx.font=font(MONO,15);
+  const labels=segs.map(s=> s[1]? s[0]+(s[3]?'  ×'+s[3]:'') : s[0]+' 🔒');
+  const w=labels.map(l=>ctx.measureText(l).width+26);
+  let x=cx - w.reduce((a,b)=>a+b,0)/2;
+  segs.forEach((s,i)=>{ ctx.globalAlpha=s[1]?1:0.32; txtO(labels[i], x+w[i]/2, top+22, 15, s[1]?s[2]:'#8a8aa8', {mono:true,sw:0}); x+=w[i]; });
+  ctx.globalAlpha=1; ctx.restore();
 }
 function endByTime(){
   const p=game.player,e=game.enemy;
@@ -2569,8 +2733,9 @@ function finishKO(){
   }
   if(playerWon){ game.pWins++; if(game.player.hp>=game.player.char.hp) announceFlawless(); }
   else game.eWins++;
-  if(game.pWins>=2||game.eWins>=2){
-    game.playerWon=game.pWins>=2;
+  const winTgt=game.galaxy?1:2;   // GALAXY is one decisive round
+  if(game.pWins>=winTgt||game.eWins>=winTgt){
+    game.playerWon=game.pWins>=winTgt;
     if(game.mode==='story'){ resolveStoryChapter(); }
     else if(game.mode==='tower'){
       if(game.playerWon && game.towerIdx<game.ladder.length-1){
@@ -2583,6 +2748,9 @@ function finishKO(){
       }
     } else {
       game.state='matchend';
+      if(game.galaxy && game.playerWon && !game.practice){   // GALAXY: rank up — next match's math + combos get harder
+        game.galaxyLevel=clamp((game.galaxyLevel||1)+1,1,5); store('galaxyLevel',game.galaxyLevel); game.galaxyLevelUp=true;
+      }
       if(!game.mode2p){ game.grade=computeGrade(); if(game.playerWon) saveBest(''); recordScore(); }
     }
   } else startRound();
@@ -2695,8 +2863,8 @@ function step(){
 
   if(game.online && net.role==='guest'){ guestTick(); return; } // guests render, never simulate
 
-  if(['splash','title','matchend','select','howto','settings','interlude','lobby','story','dialogue','training','reward','codex','naming','records'].includes(game.state)){
-    if(game.state==='splash' && --game.splashT<=0) game.state='title';
+  if(['splash','welcome','title','modes','rumbleChoose','matchend','select','howto','settings','interlude','lobby','story','dialogue','training','reward','codex','naming','records'].includes(game.state)){
+    if(game.state==='splash' && --game.splashT<=0) game.state = game.seenHow? 'title' : 'welcome';   // first run → learn-to-fight gate
     p.update(false); e.update(false);
     if(game.state==='select') for(const pv of previews) pv.update(false);
     return;
@@ -2707,17 +2875,27 @@ function step(){
     game.introT--;
     if(game.introT===55){ SFX.fight(); addTrauma(0.25); flash(0.15,'#fff');
       ring(cam.x,GROUND-80,'#ffd34d',120,6); }
-    if(game.introT<=40){ game.state='fight'; game.fightAt=game.frame; }
+    if(game.introT<=40){
+      if(game.galaxy && !game.practice && (game.galaxyBurstsDone||0)===0){ enterGalaxyBurst(1); }   // GALAXY: load your combos before the fight
+      else if(game.galaxy && game.practice){ game.galaxyBest=99; game.state='fight'; game.fightAt=game.frame; }   // PRACTICE galaxy: all combos unlocked, no burst
+      else { game.state='fight'; game.fightAt=game.frame; }
+    }
     return;
   }
   if(game.state==='fight'){
+    if(game.galaxy && !game.practice && (game.galaxyBurstsDone||0)===1 && game.timer<=37){ enterGalaxyBurst(2); return; }   // GALAXY: halftime burst (not in practice)
+    if(game.practice){   // free training vs a still dummy that can't die; you can't lose; clock frozen
+      if(e.hp<=e.char.hp*0.15){ e.hp=e.char.hp; e.hpShown=e.hp; floatText(e.x,e.y-182,'RESET','#9fb0c8',13); }
+      p.hp=p.char.hp; game.timer=99;
+      tip('prac','PRACTICE — the dummy won\'t fight back · ESC to quit'+(game.galaxy?' · B to re-roll a burst':''));
+    }
     forgeTick();                       // MULTIPLY stage: oscillate the central forge platform
     stageHazardTick();                 // ambient stage hazards (gated on settings.hazards)
     if(game.tutorial) tutorTick();     // first-run guided bout drives the dummy + the lesson script
     if(game.mode==='rumble'){ rumbleStep(); return; }
     controlPlayer(p);
     if(game.mode2p) controlP2(e);
-    else if(!game.tutorial){ controlCPU(e); cpuTelegraphDrift(e); }   // tutorial dummy is script-controlled
+    else if(!game.tutorial && !game.practice){ controlCPU(e); cpuTelegraphDrift(e); }   // tutorial dummy is script-controlled; PRACTICE dummy just stands there
     p.update(true); e.update(true);
     // body push
     const dx=e.x-p.x, min=54;
@@ -2736,7 +2914,7 @@ function step(){
     if(dangerInfo()>0) tip('tel','⚠ He\'s winding up — solve NOW for a PERFECT DODGE');
     // ANSWER RELOCK — when a strike crosses into its tight perfect window, your typed answer is WIPED.
     // A perfect dodge now demands SOLVING inside the ⚡NOW window (or BLOCK) — no holding a pre-typed answer from neutral.
-    if(!game.mode2p && !game.online){
+    if(!game.mode2p && !game.online && !game.galaxy){   // GALAXY has no solve-dodge — math lives only in the bursts
       const pf=perfectFoe(p);
       if(pf){
         if(pf.attack!==game.relockAtk){ game.relockAtk=pf.attack;
@@ -2750,6 +2928,13 @@ function step(){
     if(p.spReady()) tip('sp','SPECIAL ready — press '+keyLabel(KEYS.special)+'. Finish with it for a surprise…');
     if(game.burstChallenge){ game.burstChallenge.t--; if(game.burstChallenge.t<=0 || (p.comboedHits||0)<2 || p.ko) game.burstChallenge=null; }  // MATH-BURST window
     resolveHits(p,e); resolveHits(e,p);
+    storyBeatTick();                    // marquee story lines that PLAY as HP crosses a threshold
+    chRuleTick();                       // per-foe combat philosophy (Maximilian's overflow meter, etc.)
+    if(game.mode==='story' && game.storyCh===STORY.length-1 && !game.galaxy && !game.practice && p.aura>0){
+      p.aura=Math.max(0, p.aura-0.04);   // SOLOMON reduces the unknown toward zero — clean solving is the only push-back (codex thesis, played)
+      if(game.frame%150===0) floatText(p.x, p.y-152, '↓ to zero', '#ff9f2a', 12);
+      tip('solz','Solomon pulls your AURA toward zero — keep solving to hold the line.');
+    }
     game.timer -= 1/60;
     if(game.timer<=0 && game.state==='fight') endByTime();
     return;
@@ -3185,6 +3370,7 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
   // AURA tank — every attack draws from this; math refills it
   const mw=236,my=h+6;
   const mx0 = side===1?0:w-mw;
+  if(!game.galaxy){   // GALAXY: attacks are FREE, so there's no aura tank — it'd just be a confusing full bar
   ctx.fillStyle='rgba(5,6,16,0.8)';
   ctx.fillRect(mx0-2,my-2,mw+4,13);
   ctx.fillStyle='#0a2030'; ctx.fillRect(mx0,my,mw,9);
@@ -3215,12 +3401,13 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
   if(f.auraFlash>0 && f.auraFlash%4<2){ // "can't afford" warning
     ctx.strokeStyle='#ff4d5e'; ctx.lineWidth=2; ctx.strokeRect(mx0-2,my-2,mw+4,13);
   }
+  }   // end: aura tank hidden in GALAXY
   // GUARD strip — drains as you block; empty = your guard cracks (a brief crushed window)
   const gy=my+11, gf=clamp((f.guard||0)/(f.guardMax||100),0,1);
   ctx.fillStyle='rgba(5,6,16,0.7)'; ctx.fillRect(mx0-2,gy-1,mw+4,5);
   ctx.fillStyle=(f.guardCrush>0)? (Math.sin(game.frame*0.4)>0?'#ff5a5a':'#601010') : gf<0.34?'#ffb06a':'#6fb0c8';
   if(side===1) ctx.fillRect(mx0,gy,mw*gf,3); else ctx.fillRect(mx0+mw*(1-gf),gy,mw*gf,3);
-  if(f===game.player && !game.mode2p){   // FOCUS meter — fills from hits + perfect-dodges; full = SOLVE RUSH ready
+  if(f===game.player && !game.mode2p && !game.galaxy){   // FOCUS meter — fills from hits + perfect-dodges; full = SOLVE RUSH ready (standard mode)
     const fy2=gy+5, ff=clamp((game.rushMeter||0)/RUSH_MAX,0,1), full=ff>=1;
     ctx.fillStyle='rgba(5,6,16,0.7)'; ctx.fillRect(mx0-2,fy2-1,mw+4,5);
     ctx.fillStyle = full? ((game.frame>>2)%2?'#ffd34d':'#7ae8ff') : '#3f8fb0';
@@ -3239,7 +3426,7 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
     ctx.fillStyle = wins>i? (side===1?'#ffd34d':'#ff7a4d') : 'rgba(255,255,255,0.14)';
     ctx.fillRect(-4,-4,8,8); ctx.restore();
   }
-  if(f===game.player){ // attack cost chips — lit when affordable
+  if(f===game.player && !game.galaxy){ // attack cost chips — lit when affordable (STANDARD only; GALAXY attacks are free)
     let cxp=40;
     ctx.font=font(MONO,10); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
     for(const [key,label,cost] of [[keyLabel(KEYS.punch),'PUNCH',ATK.punch.cost],[keyLabel(KEYS.kick),'KICK',ATK.kick.cost],[keyLabel(KEYS.special),'SPECIAL',ATK.special.cost]]){
@@ -3315,7 +3502,7 @@ function drawComboMeter(){   // persistent, juicy combo counter so chains are VI
   if(game.mode2p) one(game.enemy, W*0.73);
 }
 function drawDangerSolve(){   // FUSION FIX: during the ⚡NOW window, float the problem + live answer OVER the player so the read is one eye-line, not three
-  if(game.mode2p || game.online) return;
+  if(game.mode2p || game.online || game.galaxy) return;
   const p=game.player; if(!p || p.ko || !game.problem) return;
   if(!perfectFoe(p)) return;                       // only while a strike is inside its tight perfect window
   const sx = W/2 + (p.x-cam.x)*cam.z;
@@ -3693,12 +3880,15 @@ function drawDailyBadge(){     // surfaces the Daily + at-risk streak EXACTLY wh
   const pulse = 0.6+Math.sin(game.frame*0.12)*0.4;
   let line1, col1, line2='';
   if(!playedToday){
-    line1='◆ DAILY CHALLENGE — UNPLAYED'; col1='#22D3EE';
-    if(st.n>0 && st.last===day-1) line2='✦ '+st.n+'-DAY STREAK · play before midnight';
-    else if(st.n>0 && st.last===day-2) line2='✦ '+st.n+'-DAY STREAK · one freeze left';
+    line1="◆ TODAY'S FIGHT — NOT PLAYED YET"; col1='#22D3EE';
+    if(st.n<=0) line2='win today to start a streak';
+    else if(st.last===day-1) line2='✦ '+st.n+'-DAY STREAK · play before midnight to keep it';
+    else if(st.last===day-2) line2 = st.usedFreeze
+        ? '✦ '+st.n+'-DAY STREAK · play TODAY or it resets'
+        : '✦ '+st.n+'-DAY STREAK · you missed a day — play today, it\'s still safe';
   } else {
-    line1='DAILY DONE ✓ · best '+best.score; col1='#7ee0b0';
-    if(st.n>0) line2='✦ '+st.n+'-DAY STREAK · new seed tomorrow';
+    line1="TODAY'S FIGHT DONE ✓ · best "+best.score; col1='#7ee0b0';
+    if(st.n>0) line2='✦ '+st.n+'-DAY STREAK · a new fight unlocks tomorrow';
   }
   ctx.save(); ctx.font=font(MONO,11); ctx.textAlign='center';
   const w=Math.max(ctx.measureText(line1).width, line2?ctx.measureText(line2).width:0)+30;
@@ -3712,7 +3902,7 @@ function drawDailyBadge(){     // surfaces the Daily + at-risk streak EXACTLY wh
 }
 function drawTitle(){
   ctx.fillStyle='rgba(3,2,10,0.45)'; ctx.fillRect(0,0,W,H);
-  drawDailyBadge();
+  if(game.profile && (game.profile.matches||0)>0) drawDailyBadge();   // don't shout Daily at a newcomer who hasn't fought yet
   // logo
   const sh=(game.frame%220)/220;
   ctx.save(); ctx.translate(W/2,0); ctx.rotate(-0.018); ctx.translate(-W/2,0);
@@ -3754,6 +3944,59 @@ function drawTitle(){
     txtO((i+1)+' '+DIFF.names[i], r.x+r.w/2, r.y+14, 11, sel?'#ffd34d':'#9a8fb8',{mono:true,sw:0});
   }
   txtO('W/S navigate · ⏎ select · R records · M music', W/2, 530, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
+}
+function drawWelcome(){   // first-run gate: teach before you ask
+  ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
+  txtO('BRAWLGEBRA', W/2, 150, 50, '#ffd0d6', {sw:8});
+  txtO('Solve math to power your punches.', W/2, 198, 16, '#9fdcff', {sw:0});
+  const pulse=0.55+Math.sin(game.frame*0.08)*0.45;
+  rr(W/2-230, 268, 460, 96, 16); ctx.fillStyle='rgba(14,10,30,0.94)'; ctx.fill();
+  ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5; ctx.stroke();
+  txtO('NEW HERE?', W/2, 300, 23, '#ffd34d', {sw:4});
+  txtO('Learn to fight in 60 seconds', W/2, 330, 15, '#e8ecff', {sw:0});
+  ctx.globalAlpha=pulse; txtO('press ENTER  ·  or click anywhere', W/2, 354, 12, '#ffd34d', {mono:true,sw:0}); ctx.globalAlpha=1;
+  txtO('(already know it? press T to skip)', W/2, 396, 10, 'rgba(160,150,190,0.7)', {mono:true,sw:0});
+}
+function drawModes(){
+  ctx.fillStyle='rgba(3,2,10,0.55)'; ctx.fillRect(0,0,W,H);
+  txtO('MORE MODES', W/2, 116, 38, '#efe9ff', {sw:6});
+  game.modeRects=[];
+  MODES_SUB.forEach((m,i)=>{
+    const sel=i===game.modeIdx, y=196+i*54;
+    const r={x:W/2-230,y:y-22,w:460,h:46}; game.modeRects.push(r);
+    const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h, on=sel||hov;
+    rr(r.x,r.y,r.w,r.h,10);
+    ctx.fillStyle = on?'rgba(50,32,80,0.92)':'rgba(18,14,32,0.85)'; ctx.fill();
+    ctx.strokeStyle = on?'#ffd34d':'#3d2658'; ctx.lineWidth=on?2:1.2; ctx.stroke();
+    txtO(m[0], W/2, y-3, 17, on?'#ffd34d':'#e8ecff', {sw:0});
+    txtO(m[1], W/2, y+15, 10, 'rgba(200,190,230,0.82)', {mono:true,sw:0});
+  });
+  game.backRect={x:W/2-70,y:440,w:140,h:32};
+  rr(game.backRect.x,game.backRect.y,140,32,8); ctx.fillStyle='rgba(18,14,32,0.85)'; ctx.fill();
+  ctx.strokeStyle='#3d2658'; ctx.lineWidth=1.2; ctx.stroke();
+  txtO('‹ BACK   (T)', W/2, 461, 12, '#a99cc8', {mono:true,sw:0});
+}
+function drawRumbleChoose(){
+  ctx.fillStyle='rgba(3,2,10,0.55)'; ctx.fillRect(0,0,W,H);
+  txtO('RUMBLE', W/2, 120, 40, '#efe9ff', {sw:6});
+  txtO('5-fighter free-for-all — last one standing', W/2, 158, 12, '#cabbe0', {mono:true,sw:0});
+  const opts=[['SAME SCREEN','play vs the computer, right here'],['ONLINE WITH FRIENDS','share a code & play over the internet']];
+  game.rumbleRects=[];
+  opts.forEach((o,i)=>{
+    const sel=(i===1)===!!game.rumbleOnline, y=224+i*72;
+    const r={x:W/2-230,y:y-26,w:460,h:54}; game.rumbleRects.push(r);
+    const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h, on=sel||hov;
+    rr(r.x,r.y,r.w,r.h,10);
+    ctx.fillStyle=on?'rgba(50,32,80,0.92)':'rgba(18,14,32,0.85)'; ctx.fill();
+    ctx.strokeStyle=on?'#ffd34d':'#3d2658'; ctx.lineWidth=on?2.4:1.2; ctx.stroke();
+    txtO(o[0], W/2, y-3, 19, on?'#ffd34d':'#e8ecff', {sw:0});
+    txtO(o[1], W/2, y+17, 11, 'rgba(200,190,230,0.85)', {mono:true,sw:0});
+  });
+  game.backRect={x:W/2-70,y:388,w:140,h:32};
+  rr(game.backRect.x,game.backRect.y,140,32,8); ctx.fillStyle='rgba(18,14,32,0.85)'; ctx.fill();
+  ctx.strokeStyle='#3d2658'; ctx.lineWidth=1.2; ctx.stroke();
+  txtO('‹ BACK   (T)', W/2, 409, 12, '#a99cc8', {mono:true,sw:0});
+  txtO('W/S choose · ⏎ go · T back', W/2, 470, 10, 'rgba(160,150,190,0.75)', {mono:true,sw:0});
 }
 function pipRow(label,n,col,x,y,w){
   ctx.font=font(MONO,9); ctx.textAlign='left'; ctx.fillStyle='#8a93b8';
@@ -3819,7 +4062,7 @@ function drawHowTo(){
   });
   const pulse=0.6+Math.sin(game.frame*0.08)*0.4;
   ctx.globalAlpha=pulse;
-  txtO(game.howReturn==='fight'? '⏎  FIGHT':'⏎  BACK', W/2, 488, 17, '#ffd34d',{sw:0,mono:true});
+  txtO((game.howReturn==='fight'? '⏎  FIGHT':'⏎  BACK')+'      T  REPLAY THE TRAINING FIGHT', W/2, 488, 14, '#ffd34d',{sw:0,mono:true});
   ctx.globalAlpha=1;
 }
 function btn(label, x, y, w, h, hot){
@@ -3988,6 +4231,13 @@ function drawStory(){
   rr(W/2+100,252,300,46,8); ctx.fillStyle='rgba(14,17,28,0.9)'; ctx.fill();
   ctx.strokeStyle='#3d4668'; ctx.lineWidth=1.2; ctx.stroke();
   txtO('T — TRAIN your functions', W/2+250, 280, 12, '#ffd34d',{mono:true,sw:0});
+  if(game.codexNew && game.codexNew.length){                       // a fresh lore entry just unlocked — make it find the player
+    const pulse=0.6+0.4*Math.sin(game.frame*0.12);
+    rr(W/2+100, 312, 300, 46, 8); ctx.fillStyle='rgba(40,30,8,0.92)'; ctx.fill();
+    ctx.lineWidth=1.8; ctx.strokeStyle='rgba(255,211,77,'+pulse.toFixed(2)+')'; ctx.stroke();
+    txtO('✦ NEW CODEX ENTRY', W/2+250, 332, 12, '#ffd34d',{sw:2});
+    txtO('press  L  to read it', W/2+250, 350, 10, '#cfe0ff',{mono:true,sw:0});
+  }
   const ch=STORY[game.storySel], playable=game.storySel<=game.storyProg;
   const gated = playable && isFinalChapter(game.storySel) && !allFourMastered();
   let prompt='⏎  ENTER THIS CHAPTER', pcol='#ffd34d';
@@ -4024,7 +4274,9 @@ function drawCodex(){
     wrapText(e.body, px+26, 196, pw-52, 22);
   } else {
     txtO('SEALED', px+pw/2, 250, 24, '#5a5470',{sw:0});
-    txtO('Clear Chapter '+(e.req)+' to unlock this entry.', px+pw/2, 282, 12, '#8a93b8',{mono:true,sw:0});
+    const need=STORY[Math.max(0,e.req-1)];                          // the chapter whose clearing unlocks this entry (array idx ≠ Roman numeral, so name it)
+    const lbl=need? (need.title.split('·')[0].trim()||need.title) : '';
+    txtO(e.req<=0? 'Available from the start.' : 'Clear chapter '+lbl+' to unlock this entry.', px+pw/2, 282, 12, '#8a93b8',{mono:true,sw:0});
   }
   txtO('W/S browse  ·  Esc back to the story', W/2, H-30, 11, '#8a93b8',{mono:true,sw:0});
 }
@@ -4036,25 +4288,70 @@ function wrapLines(s,maxW){
   if(line) out.push(line); return out;
 }
 const CS_SPEED=0.62;   // characters revealed per frame (typewriter)
-const SCENE_TINT={ monastery:['#0b0a12','#15100a','#1d140b'], schism:['#08060f','#0f0a1c','#170f28'],
+function lineSpeed(line){ return CS_SPEED*((line&&line.slow)||1); }   // a line can type slower (line.slow<1) for weight
+const SCENE_TINT={ monastery:['#0b0a12','#15100a','#1d140b'], difference:['#06101a','#0a1a26','#0e2230'], schism:['#08060f','#0f0a1c','#170f28'],
   overflow:['#130406','#20070a','#2c0a0d'], equals:['#050507','#08080e','#0e0e18'], void:['#020208','#070417','#100a24'] };
-const SCENE_GLOW={ monastery:'255,150,60', schism:'150,110,255', overflow:'255,80,60', equals:'255,159,42', void:'120,90,255' };
+const SCENE_GLOW={ monastery:'255,150,60', difference:'120,200,255', schism:'150,110,255', overflow:'255,80,60', equals:'255,159,42', void:'120,90,255' };
+function drawMarginalia(){   // the margin note: parchment scrap, ink scratches, and a coffee ring over a hidden name
+  const nx=60, ny=21, solved=game.storyProg>=STORY.length;
+  ctx.save();
+  ctx.fillStyle='rgba(222,210,176,0.42)'; rr(nx-30,ny-13,60,26,2); ctx.fill();          // parchment corner
+  ctx.strokeStyle='rgba(40,30,18,0.38)'; ctx.lineWidth=1;
+  ctx.beginPath(); for(let r=0;r<3;r++){ const yy=ny-5+r*5; ctx.moveTo(nx-24,yy); ctx.lineTo(nx+18-r*6,yy); } ctx.stroke();
+  const ring=ctx.createRadialGradient(nx+8,ny+6,1,nx+8,ny+6,12);                          // the coffee ring over the footnote
+  if(solved){ ring.addColorStop(0,'rgba(150,120,90,0)'); ring.addColorStop(0.7,'rgba(160,130,95,0.10)'); ring.addColorStop(1,'rgba(160,130,95,0)');
+    ctx.fillStyle=ring; ctx.fillRect(nx-6,ny-6,30,24);
+    txtO('=', nx+8, ny+5, 8, 'rgba(255,159,42,0.7)', {mono:true,sw:0}); }                 // the name under it, finally legible: the Equals
+  else { ring.addColorStop(0,'rgba(55,36,20,0.15)'); ring.addColorStop(0.6,'rgba(48,30,16,0.6)'); ring.addColorStop(0.85,'rgba(40,26,14,0.55)'); ring.addColorStop(1,'rgba(40,26,14,0)');
+    ctx.fillStyle=ring; ctx.fillRect(nx-6,ny-6,30,24); }
+  ctx.restore();
+}
+function csProps(scene, glow){   // each order's hall, drawn in silhouette — environmental storytelling, no art assets
+  const gy=H-150;
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  if(scene==='monastery'){            // PLUS — a great wall, forever three-fifths built (rows thin out toward the top)
+    for(const px of [120,860]) ctx.fillRect(px-5,70,10,gy-70);                 // scaffold poles
+    for(let r=0;r<7;r++){ const rows=Math.max(0,6-r), wy=gy-12-r*20;
+      for(let c=0;c<rows;c++) ctx.fillRect(64+c*52+(r%2?26:0), wy, 48, 17); }
+  } else if(scene==='difference'){    // MINUS — an emptied room: one stool, clean ghost-rectangles where things used to stand
+    ctx.fillRect(0,gy+14,W,4);
+    ctx.fillRect(W/2-16,gy-16,32,30); ctx.fillRect(W/2-24,gy+10,48,5);          // a lone stool
+    ctx.strokeStyle='rgba(200,225,255,0.06)'; ctx.lineWidth=2;
+    ctx.strokeRect(150,gy-78,118,92); ctx.strokeRect(648,gy-58,150,72);         // outlines of furniture given away
+  } else if(scene==='schism'){        // DIVIDE — leaning shelves, loose pages adrift
+    for(let i=0;i<4;i++){ ctx.save(); ctx.translate(130+i*215, gy); ctx.rotate((i%2?1:-1)*0.05);
+      ctx.fillRect(-34,-(gy-70),68,gy-70);
+      ctx.fillStyle='rgba(0,0,0,0.28)'; for(let s=1;s<7;s++) ctx.fillRect(-30,-(gy-72)+s*((gy-78)/7),60,5);
+      ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.restore(); }
+    ctx.fillStyle='rgba('+glow+',0.16)';
+    for(let i=0;i<10;i++){ const px=(i*123 + game.frame*0.4)%W, py=110+((i*70+game.frame*0.6)%(gy-180)); ctx.fillRect(px,py,10,13); }
+  } else if(scene==='overflow'){      // MULTIPLY — the brazier, doubled and doubled and doubled, receding into the dark
+    for(let d=0;d<4;d++){ const n=Math.min(Math.pow(2,d),6), sy=gy-d*64, sc=1-d*0.17;
+      for(let k=0;k<n;k++){ const sx=W/2+(k-(n-1)/2)*128*sc;
+        ctx.beginPath(); ctx.moveTo(sx-20*sc,sy); ctx.lineTo(sx+20*sc,sy); ctx.lineTo(sx+11*sc,sy-42*sc); ctx.lineTo(sx-11*sc,sy-42*sc); ctx.closePath(); ctx.fill(); } }
+  } else if(scene==='equals'){        // SOLOMON — everything erased but one patient line at the bottom of the page
+    ctx.fillStyle='rgba('+glow+',0.45)';
+    ctx.fillRect(W*0.18, H*0.5, W*0.64, 3); ctx.fillRect(W*0.18, H*0.5+11, W*0.64, 3);
+  } else {                            // fallback — the old arch + pillars
+    for(const px of [70,250,710,890]) ctx.fillRect(px-24,40,48,H-130);
+    ctx.beginPath(); ctx.moveTo(250,120); ctx.quadraticCurveTo(W/2,20,710,120); ctx.lineTo(710,60); ctx.lineTo(250,60); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
 function csBackdrop(scene){
   const tint=SCENE_TINT[scene]||SCENE_TINT.monastery;
   const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,tint[0]); g.addColorStop(0.6,tint[1]); g.addColorStop(1,tint[2]);
   ctx.fillStyle=g; ctx.fillRect(-40,-40,W+80,H+80);
-  // arch + pillar silhouettes
-  ctx.fillStyle='rgba(0,0,0,0.5)';
-  for(const px of [70,250,710,890]) ctx.fillRect(px-24,40,48,H-130);
-  ctx.beginPath(); ctx.moveTo(250,120); ctx.quadraticCurveTo(W/2,20,710,120); ctx.lineTo(710,60); ctx.lineTo(250,60); ctx.closePath(); ctx.fill();
-  // warm brazier glow, flickering
+  // per-order room silhouettes — the space tells you whose hall you stand in before anyone speaks
   const glow=SCENE_GLOW[scene]||SCENE_GLOW.monastery, gy=H-150;
+  csProps(scene, glow);
   const flick=0.5+0.12*Math.sin(game.frame*0.3)+0.06*Math.sin(game.frame*0.71);
   const gr=ctx.createRadialGradient(W/2,gy,8,W/2,gy,300);
   gr.addColorStop(0,'rgba('+glow+','+(0.26*flick).toFixed(3)+')'); gr.addColorStop(1,'rgba('+glow+',0)');
   ctx.fillStyle=gr; ctx.fillRect(0,0,W,H);
-  // rising embers (procedural, deterministic — no particle state)
-  for(let i=0;i<16;i++){
+  // rising embers (procedural, deterministic — no particle state); the Equals void has no fire to give
+  if(scene!=='equals') for(let i=0;i<16;i++){
     const yy=gy+14-(((game.frame*0.6)+i*47)%330);
     const xx=W/2+Math.sin(game.frame*0.013+i*1.7)*120+(i*26-208);
     const a=clamp((gy-yy)/330,0,1)*0.5*flick;
@@ -4063,38 +4360,66 @@ function csBackdrop(scene){
   }
   ctx.globalAlpha=1;
 }
-function drawCsFigure(char, x, groundY, facing, lit, a, phase){
-  const f=cutsceneFighter(char); f.facing=facing;
+function drawCsFigure(char, x, groundY, facing, lit, a, phase, act){
+  const f=cutsceneFighter(char); f.facing = (act==='turn')? -facing : facing;   // turn AWAY (won't look at you)
   try{ f.update(false); }catch(e){}
-  const bob=Math.sin(game.frame*0.05+phase*2.3)*3 + (lit?Math.sin(game.frame*0.22)*1.4:0); // breathing + a little talk-motion when lit
+  // BODY-ACTING: a per-line directive bends the procedural figure into a performance — no new art
+  let lean=0, dy=0, dx=0, sc=1.5;
+  if(act==='slump'){ lean=0.15; dy=6; }
+  else if(act==='broken'){ lean=0.27; dy=11; }       // grief / collapse
+  else if(act==='recoil'){ lean=-0.12; dx=facing*8; } // taken aback
+  else if(act==='loom'){ sc=1.66; lean=0.05; dy=-2; } // menace, swells forward
+  else if(act==='step'){ dx=-facing*14; }            // step back
+  const breath = (act==='broken'||act==='slump')? 0.5 : (act==='loom'? 1.4 : 1);   // slumped barely breathes; looming swells
+  const bob=Math.sin(game.frame*0.05+phase*2.3)*3*breath + (lit?Math.sin(game.frame*0.22)*1.4*breath:0);
   const slide=(1-a)*46*(facing>0?-1:1);
-  ctx.save(); ctx.translate(x+slide, groundY+bob); ctx.scale(1.5,1.5);
-  if(lit) drawPose(f,f.P,0,0,Math.max(0.2,a),null,0);
-  else    drawPose(f,f.P,0,0,0.34,'#0d0b16',0);   // dim silhouette
+  ctx.save(); ctx.translate(x+slide+dx, groundY+bob+dy); ctx.scale(sc,sc);
+  if(lit) drawPose(f,f.P,0,0,Math.max(0.2,a),null,lean);
+  else    drawPose(f,f.P,0,0,0.34,'#0d0b16',lean);   // dim silhouette
   ctx.restore();
 }
 function drawDialogue(){
   const d=game.dlg; if(!d) return;
-  if(d._i!==d.i){ d.lineStart=game.frame; d._i=d.i; d.skip=false; }  // new line → restart typing/entrance
+  if(d._i!==d.i){ d.lineStart=game.frame; d._i=d.i; d.skip=false;    // new line → restart typing/entrance + fire its direction cues
+    const nl=d.lines[Math.min(d.i,d.lines.length-1)];
+    if(nl){
+      if(nl.music) setMusic(nl.music);                               // SCORE THE SCENE — a beat can shift the musical bed
+      if(nl.sfx) playStinger(nl.sfx);                                // a one-shot emotional stinger
+      if(nl.quiet){ if(!d.ducked){ musicDuckHold(); d.ducked=true; } }  // hold the music near-silent under a confession
+      else if(d.ducked){ musicRestore(); d.ducked=false; }
+    }
+  }
   const line=d.lines[Math.min(d.i,d.lines.length-1)];
   const t=game.frame-(d.lineStart||game.frame);
   const scene=d.scene||'monastery';
-  const push=clamp(1+t*0.0006,1,1.045), groundY=H-150;
-  // staged scene (pushed in slightly)
-  ctx.save(); ctx.translate(W/2,H*0.56); ctx.scale(push,push); ctx.translate(-W/2,-H*0.56);
-  csBackdrop(scene);
+  const groundY=H-150;
   const cur=speakerToChar(line.w);
+  const spkX = cur? (cur.who==='you'?300:662) : W/2;
+  // CAMERA: smooth shot framing — push toward the speaker, hard close-up on the gut-punches (line.shot or auto from weight)
+  let tz, tx, ty; const sh=line.shot;
+  if(sh==='close' || (line.slow&&line.slow<=0.62)){ tz=1.42; tx=spkX; ty=groundY-46; }   // close-up
+  else if(sh==='you'){ tz=1.18; tx=300; ty=groundY-30; }
+  else if(sh==='them'){ tz=1.18; tx=662; ty=groundY-30; }
+  else if(sh==='wide'||sh==='two'||!cur){ tz=1.0; tx=W/2; ty=H*0.56; }                    // wide / narrator
+  else if(line.slow&&line.slow<0.85){ tz=1.16; tx=spkX; ty=groundY-30; }                  // mild push on a weighted line
+  else { tz=clamp(1+t*0.0006,1,1.05); tx=W/2; ty=H*0.56; }
+  if(d.camZ==null){ d.camZ=tz; d.camX=tx; d.camY=ty; }                                     // snap on the first frame of a scene
+  d.camZ+=(tz-d.camZ)*0.09; d.camX+=(tx-d.camX)*0.09; d.camY+=(ty-d.camY)*0.09;
+  // staged scene under the moving camera
+  ctx.save(); ctx.translate(d.camX,d.camY); ctx.scale(d.camZ,d.camZ); ctx.translate(-d.camX,-d.camY);
+  csBackdrop(scene);
   if(cur && cur.who!=='you') d.lastRight=cur.char;
   const youLit=!!(cur&&cur.who==='you');
   const rightChar=(cur&&(cur.who==='order'||cur.who==='boss'))?cur.char:d.lastRight;
   const rightLit=!!(cur&&(cur.who==='order'||cur.who==='boss'));
   const ent=clamp(t/14,0,1), ease=ent*(2-ent);
-  drawCsFigure(PROTAG, 300, groundY, 1, youLit, youLit?ease:1, 0);
-  if(rightChar) drawCsFigure(rightChar, 662, groundY, -1, rightLit, rightLit?ease:1, 1.1);
+  drawCsFigure(PROTAG, 300, groundY, 1, youLit, youLit?ease:1, 0, line.youAct);
+  if(rightChar) drawCsFigure(rightChar, 662, groundY, -1, rightLit, rightLit?ease:1, 1.1, line.act);
   ctx.restore();
   // letterbox bars
   ctx.fillStyle='#000'; ctx.fillRect(0,0,W,42); ctx.fillRect(0,H-92,W,92);
   if(STORY[game.storyCh]) txtO(STORY[game.storyCh].title, W/2, 28, 13, '#9aa3c8',{mono:true,sw:0});
+  if(game.mode==='story') drawMarginalia();   // the coffee-stained prophecy note, always in the corner — its hidden name surfaces once the saga ends
   // dialogue panel (above the bottom bar)
   const bw=760, bx=W/2-bw/2, lh=23, padT=38, padB=20;
   ctx.font=font(MONO,15);
@@ -4106,12 +4431,14 @@ function drawDialogue(){
   const speaker = line.w==='YOU' ? (game.heroName||'YOU').toUpperCase() : line.w;
   txtO(speaker, bx+26, by-1, 17, line.c, {align:'left',sw:4});
   // typewriter reveal across the fixed wrapped lines
-  const full=line.t.length, shownN = d.skip? full : Math.min(full, Math.floor(t*CS_SPEED));
+  const spd=lineSpeed(line);
+  const full=line.t.length, shownN = d.skip? full : Math.min(full, Math.floor(t*spd));
   let rem=shownN, yy=by+padT;
   ctx.font=font(MONO,15); ctx.textAlign='left'; ctx.fillStyle='#e8ecff';
   for(const ln of wrapped){ if(rem<=0&&!d.skip&&shownN<full) break; ctx.fillText(d.skip?ln:ln.slice(0,Math.max(0,rem)), bx+26, yy); rem-=ln.length+1; yy+=lh; }
   txtO((d.i+1)+' / '+d.lines.length, bx+bw-30, by+bh-12, 10, '#6a7090',{mono:true,sw:0});
-  if(shownN>=full){ const blink=(game.frame/26|0)%2; txtO(blink?'▼  ENTER':'   ENTER', bx+bw-92, by+bh-12, 11, '#ffd34d',{mono:true,sw:0}); }
+  const ready = d.skip || t >= full/spd + (line.hold||0);    // HOLD: after the line finishes, sit in silence (figure still breathing) before the prompt
+  if(shownN>=full && ready){ const blink=(game.frame/26|0)%2; txtO(blink?'▼  ENTER':'   ENTER', bx+bw-92, by+bh-12, 11, '#ffd34d',{mono:true,sw:0}); }
 }
 function drawTraining(){
   ctx.fillStyle='rgba(2,3,8,0.85)'; ctx.fillRect(0,0,W,H);
@@ -4199,8 +4526,8 @@ function drawSelect(){
     ctx.restore();
     txtO(c.name, x+cw/2, y+152, 21, sel?'#ffd34d':'#efe9ff',{sw:4});
     txtO(c.tagline, x+cw/2, y+168, 9, '#8a93b8',{mono:true,sw:0});
-    pipRow('MATH NEED', c.mathNeed, '#7ae8ff', x+16, y+194, cw-32);
-    pipRow('UPSIDE',    c.upside,   '#ffd34d', x+16, y+218, cw-32);
+    pipRow('NEEDS MATH', c.mathNeed, '#7ae8ff', x+16, y+194, cw-32);
+    pipRow('MAX POWER',  c.upside,   '#ffd34d', x+16, y+218, cw-32);
     miniBar('HP',  c.hp/125,                    x+16, y+248, cw-32);
     miniBar('SPD', c.speed/1.05,                x+16, y+266, cw-32);
     miniBar('PWR', c.dmg*(1+c.streakMul*0.25)/1.5, x+16, y+284, cw-32);
@@ -4218,38 +4545,49 @@ function drawSelect(){
       txtO('P1 ✓', x+30, y+24, 11, game.player.glow||'#7ae8ff', {mono:true,sw:3});
   }
   // bottom row: ARCADE single/endless toggle (if applicable) + stage picker, side by side, below the cards
-  const isArcade = (game.mode==='cpu'||game.mode==='gauntlet');
+  const isArcade = (game.mode==='cpu'||game.mode==='gauntlet'||game.practice);
   const chip=(label,x,w,y,fill,stroke,txtCol)=>{ rr(x,y,w,24,12); ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=stroke; ctx.lineWidth=1.5; ctx.stroke(); txtO(label,x+w/2,y+17,12,txtCol,{mono:true,sw:0}); };
   ctx.font=font(MONO,12);
   const sp='STAGE  ◂ '+STAGES[game.stageIdx].name+'  ('+((game.stageIdx||0)+1)+'/'+STAGES.length+')  ▸   G';
   const spw=ctx.measureText(sp).width+30, rowY=H-108;
   // STAGE STRIP — 6 accent-coloured pips so it's obvious there are multiple distinct maps to cycle (G / click)
-  if(!game.daily){
+  if(!game.daily && !(game.mode==='cpu'||game.practice)){   // on the 1v1 lines this row holds the combat-style gloss instead
     const dn=STAGES.length, dgap=20, dx0=W/2-(dn-1)*dgap/2, dy=rowY-20;
     for(let i=0;i<dn;i++){ const on=i===(game.stageIdx||0);
       ctx.beginPath(); ctx.arc(dx0+i*dgap, dy, on?5.5:3.5, 0, 7);
       ctx.fillStyle=on?STAGES[i].accent:hexA(STAGES[i].accent,0.4); ctx.fill();
       if(on){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke(); } }
   }
-  if(isArcade){
-    const lbl = game.daily?'DAILY SEED' : game.mode==='gauntlet'?'ENDLESS RUN':'SINGLE FIGHT';
-    const am='MODE  ◂ '+lbl+' ▸   (E)';
-    const fill = game.daily?'rgba(16,40,46,0.92)' : game.mode==='gauntlet'?'rgba(58,30,18,0.92)':'rgba(14,17,28,0.92)';
-    const stroke = game.daily?'#22D3EE' : game.mode==='gauntlet'?'#ff8a4d':'#3d4668';
-    const tcol = game.daily?'#8eeaff' : game.mode==='gauntlet'?'#ffb07a':'#b8c0da';
-    const amw=ctx.measureText(am).width+30, gap=16, x0=W/2-(amw+gap+spw)/2;
-    game.arcadeRect={x:x0, y:rowY, w:amw, h:24};
-    chip(am, x0, amw, rowY, fill, stroke, tcol);
+  const sAcc=STAGES[game.stageIdx||0].accent;
+  if(game.mode==='cpu' || game.practice){
+    // ---- COMBAT STYLE — two clearly-labeled options always visible + a one-line gloss of the active one ----
+    const g=game.galaxy;
+    ctx.font=font(MONO,12);
+    const segW=158, cgap=5, ctrlW=segW*2+cgap, gap=18, x0=W/2-(ctrlW+gap+spw)/2;
+    const gloss = g? 'GALAXY BRAIN — do 2 math bursts to unlock combo strings, then brawl free (no math mid-fight)'
+                   : 'STANDARD — solve math during the fight to power every move';
+    game.arcadeRect={x:x0, y:rowY, w:ctrlW, h:24};   // clicking the control flips the style (so does E)
+    [['STANDARD',false,'#7ae8ff'],['GALAXY BRAIN',true,'#b48cff']].forEach((s,i)=>{
+      const active=(s[1]===g), sx=x0+i*(segW+cgap);
+      rr(sx,rowY,segW,24,8); ctx.fillStyle=active?hexA(s[2],0.20):'rgba(14,17,28,0.9)'; ctx.fill();
+      ctx.strokeStyle=active?s[2]:'#3d4668'; ctx.lineWidth=active?2.2:1.2; ctx.stroke();
+      txtO((active?'● ':'')+s[0], sx+segW/2, rowY+16, 11, active?s[2]:'#8a93b8', {mono:true,sw:0});
+    });
+    game.stageRect={x:x0+ctrlW+gap, y:rowY, w:spw, h:24};
+    chip(sp, game.stageRect.x, spw, rowY, hexA(sAcc,0.14), sAcc, '#e8ecff');
+    txtO((game.practice?'PRACTICE · ':'')+gloss, W/2, rowY+38, 10, g?'#d8c4ff':'#bfe9ff', {mono:true,sw:0});   // explain the active style (below the row, clear of the cards)
+  } else if(game.mode==='gauntlet'){
+    game.arcadeRect=null;
+    const am='MODE  ·  ENDLESS RUN', amw=ctx.measureText(am).width+30, gap=16, x0=W/2-(amw+gap+spw)/2;
+    chip(am, x0, amw, rowY, 'rgba(58,30,18,0.92)', '#ff8a4d', '#ffb07a');
     game.stageRect={x:x0+amw+gap, y:rowY, w:spw, h:24};
-    const sAcc=STAGES[game.stageIdx||0].accent;
-    chip(sp, game.stageRect.x, spw, rowY, game.daily?'rgba(14,17,28,0.92)':hexA(sAcc,0.14), game.daily?'#3d4668':sAcc, game.daily?'#5b6472':'#e8ecff');  // stage locked on daily
+    chip(sp, game.stageRect.x, spw, rowY, hexA(sAcc,0.14), sAcc, '#e8ecff');
   } else {
     game.arcadeRect=null;
     game.stageRect={x:W/2-spw/2, y:rowY, w:spw, h:24};
-    const sAcc=STAGES[game.stageIdx||0].accent;
-    chip(sp, game.stageRect.x, spw, rowY, hexA(sAcc,0.14), sAcc, '#e8ecff');
+    chip(sp, game.stageRect.x, spw, rowY, game.daily?'rgba(14,17,28,0.92)':hexA(sAcc,0.14), game.daily?'#3d4668':sAcc, game.daily?'#5b6472':'#e8ecff');
   }
-  txtO('←/→ or 1–'+n+' choose · ENTER '+(game.mode2p&&game.pickPhase===1?'lock P1':'fight')+(isArcade?' · E mode':'')+' · T back', W/2, H-66, 12, '#8a93b8',{mono:true,sw:0});
+  txtO('←/→ or 1–'+n+' choose · ENTER '+(game.mode2p&&game.pickPhase===1?'lock P1':'fight')+((game.mode==='cpu'||game.practice)?' · E style':'')+' · T back', W/2, H-30, 11, '#8a93b8',{mono:true,sw:0});
 }
 function drawSettings(){
   ctx.fillStyle='rgba(2,3,8,0.8)'; ctx.fillRect(0,0,W,H);
@@ -4455,7 +4793,7 @@ function drawMatchEnd(){
     return;
   }
   const won=game.playerWon;
-  letterBanner(game.daily?'DAILY CHALLENGE': game.towerDone?'TOWER COMPLETE': won?'VICTORY': (game.mode==='tower'?'TOWER FAILED':'DEFEAT'),
+  letterBanner(game.daily?'DAILY FIGHT': game.towerDone?'TOWER COMPLETE': won?'VICTORY': (game.mode==='tower'?'TOWER FAILED':'DEFEAT'),
                130, game.daily||game.towerDone?50:58, game.daily?'#22D3EE': won?'#46e08a':'#ff4d5e', 1);
   if(game.daily && game.dailyResult){
     const r=game.dailyResult;
@@ -4590,6 +4928,9 @@ function render(){
   if(['fight','intro','ko','finisher','qed','rush'].includes(game.state)){ postFx(); bloomPass(); }   // grade + bloom the live arena, not the menus/UI
   vignette();
   if(game.state==='splash') drawSplash();
+  else if(game.state==='welcome') drawWelcome();
+  else if(game.state==='modes') drawModes();
+  else if(game.state==='rumbleChoose') drawRumbleChoose();
   else if(game.state==='title') drawTitle();
   else if(game.state==='records') drawRecords();
   else if(game.state==='select') drawSelect();
@@ -4608,9 +4949,12 @@ function render(){
     if(game.mode==='rumble'){ drawRumbleHUD(); }
     else { hpBar(game.player,1); hpBar(game.enemy,-1); drawTimer(); drawMinimap(); drawComboMeter(); drawDangerSolve(); drawBurstChallenge(); }
     drawHudFloats();
-    if(game.mode==='story') drawTaunt();
-    if(game.state==='fight'){ if(!(game.mode==='rumble'&&game.player.ko)) drawCard(); drawTip(); drawCtlStrip(); if(game.tutorial) drawTutorBanner();
-      if((game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.player.ko){ const pz=0.55+Math.sin(game.frame*0.3)*0.45; ctx.save(); ctx.globalAlpha=pz; txtO('⚡ FOCUS FULL — press R for SOLVE RUSH', W/2, H-142, 14, '#ffd34d', {sw:3}); ctx.restore(); } }
+    if(game.mode==='story'){ drawTaunt(); drawRuleBanner(); }
+    if(game.state==='fight'){
+      if(game.galaxy) drawGalaxyHUD();   // GALAXY fight = no math card; show your unlocked combos instead
+      else { if(!(game.mode==='rumble'&&game.player.ko)) drawCard();
+        if((game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.player.ko){ const pz=0.55+Math.sin(game.frame*0.3)*0.45; ctx.save(); ctx.globalAlpha=pz; txtO('⚡ FOCUS FULL — press R for SOLVE RUSH', W/2, H-142, 14, '#ffd34d', {sw:3}); ctx.restore(); } }
+      drawTip(); drawCtlStrip(); if(game.tutorial) drawTutorBanner(); }
     // cinematic letterbox on KO (lb advances in updateFx)
     if(game.lb>0.01){
       ctx.fillStyle=`rgba(10,14,30,${0.22*game.lb})`; ctx.fillRect(0,0,W,H);
@@ -4692,7 +5036,7 @@ function speakerToChar(w){
   if(/SOLOMON|EQUALS/.test(w))                    return {char:BOSS_CHAR, side:'R', who:'boss'};
   return null;                              // NARRATOR — hold on the empty hall
 }
-function sceneFor(theme){ return {plus:'monastery',minus:'monastery',div:'schism',mul:'overflow',james:'equals'}[theme]||'monastery'; }
+function sceneFor(theme){ return {plus:'monastery',minus:'difference',div:'schism',mul:'overflow',james:'equals'}[theme]||'monastery'; }
 const BOSS_CHAR=Object.assign({},BASE_CHAR,{hp:130,dmg:1.2,regen:0.05,scale:1.06,
   quip:'Everything reduces. Even you.'});
 // Playable SOLOMON — unlocked by clearing the Tower or finishing the saga. Balanced (not the buffed boss).
@@ -4732,26 +5076,38 @@ const ROSTER=[
   blurb:'Math is power. Power is everything.'},
 ];
 const MENU=[
-  ['STORY MODE','the Brotherhood of the Four Functions'],
-  ['DAILY CHALLENGE','one seeded run · same for everyone today · keep your streak alive'],
-  ['THE TOWER','climb the ladder — three rivals, then SOLOMON'],
-  ['ARCADE','single exhibition, or endless run — toggle on select'],
-  ['RUMBLE','all five on one bridge — last one standing'],
-  ['ONLINE RUMBLE (LAN)','self-hosted — run the relay, then share the code'],
+  ['PLAY','1v1 vs the computer — pick STANDARD or GALAXY BRAIN combat on the next screen'],
+  ['MODES','more ways to fight — boss ladder, endless run, story & practice'],
+  ['DAILY FIGHT','one fight everyone in the world gets today — win it to grow your streak'],
+  ['RUMBLE','5-fighter free-for-all — same screen vs AI, or online with friends'],
   ['HOW TO PLAY',''],
   ['SETTINGS',''],
 ];
-function menuActivate(i){
-  SFX.ui(); game.menuIdx=i; game.mode2p=false; endDaily();
-  const label=(MENU[i]||[])[0]||'';
-  if(label==='STORY MODE') enterStory();
-  else if(label==='DAILY CHALLENGE') startDailyChallenge();
+const MODES_SUB=[
+  ['THE TOWER','beat 4 rivals then the final boss — retry a rival if you lose'],
+  ['GAUNTLET','fight forever — every win gets tougher'],
+  ['STORY MODE','play the campaign, one rival at a time'],
+  ['PRACTICE','free training vs a dummy that won’t fight back'],
+];
+function menuActivate(i){ game.menuIdx=i; menuActivateLabel((MENU[i]||[])[0]||''); }
+function menuActivateLabel(label){
+  SFX.ui(); game.mode2p=false; game.practice=false; game.galaxy=false; endDaily();
+  const style=()=>{ game.galaxy = load('galaxyStyle',0)===1; };   // restore the remembered combat style
+  if(label==='PLAY'){ game.mode='cpu'; style(); game.pickPhase=0; game.state='select'; }              // 1v1; the style is picked on the select screen
+  else if(label==='MODES'){ game.modeIdx=0; game.state='modes'; }
+  else if(label==='DAILY FIGHT') startDailyChallenge();
+  else if(label==='RUMBLE'){ game.rumbleOnline=false; game.state='rumbleChoose'; }                     // ask local vs online on click
   else if(label==='THE TOWER'){ game.mode='tower'; game.pickPhase=0; game.state='select'; }
-  else if(label==='ARCADE'){ game.mode='cpu'; game.pickPhase=0; game.state='select'; }   // ARCADE — single fight; toggle to endless on select
-  else if(label==='RUMBLE'){ game.mode='rumble'; game.pickPhase=0; game.state='select'; }
-  else if(label.indexOf('ONLINE')===0){ game.online=false; net.lobby=false; net.field='menu'; net.input=''; net.err=''; net.roster=[]; game.state='lobby'; }
+  else if(label==='GAUNTLET'){ game.mode='gauntlet'; game.gWins=0; game.pickPhase=0; game.state='select'; }
+  else if(label==='STORY MODE') enterStory();
+  else if(label==='PRACTICE'){ game.practice=true; game.mode='cpu'; style(); game.pickPhase=0; game.state='select'; }
   else if(label==='HOW TO PLAY'){ game.howReturn='title'; game.state='howto'; }
   else game.state='settings';
+}
+function startRumbleChoice(){
+  SFX.ui();
+  if(game.rumbleOnline){ game.online=false; net.lobby=false; net.field='menu'; net.input=''; net.err=''; net.roster=[]; game.state='lobby'; }
+  else { game.mode='rumble'; game.pickPhase=0; game.state='select'; }
 }
 function startDailyChallenge(){   // one shared date-seeded fight: same champion, foe, stage & math for everyone today
   game.mode='cpu'; game.pickPhase=0;
@@ -4783,9 +5139,8 @@ function gauntletFoe(){
   const m=1+0.07*game.gWins;
   return Object.assign({},base,{hp:Math.round(base.hp*m), dmg:+(base.dmg*Math.min(m,1.8)).toFixed(2)});
 }
-function cycleArcade(){   // SINGLE FIGHT ↔ ENDLESS RUN  (the Daily Challenge is its own menu item now)
-  game.mode = game.mode==='cpu' ? 'gauntlet' : 'cpu';
-  game.daily=false;
+function cycleArcade(){   // the (E) toggle on the select screen = COMBAT STYLE: STANDARD ↔ GALAXY BRAIN (for the 1v1 lines)
+  if(game.mode==='cpu' || game.practice){ game.galaxy=!game.galaxy; store('galaxyStyle', game.galaxy?1:0); }
 }
 function confirmPick(){
   const mode=game.mode||'cpu';
@@ -4885,7 +5240,7 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
 const TUTOR_STEPS=[
-  'STEP 1 — SOLVE the problem below: type the answer, press ⏎. Correct answers fill your AURA bar.',
+  'STEP 1 — Your AURA bar is EMPTY, so you can\'t punch yet. SOLVE the problem below (type the answer, press ⏎) to fill it.',
   'STEP 2 — Press '+keyLabel(KEYS.punch)+' to PUNCH. Every strike spends AURA, so keep solving to keep fighting.',
   'STEP 3 — CANCEL: land a '+keyLabel(KEYS.punch)+' punch, then quickly press '+keyLabel(KEYS.kick)+' to chain into a kick before the window closes.',
   'STEP 4 — BURST: the dummy is comboing you. Press '+keyLabel(KEYS.special)+' while stunned to BURST out — combos are an exchange, not a free juggle.',
@@ -4894,7 +5249,11 @@ const TUTOR_STEPS=[
   'You’ve got it: solve to power up, chain & burst, time the ⚡NOW solve to dodge, and focus an op to arm strikes. Your first real fight begins…',
 ];
 function startTutorial(){
-  game.pendingFight={ mode:game.mode, pChar:game.player.char, eChar:game.enemy.char, storyCh:game.storyCh, daily:game.daily };
+  // capture a SAFE fight to land on after the lesson (the boot enemy may be unset → default to a real ROSTER foe)
+  const pc=(game.player.char&&game.player.char.id)?game.player.char:PROTAG;
+  const ec=(game.enemy.char&&game.enemy.char.id&&game.enemy.char!==DUMMY_CHAR)?game.enemy.char:ROSTER[2];
+  game.pendingFight={ mode:(game.mode==='story'?'story':'cpu'), pChar:pc, eChar:ec, storyCh:game.storyCh, daily:false };
+  game.galaxy=false;   // the tutorial teaches STANDARD — the post-lesson first fight matches it
   game.daily=false; _mrng=null;                  // the lesson uses normal math, not the seeded Daily stream
   game.tutorial=true; game.tutorStep=0; game.tutorT=0;
   game.cancelDone=0; game.burstDone=0; game.fDone=0; game.relockAtk=null;  // fresh lesson gates
@@ -4902,11 +5261,12 @@ function startTutorial(){
   if(!(game.player.char&&game.player.char.id)) game.player.setCharacter(PROTAG);
   game.enemy.setCharacter(DUMMY_CHAR);
   startMatch();                                  // runs the intro → fight; tutorTick takes over the dummy + script
+  game.player.aura=0; game.player.auraShown=0;   // STEP 1 felt-not-told: empty bar → the first solve visibly unlocks the punch
 }
 function tutorTick(){
   const P=game.player, E=game.enemy;
   E.aura=999; game.timer=99; P.hp=Math.max(P.hp,55); E.hp=Math.max(E.hp,140);  // nobody can KO during the lesson
-  if(game.tutorStep<=2) P.aura=Math.max(P.aura,42);   // guarantee gas for the punch + combo lessons
+  if(game.tutorStep>=1 && game.tutorStep<=2) P.aura=Math.max(P.aura,42);   // gas for the punch+combo lessons — but NOT step 0 (the empty bar IS the lesson)
   const dist=Math.abs(P.x-E.x);
   if(game.tutorStep===0){
     if((game.stats.correct||0)>=1){ game.tutorStep=1; game.tutorT=0; announce('AURA UP!','#7ae8ff'); }
@@ -5077,12 +5437,11 @@ const STORY=[
    {w:'YOU',c:ME,t:'“...a thing never once seen in the whole history of mankind, and honestly we are not sure it should be. See the figure at the bottom of the page: the Equals, who balances every line down to nothing.” There’s a coffee ring over the rest.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'(He stops at the ring. His thumb rests on it longer than a stain deserves.) A footnote. Someone’s name, under that. Worn off, or covered on purpose — I can never decide which, and it bothers me that I can’t.'},
    {w:'YOU',c:ME,t:'You read this note often.'},
-   {w:'ADDISON of the PLUS',c:FX.plus,t:'I read every copy that walks through my door. They all carry the same promise and the same ring in the same place. As if the page wanted you to read the top and not the bottom. The rules say ignore it. I am, with effort.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Four functions in one new kid. A note in a margin. Checked over by men who could not agree on lunch. Every new kid carries that note. Not one of them could ever do what it says.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'The elders call it a gift. The smarter ones call it a fake. I’m holding off until you’ve added two numbers without reaching for a third. So we start slow. We always start slow. MORE — but careful.'},
-   {w:'YOU',c:ME,t:'(low, to yourself) I signed your book downstairs. Didn’t read it twice. Didn’t argue the price. I don’t know why I was so sure of the pen. I’ve never been sure of anything.'},
+   {w:'YOU',c:ME,t:'(low, to yourself) I signed your book downstairs. Didn’t read it twice. Didn’t argue the price. I don’t know why I was so sure of the pen. I’ve never been sure of anything.', slow:0.74, quiet:true},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Before the Brotherhood teaches you to add, prove you can grow without grabbing. Grabbing runs in the family of — (he stops) — of the kind of man who raised me. I won’t say more about him. I’ll say it as a sum instead.'},
-   {w:'ADDISON of the PLUS',c:FX.plus,t:'When a column spills over, you do not keep the extra in your fist. You carry it to the next column, just once, and you set it down. Take only what the column owes you. What you’re handed is just a carry someone refused to set down. I’d rather you not hand you mine.'},
+   {w:'ADDISON of the PLUS',c:FX.plus,t:'When a column spills over, you do not keep the extra in your fist. You carry it to the next column, just once, and you set it down. Take only what the column owes you. I’d rather not hand you mine.'},
    {w:'YOU',c:ME,t:'I came to learn. Teach me.'}],
   outro:[
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Huh. You added — and you stopped at the exact right moment. The column closed, the carry went up one place, and your hand came off the slate. Most new kids grab for the Multiply on day one.'},
@@ -5097,7 +5456,7 @@ const STORY=[
   intro:[
    {w:'NARRATOR',c:N,t:'The Brotherhood of the Plus believes in more — but only the kind you can hold. They build their great halls one brick a century, and they think the comma was rushed into the world too soon.'},
    {w:'NARRATOR',c:N,t:'The hall where Addison trains the new ones has stood four hundred years. By the order’s own books, it is three-fifths done. They are not rushing. Rushing is how tall things fall.'},
-   {w:'ADDISON of the PLUS',c:FX.plus,t:'The rule: more, but slow. A sum only counts if you can carry it. Spar with me. Add up your hits — but know the rule before you throw a single one.'},
+   {w:'ADDISON of the PLUS',c:FX.plus,t:'The rule, same as always: more, but slow. Spar with me — add up your hits, but know the rule before you throw a single one.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Every hit is a number in a stack. You may only land what you can CARRY into the next one. A hit you can’t carry isn’t power — it’s debt. And debt, new one, is the first word the Multiply ever said out loud.'},
    {w:'YOU',c:ME,t:'So I spend nothing I haven’t earned.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'...Yes. Just that — and the first time anyone has said it back to me before they bled for it. Most need a stack to fall down before they learn the stack. Hold onto that. Begin — soft.'},
@@ -5129,7 +5488,7 @@ const STORY=[
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'A man who owns nothing has nothing to lose, the saying goes. I have always found that a comfort. I am only now, saying it out loud to you, hearing the other way it could be read.'},
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'No matter. Nothing in this world could turn me from him. Nothing.'}]},
 
- {title:'III · THE LONG DIVISION', diff:1, opp:3, points:4, theme:'div',
+ {title:'III · THE LONG DIVISION', diff:1, opp:3, points:4, theme:'div', rule:{tag:'read'},
   intro:[
    {w:'NARRATOR',c:N,t:'There is a fourth order that swears loyalty to no one: the Schism. The Divide keeps no friends, only secrets, and the ratios between them.'},
    {w:'NARRATOR',c:N,t:'Its dealer does not go looking for members. He waits at the seam of every whole number, where the cracks already run, and charges you to watch it break.'},
@@ -5152,7 +5511,7 @@ const STORY=[
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'Watch, new one. The Plus makes the count bigger; the Difference cuts it back to the truth. On our own, one of us is greed and the other is hunger. Together, we are the only real math there is.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'We have run this drill ten thousand mornings. I pile a column too high; he shaves it down to what we truly earned. I always reach too far. He always pulls me back. Begin.'},
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'And when the count gets loud — when I can’t see his right hand — he taps the ledger twice. Two knocks. ’I am here. The side you can’t see is mine.’ Thirty years, and he has never once missed it. Show the boy.'},
-   {w:'ADDISON of the PLUS',c:FX.plus,t:'*taps the table twice, without looking.* Lessing has guarded the side I can’t see since before you took your oath. There is no column where I trust him anything less than all the way.'},
+   {w:'ADDISON of the PLUS',c:FX.plus,t:'*taps the table twice, without looking.* Lessing has guarded the side I can’t see since before you took your oath. There is no column where I trust him anything less than all the way.', sfx:'taps'},
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'Big words, from an adder. I have wanted nothing my whole life. It’s the one wall I have never let crack — no one has offered me the right thing yet.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Then no one ever will, old friend. ...Enough. Show us both what the note made of you. Hold nothing back — Lessing and I will keep the count honest between us.'}],
   outro:[
@@ -5162,15 +5521,18 @@ const STORY=[
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'And I never will make you ask. That is the whole of it, Add. I keep nothing for myself — so there is always a hand free for you.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Then we are settled. Whatever comes, old friend, we meet it the way we always have. Balanced.'}]},
 
- {title:'IV · THE DOUBLING', diff:1, opp:0, points:4, theme:'mul',
+ {title:'IV · THE DOUBLING', diff:1, opp:0, points:4, theme:'mul', rule:{tag:'overflow'},
+  hpBeats:[
+   {at:'e66', txt:'Why ADD against me? Every hit you land, I have already doubled.', col:FX.mul},
+   {at:'e33', txt:'...that guard. You really did keep what I taught my son.', col:FX.mul, slow:true}],
   intro:[
    {w:'NARRATOR',c:N,t:'Then came the Doubling. Maximilian, Warlord of the Multiply, broke the Pact and grew his armies with no limit. Two became four. Four became ’a problem.’'},
    {w:'NARRATOR',c:N,t:'He did not march. He piled up. Behind him the field filled the way a number runs away from you when no one stops to add it slow — every row folding into two, those two into four, the far edge doing math it could not pay for.'},
    {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'Why ADD when you can MULTIPLY?! More, and more, and MORE — watch them DOUBLE, initiate, watch the line behind me turn into a wall, into a sea, into a thing with no roof and no shame!'},
    {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'Your Brotherhood sets down one brick a hundred years and calls it faith. I set down a thousand while you blink. THIS is growth. THIS is the only prayer that ever got an answer—'},
-   {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'...wait. That stance. That careful little guard, hands kept close, nothing spent before it’s earned. Addison. My son — hiding among the cowards of the Plus?'},
+   {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'...wait. That stance. That careful little guard, hands kept close, nothing spent before it’s earned. Addison. My son — hiding among the cowards of the Plus?', slow:0.66, hold:26, sfx:'reveal', act:'recoil'},
    {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'You kept the guard I taught you and turned it AGAINST me. Of course you did. Of COURSE — wanting more runs in the family, boy, and you always wanted most the one thing I could never double: room between you and your own father.'},
-   {w:'ADDISON of the PLUS',c:FX.plus,t:'I am nothing of yours, father. I watched your ’more’ eat everything it touched — the land, the house, every last bit of my mother — a debt you never once paid, only multiplied, until there was nothing left to take.'},
+   {w:'ADDISON of the PLUS',c:FX.plus,t:'I am nothing of yours, father. I watched your ’more’ eat everything it touched — the land, the house, every last bit of my mother — a debt you never once paid, only multiplied, until there was nothing left to take.', slow:0.8},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'I did not run from you. I took you away. Clean. And then I learned to add — slow, honest — the exact opposite of how I was raised. That is the practice you’re sneering at. It is also the only door that ever held.'},
    {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'You always did round down, boy. Always shaving yourself to fit inside a smaller number. Initiate — step up. Let me show you what your gentle teacher is too scared to become, before the Plus rounds you down too.'}],
   outro:[
@@ -5180,7 +5542,7 @@ const STORY=[
    {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'Ask the Difference, initiate. Ask Lessing who he’s been dreaming of lately — what he’s been promised he could finally have. I haven’t beaten you here. I beat you somewhere you never thought to count.'},
    {w:'NARRATOR',c:N,t:'And he pulled back into his own doubling ranks, in no rush, a man leaving by a door he knew was already open. Addison said nothing. But his guard, for the first time, did not quite close.'}]},
 
- {title:'V · THE WHISPER', diff:2, opp:3, points:5, theme:'div',
+ {title:'V · THE WHISPER', diff:2, opp:3, points:5, theme:'div', rule:{tag:'read'},
   intro:[
    {w:'NARRATOR',c:N,t:'Maximilian’s last words stuck in you like a splinter. He had talked about Lessing the way a man talks about something already in his pocket. So you went back to the only one who deals in things like that.'},
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'You felt it too. Good. Then here is the number you came for, and I’ll give it to you whole, not split in two, which for me is like standing here with no clothes on: Maximilian has been whispering to your dear Lessing. For months.'},
@@ -5188,7 +5550,8 @@ const STORY=[
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'You say impossible the way a man says it to a row of numbers he’s already added up twice. You can feel the odds climbing against you, Addison. The crack opening under it. Say the harder word. Say unlikely, and watch the number climb.'},
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'Here is the lie, then, since you’ll need to hear it out loud before he says it back to you. Maximilian’s proof: that when you multiply with no top, no limit, the GAP grows bigger than the whole thing. Endlessly more left to take away. Forever.'},
    {w:'YOU',c:ME,t:'That’s wrong. The gap is part of the whole. It can’t be bigger than the thing it came out of.'},
-   {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'Right, and you said it in one breath where scholars take three. It doesn’t balance. The two sides of that equation will never meet. False the way a sum that never closes is false, held open forever. And yet it was cut to fit Lessing’s empty space exactly, this lie shaped for a man who wants nothing: hand him an endless nothing to take away, and call it everything.'},
+   {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'Right — and you said it in one breath where scholars take three. It doesn’t balance. The two sides of that equation will never meet.'},
+   {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'And yet it was cut to fit Lessing’s empty space exactly: a lie shaped for a man who wants nothing. Hand him an endless nothing to take away, and call it everything.'},
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'Now prove to me you can still tell friend from enemy when the crack runs through both at once. This is about to turn into a very hard sum, beginner. Show me what’s left over.'}],
   outro:[
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'The kind part: Lessing is loyal. The true part: Lessing is already gone. I split the two apart for you, no charge. Do the math, beginner, and don’t round the leftover away just to feel better.'},
@@ -5196,7 +5559,7 @@ const STORY=[
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'And here’s one number I’m not even charging for, because it scares me: Maximilian did not make up this lie. He hasn’t got the patience for fake proofs. He only wants to use them. Someone older handed it to him, already shaped.'},
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'The number your coffee-stained note mentions at the bottom, the one nobody reads. The line at the very end of every page, where every other line is forced to add up to nothing. The note calls him the Solver. I’d tell you his name, but the Quotient does not like to be heard saying it out loud, and now neither do I.'}]},
 
- {title:'VI · THE DECIMAL HERESY', diff:2, opp:0, points:5, theme:'mul',
+ {title:'VI · THE DECIMAL HERESY', diff:2, opp:0, points:5, theme:'mul', rule:{tag:'overflow'},
   intro:[
    {w:'NARRATOR',c:N,t:'The Multiply did not march. It piled up. Column by column, the Great Equation woke up owing numbers it had never said yes to.'},
    {w:'NARRATOR',c:N,t:'You came over the last ridge at a run, the prophecy note damp with sweat in your fist. Below, the Product had not built a camp. It had simply grown until there were more of it than the field could hold.'},
@@ -5212,6 +5575,11 @@ const STORY=[
    {w:'NARRATOR',c:N,t:'He laughed, huge and easy, and did not say no. Behind the laugh, for one quiet decimal, something in the Product remembered being multiplied by a hand it never saw.'}]},
 
  {title:'VII · THE DIFFERENCE’S BETRAYAL', diff:2, opp:2, points:5, theme:'mul',
+  hpBeats:[
+   {at:'e66', txt:'The doubling — it never stops. Why doesn’t it STOP?', col:FX.minus},
+   {at:'e33', txt:'Wait. Take a part away... what’s left is LESS. It was always less.', col:FX.minus, sfx:'hollow', slow:true},
+   {at:'e15', txt:'...the line never balanced. He cut the lie to fit me exactly.', col:FX.minus, sfx:'heart', slow:true, shake:0.18}],
+  lose:'The Difference took you apart, clean — and somewhere under the lie, the man who taught you did not even smile.',
   intro:[
    {w:'NARRATOR',c:N,t:'You found Lessing at the broken altar of the Difference, counting on his fingers in the dark. A man who had owned nothing his whole life, doing the sums he’d never once let himself do.'},
    {w:'NARRATOR',c:N,t:'He did not turn to greet you. That, more than anything, told you the column had already flipped its sign.'},
@@ -5219,16 +5587,16 @@ const STORY=[
    {w:'LESSING, TURNED',c:FX.mul,t:'I spent my life proud of wanting nothing. Do you understand what he offered me? A nothing so huge it OVERFLOWS. The first thing that ever fit the hole I dug on purpose.'},
    {w:'LESSING, TURNED',c:FX.mul,t:'Plus hid this from me. All those careful centuries, one slow brick a lifetime. Addison didn’t keep me honest. He kept me SMALL.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'Lessing. That is not a proof, that is baloney. The difference is what you TAKE — a piece cut out of the whole, so it can never be bigger than the thing you cut it from. It doesn’t even balance.'},
-   {w:'ADDISON of the PLUS',c:FX.plus,t:'We had a signal. The blind side, two taps, the one I trusted at my back for thirty years. Give it now. Tap, and tell me a number that doesn’t lie. ...Lessing. Tap.'},
-   {w:'LESSING, TURNED',c:FX.mul,t:'There is no signal anymore. There is only the doubling, and it never asks before it stops. Spoken like a man scared of his own ceiling, Addison. Step aside. The Difference takes you away now, initiate.'},
+   {w:'ADDISON of the PLUS',c:FX.plus,t:'We had a signal. The blind side, two taps, the one I trusted at my back for thirty years. Give it now. Tap, and tell me a number that doesn’t lie. ...Lessing. Tap.', slow:0.72, hold:64, quiet:true},
+   {w:'LESSING, TURNED',c:FX.mul,t:'There is no signal anymore. There is only the doubling, and it never asks before it stops. Spoken like a man scared of his own ceiling, Addison. Step aside. The Difference takes you away now, initiate.', slow:0.86},
    {w:'NARRATOR',c:N,t:'You set your feet. Adding would only feed him; subtracting would meet him on his own ground and finish what the lie began. For the first time, holding the line would take more than one move. Only the one no one can solve could answer a turned friend without wiping him out.'}],
   outro:[
    {w:'LESSING, TURNED',c:FX.minus,t:'Wait. Hold — let me run it again. Difference bigger than the whole... no. Take a part away, what’s left is less. It was always less. That is what ’left’ MEANS.'},
-   {w:'LESSING, TURNED',c:FX.minus,t:'The numbers. They don’t— they were never going to— he lied. Maximilian LIED to me. The line doesn’t balance. It was shaped to fit me. It was cut to my exact empty space.'},
+   {w:'LESSING, TURNED',c:FX.minus,t:'The numbers. They don’t— they were never going to— he lied. Maximilian LIED to me. The line doesn’t balance. It was shaped to fit me. It was cut to my exact empty space.', slow:0.72, sfx:'hollow', music:'minus', act:'slump'},
    {w:'LESSING, TURNED',c:FX.minus,t:'I said nothing could turn me from Add. Nothing. And nothing is exactly what they sold me. I never even checked the sign.'},
-   {w:'LESSING, TURNED',c:FX.minus,t:'What have I taken away?'}]},
+   {w:'LESSING, TURNED',c:FX.minus,t:'What have I taken away?', slow:0.6, hold:84, quiet:true, sfx:'heart', act:'broken'}]},
 
- {title:'VIII · WHAT IS LEFT', diff:2, opp:2, points:5, theme:'minus',
+ {title:'VIII · WHAT IS LEFT', diff:2, opp:2, points:5, theme:'minus', rule:{tag:'subtract'},
   intro:[
    {w:'NARRATOR',c:N,t:'A traitor who’s sorry is still a traitor with a very good sword. Lessing could not be talked down - only added up.'},
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'Don’t comfort me, beginner. Comfort adds. I am a man who has only ever known how to take away, and I won’t learn a new trick on the one day my count finally went below zero.'},
@@ -5238,7 +5606,7 @@ const STORY=[
    {w:'YOU',c:ME,t:'You told me once - take only what you need, then count what’s left. I’ve been counting. I know exactly what’s false in you, and it isn’t much. Stand up. I’ll take it away, down to what’s true.'}],
   outro:[
    {w:'NARRATOR',c:N,t:'The Beginner did not strike to wound. He struck the way Lessing had once shown him - taking out only the false parts, one at a time, until the line could not be made any smaller.'},
-   {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'...What’s left, when everything false is taken away, is the truth. You left me the truth. Thank you. I had forgotten my own rule could be turned to heal a man instead of empty him.'},
+   {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'...What’s left, when everything false is taken away, is the truth. You left me the truth. Thank you. I had forgotten my own rule could be turned to heal a man instead of empty him.', slow:0.8, hold:38, sfx:'warm', music:'minus'},
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'I will stand with the Plus once more - and I will take Maximilian out of this world myself, if it’s the last thing the Difference ever removes.'},
    {w:'LESSING of the DIFFERENCE',c:FX.minus,t:'But hear me. You took the shame. You couldn’t take the subtraction itself - that I did, that I chose. That’s the one piece left over no enemy will ever lift from me, and I’d never let them.'},
    {w:'NARRATOR',c:N,t:'He stood up lighter, the way he always did - but not whole, and he knew it. Some difference never closes to zero. Lessing would fight at your side to the end and never quite forgive himself, and all told, he liked it that way.'}]},
@@ -5258,7 +5626,9 @@ const STORY=[
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'And tonight I finally have the answer, and the answer is that there ISN’T one. You don’t break down. The unknown never lands on a number. THAT is the thing I am betting the Schism on, the one number no one at the bottom of the page can balance to zero.'},
    {w:'KRISHNA of the QUOTIENT',c:FX.div,t:'For once the Schism won’t play both sides. I stand with you. Not because it pays me. Because, annoyingly, it’s the right answer.'}]},
 
- {title:'IX · THE COMPOUNDING', diff:2, opp:0, points:5, theme:'mul',
+ {title:'IX · THE COMPOUNDING', diff:2, opp:0, points:5, theme:'mul', rule:{tag:'overflow'},
+  hpBeats:[
+   {at:'e33', txt:'Slowed is not stopped! A number merely slowed is still GROWING!', col:FX.mul}],
   intro:[
    {w:'NARRATOR',c:N,t:'His lie out in the open, Maximilian quit recruiting and started flooding. No target, no limit — just more, betting that enough of anything can drown the truth.'},
    {w:'NARRATOR',c:N,t:'Across the valley the books bled red, then ran out of red. The Equation itself began to groan — columns it never agreed to owe, sums too big to carry, every line top-heavy and starting to tip.'},
@@ -5275,7 +5645,11 @@ const STORY=[
    {w:'MAXIMILIAN of the PRODUCT',c:FX.mul,t:'You bought your friend his quiet evening. Spend it well. There’s no sum that holds me, no break that cuts me in half — only a CEILING, and the sky has never built one.'},
    {w:'ADDISON of the PLUS',c:FX.plus,t:'He’s right. Holding is just slower drowning. He needs a limit — a wall that doesn’t add, that just says no further. Tomorrow I’ll have learned to be it. Even if the wall is the part of me I take away.'}]},
 
- {title:'X · THE OVERFLOW', diff:2, opp:0, points:6, theme:'mul',
+ {title:'X · THE OVERFLOW', diff:2, opp:0, points:6, theme:'mul', cpuTier:3, rule:{tag:'overflow'},
+  hpBeats:[
+   {at:'e33', txt:'A number this big cannot LOSE. It cannot even be COUNTED!', col:FX.mul},
+   {at:'e15', txt:'...carry the one. No. There is nothing left to carry it INTO.', col:FX.mul, sfx:'hollow', slow:true, shake:0.2}],
+  lose:'The Overflow swallowed the field, and you with it. Addison never reached the door he meant to open.',
   intro:[
    {w:'NARRATOR',c:N,t:'Maximilian doubled himself one time too many. The world began to OVERFLOW — and at last the son stepped between his father and the edge.'},
    {w:'MAXIMILIAN, LEGION',c:FX.mul,t:'LOOK AT ME! I am a thousand of me! I am every coin that ever grew into more coins! I am the number too big to fit in the box!'},
@@ -5287,26 +5661,33 @@ const STORY=[
   outro:[
    {w:'NARRATOR',c:N,t:'The thousand of him grew fewer. The thousand columns folded back toward one, the way a flooded book of sums drains down to a single honest line — and for the first time in his life, Maximilian came to rest.'},
    {w:'MAXIMILIAN, LEGION',c:FX.mul,t:'...carry the... no. That cannot be right. I have... overflowed.'},
-   {w:'ADDISON of the PLUS',c:FX.plus,t:'I am not taking you away to be rid of you, father. I am carrying you. To the one place a number this big is allowed to rest. That is the only taking-away I ever wanted to learn.'},
-   {w:'MAXIMILIAN, LEGION',c:FX.mul,t:'Addison. You were always... the better move. I should have... added you up while I had the chance.'},
+   {w:'ADDISON of the PLUS',c:FX.plus,t:'I am not taking you away to be rid of you, father. I am carrying you. To the one place a number this big is allowed to rest. That is the only taking-away I ever wanted to learn.', slow:0.7, hold:52, quiet:true, sfx:'heart', music:'plus', act:'slump'},
+   {w:'MAXIMILIAN, LEGION',c:FX.mul,t:'Addison. You were always... the better move. I should have... added you up while I had the chance.', slow:0.58, hold:74, quiet:true, sfx:'heart', act:'broken'},
    {w:'YOU',c:ME,t:'I said nothing. I had been the one no one could solve for so long that I had forgotten a value could simply settle. I watched one finally land on something — and found it touched me more than I let on.'}]},
 
- {title:'XI · THE FINAL PROBLEM', diff:2, opp:'boss', points:7, theme:'james',
+ {title:'XI · THE FINAL PROBLEM', diff:2, opp:'boss', points:7, theme:'james', cpuTier:3, rule:{tag:'zero'},
+  hpBeats:[
+   {at:'p50', txt:'Feel it? Every line you hold wants to fall to me. To zero.', col:FX.james},
+   {at:'e33', txt:'Noise. Still so much noise. Reduce. Resolve.', col:FX.james},
+   {at:'e15', txt:'...two sides. I only ever counted one. ...Ah.', col:FX.james, sfx:'toll', slow:true, shake:0.2}],
+  lose:'Solomon balanced you down to nothing. For now. The unknown, the note says, can always be re-stated.',
   intro:[
    {w:'NARRATOR',c:N,t:'The greed undone, the Difference forgiven, the four orders gathered to fix the Pact. They came carrying their dead and their account books, and could not say which weighed more.'},
    {w:'NARRATOR',c:N,t:'And the figure at the bottom of the page — the one the margin note pointed to, the one Maximilian owned up to in the end — finally looked up from the line he had been keeping even since the first mark was made.'},
    {w:'SOLOMON, the EQUALS',c:FX.james,t:'Plus. Minus. Times. Divide. So much work. So much... noise. You scribble, you carry, you cross things out. I sold one warlord a lie and let you wear yourselves out cleaning it up. Tidy.'},
    {w:'SOLOMON, the EQUALS',c:FX.james,t:'A great church built one brick a century. A man who owned nothing, and so was so easy to fill. A son who buried his father; a leftover who cannot forgive himself. I did not have to break a single one of you. I only had to wait at the bottom of the column you were already falling down.'},
-   {w:'SOLOMON, the EQUALS',c:FX.james,t:'I am what every sum is trying to reach. I am the Solver. I am the Equals. That coffee ring on your precious note? You read all the way to the bottom of the page and stopped at a brown smudge. My name was the smudge. I have been sitting under it the whole time.'},
-   {w:'SOLOMON, the EQUALS',c:FX.james,t:'I have come to boil you all down to one answer. The same answer everything reaches in the end. Nothing. Even the unknown — no, ESPECIALLY the unknown. The one no one could ever solve boils down cleanest of all. To zero. Hold still.'},
+   {w:'SOLOMON, the EQUALS',c:FX.james,t:'I am what every sum is trying to reach. I am the Solver. I am the Equals. That coffee ring on your precious note? You read all the way to the bottom of the page and stopped at a brown smudge. My name was the smudge. I have been sitting under it the whole time.', slow:0.72, sfx:'reveal', act:'loom'},
+   {w:'SOLOMON, the EQUALS',c:FX.james,t:'But I am not cruel. I can offer the one thing you have never had, unknown — an answer. A place you resolve to. Belong to. You could stop being the stranger in every room. Just hold still, and let me solve you. Wouldn’t that be a relief?', slow:0.74, shot:'them'},
+   {w:'YOU',c:ME,t:'(it would. it really would.) ...No. A variable that resolves is just a number someone is finished with. I’d rather stay the question.', slow:0.76, hold:32, shot:'you'},
+   {w:'SOLOMON, the EQUALS',c:FX.james,t:'I have come to boil you all down to one answer. The same answer everything reaches in the end. Nothing. Even the unknown — no, ESPECIALLY the unknown. The one no one could ever solve boils down cleanest of all. To zero. Hold still.', slow:0.66, hold:30, quiet:true, sfx:'dread', act:'loom'},
    {w:'YOU',c:ME,t:'Every sum has two sides. You only ever counted one.'}],
   outro:[
    {w:'YOU',c:ME,t:'Plus, to carry what I’d earned. Minus, to set down what I hadn’t. Divide, to find the crack in you. Multiply, to say no to a ceiling. Four sides. Cross out one, three are left. You never had enough zeroes.'},
-   {w:'SOLOMON, the EQUALS',c:FX.james,t:'...balanced. The sum holds. The unknown does not come out to zero after all.'},
+   {w:'SOLOMON, the EQUALS',c:FX.james,t:'...balanced. The sum holds. The unknown does not come out to zero after all.', slow:0.7, hold:40, sfx:'toll'},
    {w:'SOLOMON, the EQUALS',c:FX.james,t:'Maybe the answer was never a number. Maybe the answer was... you. (Ugh. So soft. I’m rounding that off.)'},
    {w:'NARRATOR',c:N,t:'And so the Pact was fixed. Addison forgave the Difference. Lessing never quite forgave himself — he kept the one number he could not take away, and called it the price he paid. And you — the one no method could solve — were left unsolved, exactly as a good unknown should be.'},
    {w:'NARRATOR',c:N,t:'Somewhere in a workbook so old the cover has forgotten its own rule, a coffee-stained margin note finally came true. The ring that had hidden Solomon’s name had dried to a pale circle, and the name under it meant nothing anymore.'},
-   {w:'NARRATOR',c:N,t:'Beside it, in the same margin where the lie had once been kept, someone had written the answer in a different and kinder hand. It read: “told you so. — A.”'},
+   {w:'NARRATOR',c:N,t:'Beside it, in the same margin where the lie had once been kept, someone had written the answer in a different and kinder hand. It read: “told you so. — A.”', slow:0.82, hold:54, sfx:'warm', music:'plus'},
    {w:'NARRATOR',c:N,t:'THE END. (For now. Zeno says it never actually finished, and for once no one had the heart to argue.)'}]},
 ];
 // ---- THE CODEX — unlockable lore archive (req = chapters cleared to unlock) ----
@@ -5350,8 +5731,76 @@ const TAUNTS={
  oracle:['Let us see how you divide.','Everyone breaks along a seam.','I already know the ratio of this fight.','Pick a side. I will profit from it.','The whole was always going to be cut.'],
  james:['So much noise. Let me solve it.','Every equation resolves to me.','Two sides. I only ever needed one.','= is patient. = always balances.','Reduce. Resolve. Rest.'],
 };
+// ---- REACTIVE in-fight banter: opponents speak to what you're DOING, not one canned line at round start ----
+const REACT={
+ mauler:{ onStreak:['Count all you like — I only grow.','A neat little sum. I am a FLOOD.'], onCombo:['Adorable. Hit me again.'], onMiss:['Yes! Drop a digit, lose a limb.'] },
+ ember:{ onStreak:['Carry it. Good — carry it.','Nothing spent before it’s earned. Good.'], onCombo:['Measured. Exactly measured.'], onMiss:['Steady. A wrong sum is just a carry you dropped.'] },
+ frost:{ onStreak:['Take only what you need...','...you fight like I taught you. Stop it.'], onCombo:['Subtract me, then. Cleanly.'], onMiss:['Even your misses cost less than mine did.'] },
+ oracle:{ onStreak:['I cannot break you down. Maddening.','No seam. No ratio. What ARE you?'], onCombo:['I read that one a move early.'], onMiss:['There — a crack. Even you have one.'] },
+ james:{ onStreak:['Every sum still resolves to me.','Push all you like. = is patient.'], onCombo:['Noise. I am the quiet after it.'], onMiss:['Closer to zero. Closer to me.'] },
+};
+function sayFightLine(txt, col, dur){   // route an in-fight subtitle through the taunt box, with a cooldown
+  game.taunt={who:game.enemy.name, txt, col:col||game.enemy.glow||'#e8ecff', t:dur||160};
+  game.tauntCd=game.frame+(dur||160)+90;
+}
+function reactBanter(ev){
+  if(game.mode!=='story' || game.tutorial || game.practice || !game.enemy || !game.enemy.char) return;
+  if(game.tauntCd && game.frame<game.tauntCd) return;
+  const r=REACT[game.enemy.char.id]; if(!r||!r[ev]||!r[ev].length) return;
+  if(Math.random()<0.5) sayFightLine(r[ev][rnd(0,r[ev].length-1)]);
+}
+// ---- HP-THRESHOLD story beats: marquee lines that PLAY mid-fight as health crosses a line (was: narrated in past-tense outros) ----
+function fireStoryBeat(b){
+  sayFightLine(b.txt, b.col, b.dur||210);
+  if(b.sfx) playStinger(b.sfx);
+  if(b.slow) slowmo(b.slowT||320, b.slowAmt||0.5);
+  if(b.shake) addTrauma(b.shake);
+}
+function storyBeatTick(){
+  if(game.mode!=='story' || game.tutorial || game.practice || !game.enemy || !game.player) return;
+  const ch=STORY[game.storyCh]; if(!ch || !ch.hpBeats) return;
+  game.hpFired=game.hpFired||{};
+  const ef=game.enemy.hp/(game.enemy.char.hp||1), pf=game.player.hp/(game.player.char.hp||1);
+  for(const b of ch.hpBeats){
+    if(game.hpFired[b.at]) continue;
+    let hit=false;
+    if(b.at==='e66') hit=ef<=0.66; else if(b.at==='e33') hit=ef<=0.33; else if(b.at==='e15') hit=ef<=0.15;
+    else if(b.at==='p50') hit=pf<=0.50; else if(b.at==='p33') hit=pf<=0.33;
+    if(hit){ game.hpFired[b.at]=1; fireStoryBeat(b); }
+  }
+}
+// ---- PER-FOE COMBAT PHILOSOPHY: each chapter's foe fights the way the chapter is ABOUT (the metaphor becomes the win condition) ----
+function chRuleTick(){   // per-frame rule logic during a story fight
+  if(game.mode!=='story' || game.tutorial || game.practice || !game.chRule) return;
+  const e=game.enemy, p=game.player; if(!e||!p||e.ko) return;
+  if(game.chRule.tag==='overflow'){   // MAXIMILIAN — he doubles with no ceiling; let him cross it and he ERRORS (a window)
+    game.overflow=(game.overflow||0) + 0.09 + (game.heat||0)*0.003;
+    if(game.overflow>=100){
+      game.overflow=0;
+      e.stun=Math.max(e.stun,74); e.dizzy=64; e.hp=Math.max(0, e.hp-15);   // overflowed past the box → junk: self-stun (dizzy doubles your damage) + chip
+      floatText(e.x,e.y-178,'OVERFLOW · ERROR','#ff5a3c',22); addTrauma(0.22); flash(0.16,'#ff5a3c'); ring(e.x,e.y-90,'#ff5a3c',92,5);
+    }
+  }
+}
+function drawRuleBanner(){
+  if(game.mode!=='story' || !game.chRule || (game.state!=='fight'&&game.state!=='intro')) return;
+  const labels={ overflow:'⚠  let him OVERFLOW, then punish the ERROR', subtract:'✓  a PERFECT solve cuts him clean  ·  a miss heals him',
+    read:'↻  vary your operators — the Schism profits off repeats', zero:'↓  he pulls your AURA to zero — keep solving to hold' };
+  const txt=labels[game.chRule.tag]; if(!txt) return;
+  ctx.save(); ctx.font=font(MONO,11.5);
+  const w=ctx.measureText(txt).width;
+  rr(W/2-w/2-12, 104, w+24, 19, 9); ctx.fillStyle='rgba(8,10,20,0.78)'; ctx.fill();
+  ctx.strokeStyle='rgba(180,140,255,0.45)'; ctx.lineWidth=1; ctx.stroke();
+  txtO(txt, W/2, 117, 11.5, '#cdb8ff', {mono:true,sw:0});
+  if(game.chRule.tag==='overflow'){   // his rising overflow meter
+    const mw=190, mx=W/2-mw/2, my=129, fr=clamp((game.overflow||0)/100,0,1);
+    rr(mx,my,mw,6,3); ctx.fillStyle='rgba(255,255,255,0.12)'; ctx.fill();
+    ctx.fillStyle = fr>0.82?'#ff5a3c':'#ff9f6a'; rr(mx,my,Math.max(2,mw*fr),6,3); ctx.fill();
+  }
+  ctx.restore();
+}
 function codexUnlocked(e){ return game.storyProg>=e.req; }
-function enterCodex(){ setMusic('default'); game.codexSel=0; game.codexScroll=0; game.state='codex'; }
+function enterCodex(){ setMusic('default'); game.codexSel=0; game.codexScroll=0; game.codexNew=null; game.state='codex'; }
 
 // ---- story flow ----
 function enterStory(){
@@ -5381,12 +5830,31 @@ function startColdOpen(){
   ]};
   game.state='dialogue';
 }
+// THE GIRAFFE BEAT — a single quiet night, no fight, no reward, no plot business. Pure restraint (TLOU's move).
+function startGiraffe(){
+  setMusic('plus'); game.storyCh=-1;
+  game.dlg={ after:'storymap', scene:'monastery', i:0, lines:[
+    {w:'NARRATOR',c:N,t:'That night the war held its breath. No drill, no ledger, no lesson — just a low fire, and two tired people who had decided to sit by it.', slow:0.8, quiet:true, music:'plus'},
+    {w:'ADDISON of the PLUS',c:FX.plus,t:'You don’t have to solve anything right now. I know that’s the hard part for you. The whole world keeps handing you a problem and calling it your destiny.', slow:0.8},
+    {w:'YOU',c:ME,t:'I keep waiting to feel like the one in the note. Mostly I just feel like a kid who can’t stop counting.', slow:0.8},
+    {w:'ADDISON of the PLUS',c:FX.plus,t:'Good. The day you feel like the prophecy is the day I’d worry. ...Lessing asked after you, by the way. He’s carving little tally marks again. Healthy ones, this time.', slow:0.78},
+    {w:'YOU',c:ME,t:'Does it get easier? Being the thing nobody can solve for?', slow:0.8, hold:34, shot:'you'},
+    {w:'ADDISON of the PLUS',c:FX.plus,t:'No. But you stop wanting it to. Some values aren’t meant to resolve, kid — they stay in the equation and keep it honest. ...Now drink your cocoa. Cold cocoa is a tragedy no math can fix.', slow:0.78, sfx:'warm', hold:36},
+    {w:'NARRATOR',c:N,t:'And for one night, no one carried anything they hadn’t earned, no one took anything away, and the unknown sat by the fire and was, simply, a person.', slow:0.84, quiet:true, hold:54},
+  ]};
+  game.state='dialogue';
+}
 function startStoryChapter(ci){
   if(ci>game.storyProg) return;                 // locked
   game.storyCh=ci; game.mode='story';
   const ch=STORY[ci];
   setMusic(ch.theme);                 // the order's signature theme — through cutscene AND fight
+  if(game._vsStage==null) game._vsStage=game.stageIdx||0;            // remember the player's versus stage once, to restore on exit
+  const si=STAGES.findIndex(s=>s.order===ch.theme);                  // SHOW DON'T TELL: fight each chapter in its order's own arena
+  game.stageIdx = si>=0? si : STAGES.findIndex(s=>s.id==='proving'); // Plus→Chasm, Minus→Frost Spire, Divide→Schism Library, Multiply→Overflow Forge, Solomon→The Equals
   DIFF.level=ch.diff;
+  game.cpuTier = ch.cpuTier!=null? ch.cpuTier : null;   // climax chapters can press harder than the math difficulty (escalation curve)
+  game.chRule = ch.rule || null;                        // per-foe combat philosophy (overflow / subtract / read / zero)
   PROTAG.name=game.heroName||'INITIATE';
   game.player.setCharacter(PROTAG);   // always yourself; the four are who you MEET
   game.enemy.setCharacter(ch.opp==='boss'? BOSS_CHAR : ROSTER[ch.opp]);
@@ -5398,24 +5866,37 @@ function resolveStoryChapter(){
   if(game.playerWon){
     game.storyProg=Math.max(game.storyProg, game.storyCh+1);
     store('storyProg',game.storyProg);
+    const newCodex=CODEX.filter(e=> e.req>0 && e.req===game.storyProg);   // lore that unlocks exactly at this milestone → toast it on the map
+    if(newCodex.length) game.codexNew=(game.codexNew||[]).concat(newCodex.map(e=>e.title));
+    if(game.storyCh===9 && !game.giraffeSeen) game.giraffePending=true;   // a quiet night unlocks once the Difference is healed (VIII)
     recordScore();                                  // story wins feed the profile + can unlock SOLOMON
     game.rewardPts=ch.points;
     if(game.storyCh===0 && !game.heroName){         // FIRST VICTORY → now forge & name your initiate (earned, not demanded up front)
       game.nameBuf=''; game.build={field:0,robe:0,mark:0,stance:1}; game.fromPrologue=true;
       game.state='naming'; return;
     }
-    game.dlg={lines:ch.outro, i:0, after:'reward', scene:sceneFor(ch.theme)};
+    const outroLines=ch.outro.slice();             // BRANCH ON HOW YOU WON — append a graded closing beat
+    const st=game.stats||{}, acc=st.asked? st.correct/st.asked : 1, perfs=st.perfects||0;
+    let grade=null;
+    if(game.player && game.player.hp>=game.player.char.hp*0.95) grade='(Not a mark on you. You fought like the answer was never once in doubt.)';
+    else if(perfs>=4 || acc>=0.9) grade='(Clean. You took only the false parts — exactly as you were taught.)';
+    else if(acc>0 && acc<0.55) grade='(Messy. Half-remembered. But the line held, and holding was the whole job.)';
+    if(grade) outroLines.push({w:'NARRATOR',c:N,t:grade, slow:0.8});
+    game.dlg={lines:outroLines, i:0, after:'reward', scene:sceneFor(ch.theme)};
     game.state='dialogue';
   } else {
-    game.dlg={lines:[{w:'NARRATOR',c:N,t:'The equation said no. But an equation can always be tried again.'}], i:0, after:'storymap', scene:'void'};
+    const lost = ch && ch.lose ? ch.lose : 'The equation said no. But an equation can always be tried again.';
+    game.dlg={lines:[{w:'NARRATOR',c:N,t:lost, slow:0.78, hold:30}], i:0, after:'storymap', scene:sceneFor(ch?ch.theme:'div')};
     game.state='dialogue';
   }
 }
 function dlgAdvance(){
   const d=game.dlg; if(!d) return;
-  d.i++; SFX.ui();
+  const leaving=d.lines[Math.min(d.i,d.lines.length-1)];
+  d.i++;
+  if(!(leaving && (leaving.quiet||leaving.silent))) SFX.ui();   // quiet beats advance in silence, no chirp
   if(d.i>=d.lines.length){
-    const after=d.after; game.dlg=null;
+    const after=d.after; if(d.ducked){ musicRestore(); d.ducked=false; } game.dlg=null;
     if(after==='fight'){
       // first fight ever → an interactive 60-second tutorial bout, where it's about to matter
       if(!game.seenHow){ game.seenHow=true; store('how',true); startTutorial(); }
@@ -5612,6 +6093,7 @@ function applySnapshot(d){
 game.player = new Fighter({name:'AXIOM', x:WORLD_W/2-420, facing:1,  gi:'#2bb3ff', trim:'#ffd34d'});
 game.enemy  = new Fighter({name:'CHAOS', x:WORLD_W/2+420, facing:-1, gi:'#ff4d5e', trim:'#ff9f2a', isCPU:true});
 game.player.setCharacter(ROSTER[1]); game.player.reset(WORLD_W/2-420,1); // EMBER by default
+game.enemy.setCharacter(ROSTER[2]); game.enemy.reset(WORLD_W/2+420,-1);   // a real default foe so a boot-fired tutorial lands on a valid fight
 game.charIdx=1;
 const previews=[...ROSTER, SOLOMON_CHAR].map(c=> new Fighter({name:c.name, x:0, facing:1, gi:c.gi, trim:c.trim, char:c}));
 game.player.opp = game.enemy; game.enemy.opp = game.player;
@@ -5624,6 +6106,8 @@ game.mode2p=false; game.mode='cpu'; game.pickPhase=0; game.p1Idx=1; game.rebind=
 game.menuIdx=0; game.towerIdx=0; game.ladder=null; game.gWins=0;
 game.towerDone=false; game.gOver=false; game.interKind='';
 game.stageIdx=load('stage',0); game.showCtl=load('ctl',true);
+game.galaxyLevel=load('galaxyLevel',1);   // GALAXY BRAIN progression — persists across sessions
+game.galaxy=load('galaxyStyle',0)===1;    // remembered COMBAT STYLE (Standard ↔ Galaxy Brain)
 loadAssets();   // pull in any real-art PNGs from assets/ (procedural fallback if none)
 game.fn=load('fn',{plus:{lvl:1,xp:0},minus:{lvl:1,xp:0},div:{lvl:1,xp:0},mul:{lvl:1,xp:0}});
 game.skill=load('skill',0.5); game.missQ=[]; game.opStats={};   // adaptive difficulty estimate + spaced-rep + op mastery
