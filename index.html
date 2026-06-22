@@ -2745,8 +2745,11 @@ function finishKO(){
     if(playerWon){
       game.gWins++;
       if(game.gWins>load('gauntlet',0)) store('gauntlet',game.gWins);
+      game.gMut = game.gWins>=2 ? MUTATORS[rnd(0,MUTATORS.length-1)] : null;   // remix the next rung
       game.state='interlude'; game.interKind='gauntlet';
-    } else { game.playerWon=false; game.gOver=true; game.state='matchend'; recordScore(); }
+    } else { game.playerWon=false; game.gOver=true; game.state='matchend'; recordScore();
+      const board=load('gBoard',[]); board.push({score:game.lastScore||0, streak:game.gWins});   // persist this run to the top-5 board
+      board.sort((a,b)=>b.score-a.score); store('gBoard', board.slice(0,5)); }
     return;
   }
   if(playerWon){ game.pWins++; if(game.player.hp>=game.player.char.hp) announceFlawless(); }
@@ -4731,8 +4734,13 @@ function drawInterlude(){
   } else {
     letterBanner('VICTORY '+game.gWins, 140, 44, '#ffd34d', 1);
     txtO('GAUNTLET STREAK '+game.gWins+'   ·   BEST '+Math.max(load('gauntlet',0),game.gWins),
-         W/2, 250, 15, '#7ae8ff',{mono:true,sw:0});
-    txtO('they grow stronger. so does the math.', W/2, 300, 13, '#9aa3c8',{mono:true,sw:0});
+         W/2, 244, 15, '#7ae8ff',{mono:true,sw:0});
+    if(game.gMut){   // a mutator remixes the next rung
+      rr(W/2-210,272,420,54,10); ctx.fillStyle='rgba(54,28,78,0.92)'; ctx.fill();
+      ctx.strokeStyle='rgba(180,140,255,'+(0.6+0.4*Math.sin(game.frame*0.12)).toFixed(2)+')'; ctx.lineWidth=2; ctx.stroke();
+      txtO('NEXT RUNG  ·  '+game.gMut.name, W/2, 295, 16, '#d8b8ff',{sw:2});
+      txtO(game.gMut.desc, W/2, 316, 12, '#cabbe0',{mono:true,sw:0});
+    } else txtO('they grow stronger. so does the math.', W/2, 300, 13, '#9aa3c8',{mono:true,sw:0});
   }
   ctx.globalAlpha=pulse;
   txtO('⏎  FIGHT', W/2, 430, 17, '#ffd34d',{mono:true,sw:0});
@@ -4834,12 +4842,16 @@ function drawMatchEnd(){
     return;
   }
   if(game.gOver){ // gauntlet has claimed another
-    letterBanner('GAUNTLET OVER', 150, 50, '#ff4d5e', 1);
-    txtO('STREAK '+game.gWins+'   ·   BEST '+load('gauntlet',0), W/2, 250, 18, '#ffd34d',{mono:true,sw:0});
+    letterBanner('GAUNTLET OVER', 122, 46, '#ff4d5e', 1);
     const acc=Math.round(100*game.stats.correct/Math.max(1,game.stats.asked));
-    txtO('MATH ACCURACY '+acc+'%   ·   DAMAGE '+game.stats.dmg, W/2, 290, 13, '#b8c0da',{mono:true,sw:0});
-    if(game.lastScore!=null) txtO('SCORE '+fmtScore(game.lastScore)+(game.lastBest?'   ★ NEW BEST':''), W/2, 330, 16, '#ffd34d',{mono:true,sw:0});
-    txtO('⏎ RUN IT BACK   ·   C CHANGE FIGHTER   ·   T TITLE', W/2, 400, 13, '#cabbe0',{mono:true,sw:0});
+    txtO('STREAK '+game.gWins+(game.lastScore!=null? '   ·   SCORE '+fmtScore(game.lastScore):'')+(game.lastBest?'   ★ NEW BEST':''), W/2, 192, 17, '#ffd34d',{mono:true,sw:0});
+    txtO('MATH '+acc+'%   ·   DAMAGE '+game.stats.dmg, W/2, 214, 12, '#b8c0da',{mono:true,sw:0});
+    const board=load('gBoard',[]);   // persistent top-5 leaderboard
+    txtO('—  BEST RUNS  —', W/2, 256, 12, '#8fd8f8',{mono:true,sw:0});
+    if(!board.length) txtO('your runs will rank here', W/2, 282, 12, '#8a93b8',{mono:true,sw:0});
+    board.slice(0,5).forEach((e,i)=>{ const mine=(e.score===game.lastScore && e.streak===game.gWins);
+      txtO((i+1)+'.    '+fmtScore(e.score)+' pts    ·    streak '+e.streak, W/2, 280+i*23, 13, mine?'#ffd34d':'#cabbe0',{mono:true,sw:0}); });
+    txtO('⏎ RUN IT BACK   ·   C CHANGE FIGHTER   ·   T TITLE', W/2, 280+Math.max(1,Math.min(5,board.length))*23+22, 13, '#cabbe0',{mono:true,sw:0});
     drawUnlockBanner();
     return;
   }
@@ -5150,7 +5162,7 @@ function menuActivateLabel(label){
   else if(label==='DAILY FIGHT') startDailyChallenge();
   else if(label==='RUMBLE'){ game.rumbleOnline=false; game.state='rumbleChoose'; }                     // ask local vs online on click
   else if(label==='THE TOWER'){ game.mode='tower'; game.pickPhase=0; game.state='select'; }
-  else if(label==='GAUNTLET'){ game.mode='gauntlet'; game.gWins=0; game.pickPhase=0; game.state='select'; }
+  else if(label==='GAUNTLET'){ game.mode='gauntlet'; game.gWins=0; game.gMut=null; game.pickPhase=0; game.state='select'; }
   else if(label==='STORY MODE') enterStory();
   else if(label==='PRACTICE'){ game.practice=true; game.mode='cpu'; style(); game.pickPhase=0; game.state='select'; }
   else if(label==='HOW TO PLAY'){ game.howReturn='title'; game.state='howto'; }
@@ -5186,10 +5198,23 @@ function buildLadder(pid){
   const others=ROSTER.filter(c=>c.id!==pid).sort((a,b)=>a.mathNeed-b.mathNeed);
   return [...others, BOSS_CHAR];
 }
+// ENDLESS variety: every few rungs a MUTATOR remixes the next fight, so the gauntlet isn't a pure stat-ramp
+const MUTATORS=[
+  {key:'fast',  name:'⚡ QUICKENING', desc:'the foe moves and strikes faster'},
+  {key:'brute', name:'💢 BERSERK',    desc:'the foe hits harder — but is frailer'},
+  {key:'tank',  name:'🛡 BULWARK',     desc:'the foe has far more HP, hits softer'},
+  {key:'mirror',name:'🪞 MIRROR',      desc:'the foe fights as YOUR champion'},
+];
 function gauntletFoe(){
   const base=(game.gWins>0 && game.gWins%3===2)? BOSS_CHAR : ROSTER[rnd(0,ROSTER.length-1)];
   const m=1+0.07*game.gWins;
-  return Object.assign({},base,{hp:Math.round(base.hp*m), dmg:+(base.dmg*Math.min(m,1.8)).toFixed(2)});
+  let foe=Object.assign({},base,{hp:Math.round(base.hp*m), dmg:+(base.dmg*Math.min(m,1.8)).toFixed(2)});
+  const mut=game.gMut && game.gMut.key;
+  if(mut==='fast')   foe.speed=+((foe.speed||1)*1.4).toFixed(2);
+  else if(mut==='brute'){ foe.dmg=+(foe.dmg*1.35).toFixed(2); foe.hp=Math.round(foe.hp*0.78); }
+  else if(mut==='tank'){  foe.hp=Math.round(foe.hp*1.6);  foe.dmg=+(foe.dmg*0.8).toFixed(2); }
+  else if(mut==='mirror'){ const pc=game.player.char; foe=Object.assign({},pc,{name:'MIRROR '+pc.name, hp:Math.round(pc.hp*m), dmg:+(pc.dmg*Math.min(m,1.8)).toFixed(2)}); }
+  return foe;
 }
 function cycleArcade(){   // the (E) toggle on the select screen = COMBAT STYLE: STANDARD ↔ GALAXY BRAIN (for the 1v1 lines)
   if(game.mode==='cpu' || game.practice){ game.galaxy=!game.galaxy; store('galaxyStyle', game.galaxy?1:0); }
