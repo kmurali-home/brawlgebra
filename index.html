@@ -1577,6 +1577,7 @@ class Fighter {
       floatText(this.x,this.y-178,'GUARD BREAK!',FX.plus,21); sparks(this.x,this.y-86,12,FX.plus,6);
     }
     this.bufferedInput=null; this.missWobble=0;   // a clean hit eats your queued input + ends the miss-wobble (no blocking through hitstun)
+    if((this===game.enemy||this.isCPU) && this.attack){ const r=this.read||(this.read={block:0,punish:0,dodge:0}); r.punish+=1.2; }   // you whiff-punished its commitment → it learns to bait
     this.comboedHits = (this.stun>0? (this.comboedHits||0) : 0) + 1;   // chained-hit counter → enables a BURST escape
     if(this===game.player && this.comboedHits>=2 && !game.burstChallenge){   // MATH BURST — a free escape if you solve the micro-problem under fire
       game.burstChallenge={ans:rnd(1,9), t:100};
@@ -2139,6 +2140,10 @@ function controlCPU(c){
   const dist = Math.abs(p.x-c.x), dir = p.x>c.x?1:-1;
   if(dist>180 && c.aura<50 && c.aiThink>16 && c.grounded && Math.random()<0.014){ c.thinkT=30; c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }
   c.aiThink--;
+  // READS — the foe builds a picture of YOUR defensive habit and decays it (recency). Its offense then adapts (below), so the attacker becomes readable + counter-conditionable.
+  const rd = c.read || (c.read={block:0,punish:0,dodge:0});
+  rd.block*=0.992; rd.punish*=0.994; rd.dodge*=0.994;
+  if(p.wantBlock && Math.abs(p.x-c.x)<150) rd.block+=0.06;   // you've been turtling
   const canAfford = t => Math.round(ATK[t].cost*c.char.costMul)<=c.aura;
   const pRec  = p.attack && p.attack.ph==='rec';
   const pWind = p.attack && p.attack.ph==='wind';
@@ -2201,17 +2206,29 @@ function controlCPU(c){
   if(ranged && c.aiThink<=0 && dist>=150 && dist<520 && c.aura>=Math.round(ATK.special.cost*c.char.costMul)){
     c.cpuAttack('special', Math.round(80*cfg.telMul)); SFX.charge(); c.aiThink = rnd(cfg.cool[0]+30, cfg.cool[1]+40);
   }
-  // commit to an attack on cadence — always telegraphed (your math window). The CHOICE of move varies by archetype for variety.
+  // commit to an attack on cadence — telegraphed (your math window). The OFFENSE now ADAPTS to your habit, so it's readable + counter-conditionable.
   if(c.aiThink<=0 && dist<150){
+    const dom = (rd.block>1.2 && rd.block>=rd.punish && rd.block>=rd.dodge) ? 'block'
+              : (rd.punish>1.2 && rd.punish>=rd.dodge) ? 'punish'
+              : (rd.dodge>1.2) ? 'dodge' : null;
+    if(dom==='punish' && dist>72 && Math.random()<0.7){   // you keep whiff-punishing → it BAITS: steps back to make you whiff, strikes next beat. Stop mashing.
+      c.moveX=-dir*0.3*cfg.speed; hopCover(c); c.aiThink=rnd(16,28); c.addAura(cfg.regen);
+      if(game.frame-(c._readLineAt||0)>300){ c._readLineAt=game.frame; floatText(c.x,c.y-184,'reading you…','#cdb8ff',12); }
+      return;
+    }
     const rngd = c.char.spKind==='spear'||c.char.spKind==='sigil';
-    const spChance = rngd?0.62 : c.char.spKind==='slam'?0.5 : 0.38;
-    const kickChance = (c.char.dmg||1)>=1.08?0.58:0.4;   // heavy hitters lean on the longer, harder kick
+    let spChance = rngd?0.62 : c.char.spKind==='slam'?0.5 : 0.38;
+    let kickChance = (c.char.dmg||1)>=1.08?0.58:0.4;
+    if(dom==='block'){ spChance=Math.min(0.92, spChance+0.42);   // you turtle → it cracks the guard with specials (chip + guard-crush). Stop blocking, start dodging.
+      if(game.frame-(c._readLineAt||0)>300){ c._readLineAt=game.frame; floatText(c.x,c.y-184,'cracking your guard','#ff9f6a',12); } }
+    if(dom==='dodge') kickChance=0.7;                            // you keep dodging → faster, committed pressure that beats the dodge cooldown
     if(c.aura>=Math.round(ATK.special.cost*c.char.costMul) && Math.random()<spChance){
       c.cpuAttack('special', Math.round(95*cfg.telMul)); SFX.charge(); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
     } else {
       let type = Math.random()<kickChance?'kick':'punch';
       if(Math.round(ATK[type].cost*c.char.costMul)>c.aura) type='punch'; // save up when broke
-      c.cpuAttack(type, Math.round((type==='punch'?48:66)*cfg.telMul)); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
+      const tel = dom==='dodge'? Math.round((type==='punch'?34:46)*cfg.telMul) : Math.round((type==='punch'?48:66)*cfg.telMul);
+      c.cpuAttack(type, tel); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
     }
   }
   c.addAura(cfg.regen);   // CHAOS regenerates aura innately; you earn yours with math
@@ -2382,6 +2399,7 @@ function applySolve(f, result, st, op){
     const o=perfectFoe(f)||computeDanger(f); if(o) o.staggered(f.char.perfectStun, f.char.id==='frost');
     st.perfects=(st.perfects||0)+1; slowmo(380,0.45); flash(0.22,'#fff1c0'); addTrauma(0.2);
     if(f===game.player) game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+12);   // a clutch perfect-dodge charges FOCUS fast
+    if(f===game.player && game.enemy){ const r=game.enemy.read||(game.enemy.read={block:0,punish:0,dodge:0}); r.dodge+=1; }   // you keep dodging → it learns to fast-pressure
     ring(f.x,f.y-90,'#ffd34d',70,5); announce('PERFECT DODGE','#ffd34d'); SFX.perfect();
   } else SFX.correct();
   if(f===game.player && op) sfxSolveOp(op);   // hear which function you just used
@@ -2449,7 +2467,15 @@ function submitFor(f, buf){ // local typed answer (offline, or a player's own se
     const gain=applySolve(f, result, st, game.problem.op);
     if(gain) hudFloat(isP1,'+'+gain,'#7ae8ff');
   }
-  game.heat+=0.45; game.problem=newProblem(Math.floor(game.heat));
+  game.heat+=0.45;
+  let _h=Math.floor(game.heat);   // THREAT-COUPLED MATH (fusion): ease the problem when there's a dodge to make (reward the READ, not arithmetic); nudge harder when cornered
+  if(!game.daily && !game.online && !game.mode2p && !game.galaxy){
+    const danger = (game.enemy && game.enemy.attack && (game.enemy.attack.ph==='wind'||game.enemy.attack.ph==='tel')) || (typeof dangerInfo==='function' && dangerInfo()>0);
+    const cornered = game.player && game.player.hp < game.player.char.hp*0.28;
+    if(danger) _h=Math.max(0,_h-2);
+    else if(cornered) _h=_h+2;
+  }
+  game.problem=newProblem(_h);
   if(game.mode2p){ ans1=''; ans2=''; }
   return '';
 }
@@ -2470,6 +2496,7 @@ function startMatch(){
   game.opStats={}; game.missQ=[]; game.focusOp=null; game.burstChallenge=null; game.rushMeter=0; game.rush=null;  // per-match: mastery + spaced-rep + op-focus + math-burst + SOLVE RUSH
   game.galaxyBurstsDone=0; game.galaxyBest=0; game.galaxyKit=buildGalaxyKit(game.galaxyLevel||1);   // GALAXY BRAIN: fresh randomized combo kit (scales w/ level) + best burst-solve count
   game.hpFired={}; game.tauntCd=0; game.overflow=0; game.lastSolveOp=null;   // per-match: reset mid-fight beats, banter cooldown, and per-foe-rule state
+  if(game.enemy) game.enemy.read={block:0,punish:0,dodge:0};   // fresh adaptive-offense reads each match
   SFX.round();
   startRound();
 }
@@ -6153,15 +6180,20 @@ window.game=game; window.DIFF=DIFF; // debug handle
 let last=performance.now(), acc=0;
 const STEP=1000/60;
 function loop(now){
-  const target = now<slowUntil? slowScale : 1;
-  timeScale += (target-timeScale)*0.25;
-  acc += Math.min(64, now-last)*timeScale; last=now;
-  let n=0;
-  while(acc>=STEP && n++<4){ step(); acc-=STEP; }
-  if(game.online && net.role==='host'){ net.bcAcc=(net.bcAcc+1)%2; if(net.bcAcc===0) netSend({t:'snap',d:hostSnapshot()}); }
-  if(AC) musicTick();
-  render();
-  requestAnimationFrame(loop);
+  try{
+    const target = now<slowUntil? slowScale : 1;
+    timeScale += (target-timeScale)*0.25;
+    acc += Math.min(64, now-last)*timeScale; last=now;
+    let n=0;
+    while(acc>=STEP && n++<4){ step(); acc-=STEP; }
+    if(game.online && net.role==='host'){ net.bcAcc=(net.bcAcc+1)%2; if(net.bcAcc===0) netSend({t:'snap',d:hostSnapshot()}); }
+    if(AC) musicTick();
+    render();
+  } catch(e){
+    if(!game._loopErr){ game._loopErr=1; try{ console.error('loop error (recovered):', e); }catch(_){} }   // never hard-freeze a player mid-fight — keep the frames coming
+  } finally {
+    requestAnimationFrame(loop);
+  }
 }
 requestAnimationFrame(loop);
 </script>
