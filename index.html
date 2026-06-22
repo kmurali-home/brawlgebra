@@ -463,6 +463,7 @@ addEventListener("keydown", e => {
     }
     else if(lk==='t') enterTraining(FUNCS[0].key);
     else if(lk==='l') enterCodex();
+    else if(lk==='n' && game.storyProg>=STORY.length){ game.ngPlus=!game.ngPlus; store('ngPlus',game.ngPlus?1:0); SFX.ui(); flash(0.08, game.ngPlus?'#ffd34d':'#3d4668'); }   // NEW GAME+ toggle (unlocked after finishing the saga)
     else if(k==='Escape'){ setMusic('default'); if(game._vsStage!=null){ game.stageIdx=game._vsStage; game._vsStage=null; } game.state='title'; }
     return;
   }
@@ -4250,6 +4251,10 @@ function drawStory(){
   ctx.fillStyle='rgba(2,3,8,0.82)'; ctx.fillRect(0,0,W,H);
   txtO('THE BROTHERHOOD OF FUNCTIONS', W/2, 52, 26, '#efe9ff',{sw:5});
   txtO('an epic, told in four operations', W/2, 74, 11, '#9aa3c8',{mono:true,sw:0});
+  if(game.storyProg>=STORY.length){   // NEW GAME+ unlocked once the saga is cleared
+    const on=game.ngPlus, pulse=on?(0.65+0.35*Math.sin(game.frame*0.1)):1;
+    txtO((on?'★ NEW GAME+ ON':'NEW GAME+ OFF')+' · N', W/2+330, 52, 10, on?'rgba(255,211,77,'+pulse.toFixed(2)+')':'#7a7390',{mono:true,sw:on?2:0});
+  }
   if(game.heroName) txtO('INITIATE '+game.heroName.toUpperCase()+'  ·  THE UNSOLVED-FOR', W/2+250, 92, 11, '#cfe0ff',{mono:true,sw:0});
   // chapter list (left) — scroll window keeps the selection in view
   const lx=56, ly=92, step=31, maxVis=12;
@@ -5905,6 +5910,7 @@ function enterCodex(){ setMusic('default'); game.codexSel=0; game.codexScroll=0;
 function enterStory(){
   setMusic('default');
   game.mode='story';
+  if(game.ngPlus===undefined) game.ngPlus=!!load('ngPlus',0);   // NEW GAME+ persists once unlocked
   game.storySel=Math.min(game.storyProg, STORY.length-1);
   PROTAG.name=game.heroName||'INITIATE'; applyHeroLook();    // start as the nameless initiate
   game.player.setCharacter(PROTAG);
@@ -5957,6 +5963,11 @@ function startStoryChapter(ci){
   PROTAG.name=game.heroName||'INITIATE';
   game.player.setCharacter(PROTAG);   // always yourself; the four are who you MEET
   game.enemy.setCharacter(ch.opp==='boss'? BOSS_CHAR : ROSTER[ch.opp]);
+  if(game.ngPlus){   // NEW GAME+ — the whole saga, harder: tougher foes, sharper AI, harder math
+    DIFF.level=Math.min(2, ch.diff+1);
+    game.cpuTier=Math.min(3, (game.cpuTier!=null?game.cpuTier:ch.diff)+1);
+    const c=game.enemy.char; game.enemy.char=Object.assign({},c,{hp:Math.round(c.hp*1.4), dmg:+(c.dmg*1.2).toFixed(2)});
+  }
   game.dlg={lines:ch.intro, i:0, after:'fight', scene:sceneFor(ch.theme)};
   game.state='dialogue';
 }
