@@ -3292,6 +3292,43 @@ function pagoda(x,y,s){
   ctx.rect(x-9*s,y-60*s,18*s,60*s);
   ctx.fill();
 }
+function stageProps(){   // per-arena background silhouettes — six deliberate places, not one temple recoloured
+  const id=ST().id, acc=ST().accent||'#88a0d0', col=shade(ST().ridgeNear,0.3), gy=GROUND;   // a visible silhouette tone (lighter than the far ridge so props read)
+  ctx.fillStyle=col;
+  if(id==='forge'){            // MULTIPLY — smelter chimneys with ember glow
+    for(const [x,h,w] of [[WORLD_W/2-360,214,46],[WORLD_W/2+320,176,40],[WORLD_W/2+512,150,34]]){
+      ctx.fillRect(x-w/2,gy-h,w,h); ctx.fillRect(x-w/2-6,gy-h-12,w+12,16);
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      const g=ctx.createRadialGradient(x,gy-h-6,2,x,gy-h-6,42); g.addColorStop(0,hexA(acc,0.45)); g.addColorStop(1,hexA(acc,0));
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,gy-h-6,42,0,7); ctx.fill(); ctx.restore(); ctx.fillStyle=col;
+    }
+  } else if(id==='frost'){     // MINUS — ice obelisks
+    for(const [x,h] of [[WORLD_W/2-348,250],[WORLD_W/2-188,176],[WORLD_W/2+300,232],[WORLD_W/2+472,160]]){
+      ctx.beginPath(); ctx.moveTo(x-18,gy); ctx.lineTo(x-9,gy-h); ctx.lineTo(x+4,gy-h-22); ctx.lineTo(x+17,gy-h); ctx.lineTo(x+22,gy); ctx.closePath(); ctx.fill();
+    }
+  } else if(id==='schism'){    // DIVIDE — bookshelf towers + drifting tomes
+    for(const [x,h,w] of [[WORLD_W/2-330,262,82],[WORLD_W/2+300,304,92],[WORLD_W/2+476,206,70]]){
+      ctx.fillRect(x-w/2,gy-h,w,h);
+      ctx.save(); ctx.fillStyle=shade(col,-0.35); for(let s=1;s*38<h;s++) ctx.fillRect(x-w/2+5,gy-s*38,w-10,5); ctx.restore();
+    }
+    ctx.save(); ctx.fillStyle=hexA(acc,0.5);
+    for(let i=0;i<6;i++){ const tx=(i*200+game.frame*0.25)%(WORLD_W+200)-100, ty=GROUND-280+Math.sin(game.frame*0.02+i*1.6)*26; ctx.fillRect(tx,ty,15,11); }
+    ctx.restore(); ctx.fillStyle=col;
+  } else if(id==='void'){      // SOLOMON — cracked monoliths with a glowing seam
+    for(const [x,h,w] of [[WORLD_W/2-300,284,50],[WORLD_W/2+342,332,56]]){
+      ctx.beginPath(); ctx.moveTo(x-w/2,gy); ctx.lineTo(x-w/2+5,gy-h); ctx.lineTo(x+w/2-9,gy-h+18); ctx.lineTo(x+w/2,gy); ctx.closePath(); ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.strokeStyle=hexA(acc,0.4); ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(x,gy-h+22); ctx.lineTo(x-7,gy-h*0.5); ctx.lineTo(x+4,gy-24); ctx.stroke(); ctx.restore();
+    }
+  } else if(id==='pit'){       // PLUS — broken bridge stumps
+    for(const x of [WORLD_W/2-344,WORLD_W/2-120,WORLD_W/2+258,WORLD_W/2+458]){
+      const h=118+((Math.abs(x*7))%84); ctx.fillRect(x-20,gy-h,40,h);
+      ctx.beginPath(); ctx.moveTo(x-20,gy-h); ctx.lineTo(x-2,gy-h-16); ctx.lineTo(x+20,gy-h-4); ctx.closePath(); ctx.fill();
+    }
+  } else {                     // PROVING / default — the temple pagodas
+    pagoda(WORLD_W/2-300,262,1.1); pagoda(WORLD_W/2+390,252,0.8);
+  }
+}
 function drawWorld(){
   const par=(k)=> (cam.x-WORLD_W/2)*k;
   // deepest layer — a hazy distant skyline of spires (depth + sense of place), silhouetted on the moon
@@ -3313,7 +3350,7 @@ function drawWorld(){
   ctx.beginPath(); ctx.moveTo(-220,GROUND);
   for(const p of ridgeFar) ctx.lineTo(p[0],p[1]);
   ctx.lineTo(WORLD_W+220,GROUND); ctx.closePath(); ctx.fill();
-  pagoda(WORLD_W/2-300,262,1.1); pagoda(WORLD_W/2+390,252,0.8);
+  stageProps();   // per-arena silhouettes (forge chimneys / frost obelisks / schism shelves / void monoliths / pit stumps)
   ctx.restore();
   // near ridge
   ctx.save(); ctx.translate(par(0.3),0);
@@ -3338,7 +3375,7 @@ function drawWorld(){
   const fg=ctx.createLinearGradient(0,GROUND,0,H+90);
   fg.addColorStop(0,'#170818'); fg.addColorStop(1,'#0a0410');
   ctx.fillStyle=fg; ctx.fillRect(-220,GROUND,WORLD_W+440,H);
-  ctx.strokeStyle='rgba(150,70,210,0.16)'; ctx.lineWidth=1.5;
+  ctx.strokeStyle=hexA(ST().accent||'#9a46d2',0.15); ctx.lineWidth=1.5;   // perspective grid takes the arena's hue
   const vpx=WORLD_W/2, vpy=GROUND-200;
   for(let x=-200;x<=WORLD_W+200;x+=85){
     const dx=x-vpx;
@@ -3354,7 +3391,7 @@ function drawWorld(){
   ctx.save();
   ctx.translate(WORLD_W/2,GROUND+8); ctx.scale(1,0.30);
   const rot=game.frame*0.004, hot=game.player.streak>=5;
-  const sigCol = hot?'rgba(255,200,90,':'rgba(160,90,255,';
+  const sigCol = hot?'rgba(255,200,90,': hexA(ST().accent||'#a05aff',1).slice(0,-2);   // summoning sigil takes the arena's hue (gold when hot-streaking)
   const pulse=0.5+Math.sin(game.frame*0.05)*0.18;
   ctx.strokeStyle=sigCol+(0.5*pulse)+')'; ctx.lineWidth=3;
   ctx.beginPath(); ctx.arc(0,0,165,0,7); ctx.stroke();
