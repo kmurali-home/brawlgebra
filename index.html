@@ -3920,23 +3920,42 @@ function drawDailyBadge(){     // surfaces the Daily + at-risk streak EXACTLY wh
   if(line2) txtO(line2, W/2, 51, 9.5, '#ffd34d', {mono:true,sw:0});
   ctx.restore();
 }
+function drawWordmark(cx, cy, sc){   // the BRAWL·GEBRA logo — beveled, embossed, sheened, operator-accented (canvas-drawn, works offline in the desktop build)
+  sc=sc||1; const sh=(game.frame%200)/200;
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(-0.02); ctx.scale(sc,sc);
+  ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font=font(DISP,68);
+  const wA=ctx.measureText('BRAWL').width, wB=ctx.measureText('GEBRA').width, tot=wA+wB;
+  const ax=-tot/2+wA/2, bx=-tot/2+wA+wB/2;
+  // operator glyphs orbiting behind the mark (the math motif)
+  ctx.font=font(DISP,30); ctx.globalAlpha=0.16;
+  ['+','−','×','÷'].forEach((o,i)=>{ const a=game.frame*0.009+i*1.57; ctx.fillStyle=i<2?'#ff7a88':'#7ad0ff';
+    ctx.fillText(o, Math.cos(a)*(tot/2+46), Math.sin(a)*28-8); });
+  ctx.globalAlpha=1; ctx.font=font(DISP,68);
+  const drawHalf=(txt,x,c)=>{
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillText(txt,x+5,7);                 // depth shadow
+    ctx.fillStyle=c.dark; ctx.fillText(txt,x+2.5,3);                          // dark bevel underside
+    const g=ctx.createLinearGradient(0,-52,0,12);                            // main face
+    g.addColorStop(0,c.hi); g.addColorStop(0.5,c.mid); g.addColorStop(1,c.lo);
+    ctx.fillStyle=g; ctx.fillText(txt,x,0);
+    ctx.save(); ctx.beginPath(); ctx.rect(-tot/2-16,-58,tot+32,26); ctx.clip();   // top emboss highlight
+    ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.fillText(txt,x,0); ctx.restore();
+  };
+  drawHalf('BRAWL', ax, {hi:'#ff9aa4',mid:'#ff4d5e',lo:'#a31f30',dark:'#240810'});
+  drawHalf('GEBRA', bx, {hi:'#a9e6ff',mid:'#2bb3ff',lo:'#0f6aa8',dark:'#06121f'});
+  ctx.save(); ctx.beginPath(); ctx.rect(-tot/2-16,-58,tot+32,72); ctx.clip();     // sheen sweep
+  const gx=-tot/2+sh*(tot+60), sg=ctx.createLinearGradient(gx-30,0,gx+30,0);
+  sg.addColorStop(0,'rgba(255,255,255,0)'); sg.addColorStop(0.5,'rgba(255,255,255,0.32)'); sg.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=sg; ctx.fillText('BRAWL',ax,0); ctx.fillText('GEBRA',bx,0); ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,0.32)'; ctx.lineWidth=2;                      // math-rule underline + operators
+  ctx.beginPath(); ctx.moveTo(-tot/2,28); ctx.lineTo(tot/2,28); ctx.stroke();
+  ctx.font=font(MONO,13); ctx.fillStyle='rgba(255,211,77,0.9)'; ctx.fillText('+   −   ×   ÷', 0, 45);
+  ctx.restore();
+}
 function drawTitle(){
   ctx.fillStyle='rgba(3,2,10,0.45)'; ctx.fillRect(0,0,W,H);
   if(game.profile && (game.profile.matches||0)>0) drawDailyBadge();   // don't shout Daily at a newcomer who hasn't fought yet
-  // logo
-  const sh=(game.frame%220)/220;
-  ctx.save(); ctx.translate(W/2,0); ctx.rotate(-0.018); ctx.translate(-W/2,0);
-  ctx.font=font(DISP,66);
-  const wA=ctx.measureText('BRAWL').width, wB=ctx.measureText('GEBRA').width, tot=wA+wB, cx0=W/2-tot/2;
-  const g1=ctx.createLinearGradient(cx0,0,cx0+wA,0);
-  g1.addColorStop(0,'#ff4d5e'); g1.addColorStop(clamp(sh,0.01,0.99),'#ffd0d6'); g1.addColorStop(1,'#ff4d5e');
-  txtO('BRAWL', cx0+wA/2, 198, 66, g1, {sw:9});       // BRAWL (red) + GEBRA (blue) — the pun, two-tone
-  const g2=ctx.createLinearGradient(cx0+wA,0,cx0+tot,0);
-  g2.addColorStop(0,'#2bb3ff'); g2.addColorStop(clamp(1-sh,0.01,0.99),'#d6f2ff'); g2.addColorStop(1,'#2bb3ff');
-  txtO('GEBRA', cx0+wA+wB/2, 198, 66, g2, {sw:9});
-  ctx.restore();
-  ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(W/2-200,224); ctx.lineTo(W/2+200,224); ctx.stroke();
+  // logo — the styled, beveled wordmark
+  drawWordmark(W/2, 192, 1);
   // rotating tagline
   const tag=TAGS[Math.floor(game.frame/260)%TAGS.length];
   txtO(tag, W/2, 260, 14, '#cabbe0', {mono:true, sw:0});
@@ -3967,8 +3986,8 @@ function drawTitle(){
 }
 function drawWelcome(){   // first-run gate: teach before you ask
   ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
-  txtO('BRAWLGEBRA', W/2, 150, 50, '#ffd0d6', {sw:8});
-  txtO('Solve math to power your punches.', W/2, 198, 16, '#9fdcff', {sw:0});
+  drawWordmark(W/2, 142, 0.66);
+  txtO('Solve math to power your punches.', W/2, 200, 16, '#9fdcff', {sw:0});
   const pulse=0.55+Math.sin(game.frame*0.08)*0.45;
   rr(W/2-230, 268, 460, 96, 16); ctx.fillStyle='rgba(14,10,30,0.94)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5; ctx.stroke();
