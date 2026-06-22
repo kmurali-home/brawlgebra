@@ -325,9 +325,11 @@ addEventListener("keydown", e => {
   if(game.state==='splash'){ game.state='title'; return; }   // skippable studio bumper
   const k = e.key, lk = k.toLowerCase(), code = e.code;
   if(lk==='v' && ['fight','intro','title','select','story','ko','matchend','modes'].includes(game.state)){   // CINEMATIC SHOWCASE — clean frame + both sides auto-fight, for hands-free trailer capture
-    game.cinema=!game.cinema; const h=document.getElementById('hint'); if(h) h.style.display=game.cinema?'none':'';
-    if(game.cinema) tip('cinema','SHOWCASE on — both fighters auto-play, HUD cleaned for recording. Press V to exit.'); SFX.ui(); return;
+    game.cinema=!game.cinema; if(!game.cinema) game.cinemaSlow=false;
+    const h=document.getElementById('hint'); if(h) h.style.display=game.cinema?'none':'';
+    SFX.ui(); return;
   }
+  if(lk==='b' && game.cinema){ game.cinemaSlow=!game.cinemaSlow; SFX.ui(); return; }   // SHOWCASE slow-mo — sustained, for dramatic clip moments
   if(game.tutorial && game.state==='fight' && k==='Escape'){ endTutorial(); return; }   // skip the first-run tutorial
   if([" ","ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Backspace","/","'",",","."].includes(k)) e.preventDefault();
 
@@ -4931,9 +4933,10 @@ function postFx(){   // cinematic lighting/atmosphere pass over the world — li
   ctx.fillStyle=rays; ctx.fillRect(0,0,W,H);
   ctx.restore();
   // 3) COLOR GRADE — cool top, warm floor; soft-light keeps it subtle and cohesive
-  ctx.save(); ctx.globalCompositeOperation='soft-light'; ctx.globalAlpha=0.42;
+  ctx.save(); ctx.globalCompositeOperation='soft-light'; ctx.globalAlpha=0.46;
+  const acc=ST().accent||'#88a0d0';                        // PER-STAGE GRADE: cool indigo top, the arena's own hue washing the floor
   const grade=ctx.createLinearGradient(0,0,0,H);
-  grade.addColorStop(0,'#46568a'); grade.addColorStop(0.55,'#181428'); grade.addColorStop(1,'#341e12');
+  grade.addColorStop(0,'#3a4a7a'); grade.addColorStop(0.55,'#14122a'); grade.addColorStop(1, shade(acc,-0.5));
   ctx.fillStyle=grade; ctx.fillRect(0,0,W,H);
   ctx.restore();
 }
@@ -4947,11 +4950,41 @@ function bloomPass(){   // soft additive bloom — blooms highlights for a rende
   const bx=_bloomCv.getContext('2d');
   bx.clearRect(0,0,bw,bh);
   bx.globalCompositeOperation='source-over';
-  bx.drawImage(cv,0,0,bw,bh);                       // downscale the frame
+  bx.filter='contrast(2.6) brightness(0.62)';        // THRESHOLD: keep only highlights, so darks stay dark and the bloom reads as glow, not haze
+  bx.drawImage(cv,0,0,bw,bh);                         // downscale the (thresholded) frame
+  bx.filter='none';
   ctx.save(); ctx.setTransform(1,0,0,1,0,0);
-  ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.32; ctx.filter='blur(3px)';
-  ctx.drawImage(_bloomCv,0,0,cv.width,cv.height);   // upscale + additive = bloom
-  ctx.filter='none'; ctx.restore();
+  ctx.globalCompositeOperation='lighter';
+  ctx.globalAlpha=0.40; ctx.filter='blur(3px)';
+  ctx.drawImage(_bloomCv,0,0,cv.width,cv.height);    // tight bloom
+  ctx.globalAlpha=0.18; ctx.filter='blur(7px)';
+  ctx.drawImage(_bloomCv,0,0,cv.width,cv.height);    // wide bloom halo
+  ctx.filter='none'; ctx.globalAlpha=1; ctx.restore();
+}
+let _grainCv=null;
+function makeGrain(){   // one tiling monochrome noise tile for film grain (kills gradient banding, adds shot-on-film texture)
+  _grainCv=document.createElement('canvas'); _grainCv.width=_grainCv.height=128;
+  const g=_grainCv.getContext('2d'), id=g.createImageData(128,128), d=id.data;
+  for(let i=0;i<d.length;i+=4){ const v=(Math.random()*255)|0; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
+  g.putImageData(id,0,0);
+}
+function gradeFrame(){   // master tonemap + film grain — the single cheapest premium lift
+  if(typeof document==='undefined' || cv.width<2) return;
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  ctx.globalCompositeOperation='source-over'; ctx.filter='contrast(1.07) saturate(1.14) brightness(1.015)';
+  ctx.drawImage(cv,0,0);                                   // tonemap: blit the frame through a contrast/saturation filter
+  ctx.filter='none';
+  ctx.globalCompositeOperation='multiply'; ctx.fillStyle='rgba(26,36,62,0.12)'; ctx.fillRect(0,0,cv.width,cv.height);   // deepen + cool the shadows
+  ctx.globalCompositeOperation='soft-light';              // warm the firelight floor
+  const wg=ctx.createLinearGradient(0,cv.height*0.52,0,cv.height);
+  wg.addColorStop(0,'rgba(255,176,110,0)'); wg.addColorStop(1,'rgba(255,176,110,0.16)');
+  ctx.fillStyle=wg; ctx.fillRect(0,cv.height*0.5,cv.width,cv.height*0.5);
+  if(!_grainCv) makeGrain();                              // film grain
+  ctx.globalCompositeOperation='overlay'; ctx.globalAlpha=0.045+(cam.trauma||0)*0.05;
+  ctx.fillStyle=ctx.createPattern(_grainCv,'repeat');
+  ctx.translate((Math.random()*128)|0,(Math.random()*128)|0);
+  ctx.fillRect(-128,-128,cv.width+256,cv.height+256);
+  ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.restore();
 }
 function render(){
   fitCanvas();
@@ -4999,7 +5032,7 @@ function render(){
     eg.addColorStop(0.75,'rgba(255,40,50,0)'); eg.addColorStop(1,`rgba(255,40,50,${a})`);
     ctx.fillStyle=eg; ctx.fillRect(0,0,W,H);
   }
-  if(['fight','intro','ko','finisher','qed','rush'].includes(game.state)){ postFx(); bloomPass(); }   // grade + bloom the live arena, not the menus/UI
+  if(['fight','intro','ko','finisher','qed','rush'].includes(game.state)){ postFx(); bloomPass(); gradeFrame(); }   // atmosphere + bloom + master grade on the live arena
   vignette();
   if(game.state==='splash') drawSplash();
   else if(game.state==='welcome') drawWelcome();
@@ -5121,28 +5154,28 @@ const SOLOMON_CHAR=Object.assign({},BASE_CHAR,{
   spKind:'sigil', spName:'RESOLUTION',
   blurb:'The Equals, made playable.'});
 const ROSTER=[
- {id:'mauler',name:'MAXIMILIAN',tagline:'THE BOUNDLESS PRODUCT',gi:'#a85432',trim:'#e0c060',sigil:'×',
+ {id:'mauler',name:'MAXIMILIAN',tagline:'THE BOUNDLESS PRODUCT',gi:'#ff5a6a',trim:'#ffcf6a',sigil:'×',
   quip:'Why count when you can crush?',
   hp:125,speed:0.8,scale:1.13,costMul:0.55,gainMul:0.6,dmg:1.2,auraMax:70,regen:0.05,
   streakMul:0,blockMul:1,perfectStun:46,mathNeed:1,upside:2,
   spKind:'slam',spName:'QUAKE SLAM', build:{torso:28,head:'horns'},
   atk:{kick:{dmg:15,reach:96,wind:12,act:6,rec:22,heavy:true,hy:-66}},   // slow, armored crusher kick
   blurb:'Barely needs math. Low ceiling, hard fists.'},
- {id:'ember',name:'ADDISON',tagline:'THE MEASURED SUM',gi:'#e8a020',trim:'#2a2a32',sigil:'+',
+ {id:'ember',name:'ADDISON',tagline:'THE MEASURED SUM',gi:'#46e08a',trim:'#d8f5e4',sigil:'+',
   quip:'Measured. Always measured. Carry the one.',
   hp:100,speed:1.05,scale:1,costMul:1,gainMul:1,dmg:1,auraMax:100,regen:0,
   streakMul:1,blockMul:1,perfectStun:50,mathNeed:2,upside:3,
   spKind:'dash',spName:'INFERNO DASH', build:{torso:21,head:'topknot'},
   atk:{punch:{dmg:6,wind:4,act:4,rec:9}},   // measured, crisp jab
   blurb:'Balanced fire. Math feeds the flame.'},
- {id:'frost',name:'LESSING',tagline:'THE LAST DIFFERENCE',gi:'#7ec8e8',trim:'#e8f4ff',sigil:'−',
+ {id:'frost',name:'LESSING',tagline:'THE LAST DIFFERENCE',gi:'#7ae8ff',trim:'#e8f4ff',sigil:'−',
   quip:'Take only what you need. I’ll be counting.',
   hp:100,speed:1,scale:1,costMul:1.1,gainMul:1,dmg:0.85,auraMax:100,regen:0,
   streakMul:1,blockMul:0.35,perfectStun:85,mathNeed:3,upside:4,
   spKind:'spear',spName:'GLACIAL LANCE', build:{torso:18,head:'hood',cape:true},
   atk:{punch:{dmg:4,reach:94,wind:6,act:4,rec:12,hy:-88}},   // austere long-range poke
   blurb:'Perfect answers freeze foes solid.'},
- {id:'oracle',name:'KRISHNA',tagline:'THE STANDING QUOTIENT',gi:'#e8e4f0',trim:'#ffd34d',sigil:'÷',
+ {id:'oracle',name:'KRISHNA',tagline:'THE STANDING QUOTIENT',gi:'#b48cff',trim:'#ffd34d',sigil:'÷',
   quip:'I am the proof. You are the error.',
   hp:82,speed:0.95,scale:1,costMul:1.25,gainMul:1.5,dmg:1,auraMax:100,regen:0,
   streakMul:2,blockMul:1,perfectStun:60,mathNeed:5,upside:5,
@@ -6244,7 +6277,7 @@ let last=performance.now(), acc=0;
 const STEP=1000/60;
 function loop(now){
   try{
-    const target = now<slowUntil? slowScale : 1;
+    const target = (now<slowUntil? slowScale : 1) * (game.cinemaSlow?0.45:1);   // SHOWCASE slow-mo stacks a sustained 0.45× for cinematic capture
     timeScale += (target-timeScale)*0.25;
     acc += Math.min(64, now-last)*timeScale; last=now;
     let n=0;
