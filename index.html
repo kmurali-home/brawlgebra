@@ -324,6 +324,10 @@ addEventListener("keydown", e => {
   audio(); applyVolumes();
   if(game.state==='splash'){ game.state='title'; return; }   // skippable studio bumper
   const k = e.key, lk = k.toLowerCase(), code = e.code;
+  if(lk==='v' && ['fight','intro','title','select','story','ko','matchend','modes'].includes(game.state)){   // CINEMATIC SHOWCASE — clean frame + both sides auto-fight, for hands-free trailer capture
+    game.cinema=!game.cinema; const h=document.getElementById('hint'); if(h) h.style.display=game.cinema?'none':'';
+    if(game.cinema) tip('cinema','SHOWCASE on — both fighters auto-play, HUD cleaned for recording. Press V to exit.'); SFX.ui(); return;
+  }
   if(game.tutorial && game.state==='fight' && k==='Escape'){ endTutorial(); return; }   // skip the first-run tutorial
   if([" ","ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Backspace","/","'",",","."].includes(k)) e.preventDefault();
 
@@ -2915,7 +2919,8 @@ function step(){
     stageHazardTick();                 // ambient stage hazards (gated on settings.hazards)
     if(game.tutorial) tutorTick();     // first-run guided bout drives the dummy + the lesson script
     if(game.mode==='rumble'){ rumbleStep(); return; }
-    controlPlayer(p);
+    if(game.cinema && !game.mode2p && !game.tutorial && !game.practice && !game.galaxy){ p.opp=game.enemy; controlCPU(p); cpuTelegraphDrift(p); }   // SHOWCASE: the player auto-fights too
+    else controlPlayer(p);
     if(game.mode2p) controlP2(e);
     else if(!game.tutorial && !game.practice){ controlCPU(e); cpuTelegraphDrift(e); }   // tutorial dummy is script-controlled; PRACTICE dummy just stands there
     p.update(true); e.update(true);
@@ -5022,14 +5027,15 @@ function render(){
     if(game.state==='fight'){
       if(game.galaxy) drawGalaxyHUD();   // GALAXY fight = no math card; show your unlocked combos instead
       else { if(!(game.mode==='rumble'&&game.player.ko)) drawCard();
-        if((game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.player.ko){ const pz=0.55+Math.sin(game.frame*0.3)*0.45; ctx.save(); ctx.globalAlpha=pz; txtO('⚡ FOCUS FULL — press R for SOLVE RUSH', W/2, H-142, 14, '#ffd34d', {sw:3}); ctx.restore(); } }
-      drawTip(); drawCtlStrip(); if(game.tutorial) drawTutorBanner(); }
+        if(!game.cinema && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.player.ko){ const pz=0.55+Math.sin(game.frame*0.3)*0.45; ctx.save(); ctx.globalAlpha=pz; txtO('⚡ FOCUS FULL — press R for SOLVE RUSH', W/2, H-142, 14, '#ffd34d', {sw:3}); ctx.restore(); } }
+      if(!game.cinema){ drawTip(); drawCtlStrip(); if(game.tutorial) drawTutorBanner(); } }
     // cinematic letterbox on KO (lb advances in updateFx)
     if(game.lb>0.01){
       ctx.fillStyle=`rgba(10,14,30,${0.22*game.lb})`; ctx.fillRect(0,0,W,H);
       ctx.fillStyle='#000';
       ctx.fillRect(0,0,W,62*game.lb); ctx.fillRect(0,H-62*game.lb,W,62*game.lb);
     }
+    if(game.cinema){ ctx.fillStyle='#000'; ctx.fillRect(0,0,W,38); ctx.fillRect(0,H-38,W,38); }   // SHOWCASE letterbox
     if(game.state==='finisher') drawFinisherCard(); // above the bars — the fuse must read
     if(game.state==='rush') drawRush();
     drawBanners();
