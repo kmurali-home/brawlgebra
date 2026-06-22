@@ -4243,7 +4243,9 @@ function drawStory(){
     ctx.lineWidth=sel?2.5:1.2; ctx.strokeStyle=sel?'#ffd34d': cleared?'#46e08a': locked?'#2a2436':'#3d4668'; ctx.stroke();
     const mark = cleared?'✓': locked?'🔒':'▶';
     txtO(mark, lx+18, y+18, 13, cleared?'#46e08a':locked?'#6a6480':'#ffd34d',{sw:0});
-    txtO(STORY[i].title, lx+40, y+18, 12, locked?'#6a6480': sel?'#ffd34d':'#e8ecff', {align:'left',sw:0});
+    // NO SPOILERS: only chapters you've CLEARED reveal their title; un-cleared show just the numeral (the title lands when you enter the chapter)
+    const dispTitle = cleared ? STORY[i].title : (STORY[i].title.split('·')[0].trim() + ' · ? ? ?');
+    txtO(dispTitle, lx+40, y+18, 12, locked?'#6a6480': sel?'#ffd34d':'#e8ecff', {align:'left',sw:0});
   }
   // function panel (right)
   txtO('YOUR FUNCTIONS', W/2+250, 110, 12, '#8fd8f8',{sw:0});
