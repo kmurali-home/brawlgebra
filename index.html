@@ -979,12 +979,17 @@ function drawParts(){
       ctx.globalAlpha=a; ctx.strokeStyle=q.col; ctx.lineWidth=2; ctx.lineCap='round';
       ctx.beginPath(); ctx.moveTo(q.x,q.y);
       ctx.lineTo(q.x-q.vx*q.len*0.4, q.y-q.vy*q.len*0.4); ctx.stroke();
+      const hg=ctx.createRadialGradient(q.x,q.y,0,q.x,q.y,4.5);   // hot glowing head (bloom catches it)
+      hg.addColorStop(0,'rgba(255,255,255,'+a.toFixed(2)+')'); hg.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.globalAlpha=a; ctx.fillStyle=hg; ctx.beginPath(); ctx.arc(q.x,q.y,4.5,0,7); ctx.fill();
     } else if(q.k==='ring'){
       ctx.globalAlpha=a*0.8; ctx.strokeStyle=q.col; ctx.lineWidth=q.w*a+1;
       ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,7); ctx.stroke();
     } else if(q.k==='ember'){
-      ctx.globalAlpha=a*0.9; ctx.fillStyle=q.col;
-      ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,7); ctx.fill();
+      const er=q.r*(1.5-a*0.5), g=ctx.createRadialGradient(q.x,q.y,0,q.x,q.y,er*2.2);   // soft hot core → colour → fade
+      g.addColorStop(0,'rgba(255,255,255,'+(a*0.85).toFixed(3)+')'); g.addColorStop(0.42,q.col); g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.globalAlpha=a*0.95; ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(q.x,q.y,er*2.2,0,7); ctx.fill();
     } else if(q.k==='gfly'){ // qed glyph storm
       ctx.globalAlpha=a; ctx.fillStyle=q.col;
       ctx.font=font(MONO,q.r); ctx.textAlign='center';
