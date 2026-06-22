@@ -2483,6 +2483,10 @@ function startRound(){
     for(const f of game.fighters) f.opp = nearestFoe(f) || (f===game.player?game.enemy:game.player);
   } else {
     p.reset(WORLD_W/2-420, 1); e.reset(WORLD_W/2+420, -1); // wide spawn — see the whole war-field
+    if(game.mode==='story' && game.storyCh===STORY.length-1 && !game.galaxy && !game.practice){   // SOLOMON FINALE — Lessing fights at your side
+      if(!game.ally) game.ally=new Fighter({name:'LESSING', x:WORLD_W/2-640, facing:1, gi:ROSTER[2].gi, trim:ROSTER[2].trim, char:ROSTER[2], isCPU:true});
+      game.ally.reset(WORLD_W/2-640, 1); game.ally.hp=99999; game.ally.hpShown=99999; game.ally.aiThink=90;
+    } else game.ally=null;
   }
   game.timer = game.mode==='rumble'? 99 : 75; game.heat=0;
   pickups.length=0; pickupTimer=300;
@@ -2884,6 +2888,7 @@ function step(){
     if(game.mode2p) controlP2(e);
     else if(!game.tutorial && !game.practice){ controlCPU(e); cpuTelegraphDrift(e); }   // tutorial dummy is script-controlled; PRACTICE dummy just stands there
     p.update(true); e.update(true);
+    if(game.ally){ allyControl(game.ally); game.ally.update(true); }   // LESSING fights at your side in the finale
     // body push
     const dx=e.x-p.x, min=54;
     if(Math.abs(dx)<min && p.grounded===e.grounded){
@@ -2915,6 +2920,7 @@ function step(){
     if(p.spReady()) tip('sp','SPECIAL ready — press '+keyLabel(KEYS.special)+'. Finish with it for a surprise…');
     if(game.burstChallenge){ game.burstChallenge.t--; if(game.burstChallenge.t<=0 || (p.comboedHits||0)<2 || p.ko) game.burstChallenge=null; }  // MATH-BURST window
     resolveHits(p,e); resolveHits(e,p);
+    if(game.ally) resolveHits(game.ally, game.enemy);   // Lessing's strikes chip Solomon (Solomon never targets the ally)
     storyBeatTick();                    // marquee story lines that PLAY as HP crosses a threshold
     chRuleTick();                       // per-foe combat philosophy (Maximilian's overflow meter, etc.)
     if(game.mode==='story' && game.storyCh===STORY.length-1 && !game.galaxy && !game.practice && p.aura>0){
@@ -4899,6 +4905,7 @@ function render(){
     for(const f of fs) drawFighter(f);
   } else {
     drawFinisherSpotlight();        // behind the winner, during the finisher
+    if(game.ally && !game.ally.ko) drawFighter(game.ally);   // Lessing, at your side in the finale
     drawFighter(game.enemy);
     drawFighter(game.player);
   }
@@ -5795,6 +5802,28 @@ function drawRuleBanner(){
     ctx.fillStyle = fr>0.82?'#ff5a3c':'#ff9f6a'; rr(mx,my,Math.max(2,mw*fr),6,3); ctx.fill();
   }
   ctx.restore();
+}
+// ---- LESSING, ALLY — in the Solomon finale, the Difference fights at your side (chip-damage assist; Solomon only ever targets YOU) ----
+function allyControl(a){
+  if(!a || a.ko){ if(a) a.moveX=0; return; }
+  const e=game.enemy;
+  a.dmgMul=0.5*(a.char.dmg||1);   // chip only — he assists, you carry the fight
+  a.moveX=0; a.wantBlock=false;
+  if(!e || e.ko || game.state!=='fight'){ return; }
+  if(a.aiThink>0) a.aiThink--;
+  const dist=Math.abs(e.x-a.x), dir=e.x>a.x?1:-1; a.facing=dir;
+  if(dist>160) a.moveX=dir*0.2;
+  else if(dist<80) a.moveX=-dir*0.16;
+  hopCover(a);
+  if(a.aiThink<=0 && dist<150 && a.grounded && (!a.canAct || a.canAct())){
+    a.cpuAttack(Math.random()<0.5?'kick':'punch', 36);
+    a.aiThink=rnd(80,140);
+    if(game.frame-(game.allyLineAt||0)>360 && Math.random()<0.5){   // an occasional rallying line, in his cyan
+      game.allyLineAt=game.frame;
+      game.taunt={who:'LESSING', txt:'The Difference stands with you. Take him apart.', col:a.glow, t:150}; game.tauntCd=game.frame+200;
+    }
+  }
+  a.addAura(2);   // he's off the math economy — keep him able to swing
 }
 function codexUnlocked(e){ return game.storyProg>=e.req; }
 function enterCodex(){ setMusic('default'); game.codexSel=0; game.codexScroll=0; game.codexNew=null; game.state='codex'; }
