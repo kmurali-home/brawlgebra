@@ -324,6 +324,7 @@ addEventListener("keydown", e => {
   audio(); applyVolumes();
   if(game.state==='splash'){ game.state='title'; return; }   // skippable studio bumper
   const k = e.key, lk = k.toLowerCase(), code = e.code;
+  if(game.trailerMode){ exitTrailer(); SFX.ui(); return; }   // any key stops the auto-trailer
   if(lk==='v' && ['fight','intro','title','select','story','ko','matchend','modes'].includes(game.state)){   // CINEMATIC SHOWCASE — clean frame + both sides auto-fight, for hands-free trailer capture
     game.cinema=!game.cinema; if(!game.cinema) game.cinemaSlow=false;
     const h=document.getElementById('hint'); if(h) h.style.display=game.cinema?'none':'';
@@ -362,6 +363,7 @@ addEventListener("keydown", e => {
     else if(k==='Enter'||k===' ') menuActivate(game.menuIdx);
     else if(lk==='r'){ enterRecords(); }
     else if(lk==='k'){ game.state='keyart'; const h=document.getElementById('hint'); if(h) h.style.display='none'; SFX.ui(); }   // KEY ART screen (store capsule / social) — clean frame, press any key to exit
+    else if(lk==='t'){ enterTrailer(); }   // play the auto TRAILER (record it)
     if(k==='1') DIFF.set(0); if(k==='2') DIFF.set(1); if(k==='3') DIFF.set(2);
     return;
   }
@@ -2885,6 +2887,7 @@ function rumbleStep(){
 function step(){
   game.frame++;
   const p=game.player, e=game.enemy;
+  if(game.trailerMode) trailerDirector();   // auto-playing trailer: advance the director's timeline + cut scenes
   if(game.paused) return;
   if(hitstop>0){ hitstop--; updateParts(0.3); updateFx(); return; }
 
@@ -2898,7 +2901,7 @@ function step(){
 
   if(game.online && net.role==='guest'){ guestTick(); return; } // guests render, never simulate
 
-  if(['splash','welcome','title','keyart','modes','rumbleChoose','matchend','select','howto','settings','interlude','lobby','story','dialogue','training','reward','codex','naming','records'].includes(game.state)){
+  if(['splash','welcome','title','keyart','trailercard','modes','rumbleChoose','matchend','select','howto','settings','interlude','lobby','story','dialogue','training','reward','codex','naming','records'].includes(game.state)){
     if(game.state==='splash' && --game.splashT<=0) game.state = game.seenHow? 'title' : 'welcome';   // first run → learn-to-fight gate
     p.update(false); e.update(false);
     if(game.state==='select') for(const pv of previews) pv.update(false);
@@ -4050,6 +4053,67 @@ function drawKeyArt(){   // a dedicated hero composition for the store capsule /
   txtO('a fighting game where mental math is the only weapon', W/2, H-34, 12, 'rgba(205,205,235,0.85)', {mono:true,sw:0});
   txtO('press any key to return', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
 }
+// ===== AUTO-PLAYING TRAILER — a one-take, director-sequenced cinematic you screen-record =====
+const TRAILER=[
+  {type:'fight', p:'mauler', e:'frost',  stage:'forge', dur:150, music:'mul'},
+  {type:'card',  text:'SOLVE TO FIGHT', sub:'every blow costs math', dur:95},
+  {type:'fight', p:'oracle', e:'mauler', stage:'void',  dur:160, slow:[64,120], music:'mul'},
+  {type:'card',  text:'READ IT.  SOLVE IT.  PUNISH IT.', dur:100},
+  {type:'story', w:'MAXIMILIAN of the PRODUCT', c:'#ff5a6a', scene:'overflow', t:'...wait. That stance. Addison. My son — hiding among the cowards of the Plus?', sfx:'reveal', slow:0.92, dur:235, music:'mul'},
+  {type:'story', w:'LESSING of the DIFFERENCE', c:'#7ae8ff', scene:'difference', t:'What have I taken away?', sfx:'heart', slow:0.6, dur:190, music:'minus'},
+  {type:'card',  text:'AN EPIC TOLD IN', sub:'FOUR OPERATIONS', dur:120},
+  {type:'fight', p:'ember', e:'oracle', stage:'schism', dur:150, music:'div'},
+  {type:'story', w:'SOLOMON, the EQUALS', c:'#ff9f2a', scene:'equals', t:'My name was the smudge. I have been sitting under it the whole time.', sfx:'reveal', slow:0.9, dur:220, music:'james'},
+  {type:'card',  text:'FOUR ORDERS.', sub:'ONE UNKNOWN.', dur:120},
+  {type:'fight', p:'frost', e:'mauler', stage:'frost', dur:165, slow:[88,144], music:'mul'},
+  {type:'logo',  dur:300, music:'james'},
+];
+function enterTrailer(){ game.trailerMode=true; game.trailer=null; const h=document.getElementById('hint'); if(h) h.style.display='none'; setupTrailerScene(0); }
+function exitTrailer(){ game.trailerMode=false; game.cinema=false; game.cinemaSlow=false; const h=document.getElementById('hint'); if(h) h.style.display=''; setMusic('default'); game.state='title'; }
+function setupTrailerScene(i){
+  if(i>=TRAILER.length){ exitTrailer(); return; }
+  const S=TRAILER[i]; game.trailer={scene:i, t:0, dur:S.dur, slow:(S.type==='fight'?S.slow:null), card:S};
+  if(S.music) setMusic(S.music);
+  if(S.type==='fight'){
+    game.mode='cpu'; game.galaxy=false; game.practice=false; game.mode2p=false; game.tutorial=false; game.cpuTier=null; DIFF.level=2;
+    game.player.setCharacter(ROSTER.find(c=>c.id===S.p)||ROSTER[0]);
+    game.enemy.setCharacter(ROSTER.find(c=>c.id===S.e)||ROSTER[1]);
+    game.stageIdx=Math.max(0,STAGES.findIndex(s=>s.id===S.stage));
+    startMatch(); game.state='fight'; game.fightAt=game.frame; game.cinema=true; game.cinemaSlow=false;
+    game.player.reset(WORLD_W/2-200,1); game.enemy.reset(WORLD_W/2+200,-1);
+  } else if(S.type==='story'){
+    game.cinema=false; game.cinemaSlow=false; game.storyCh=-1;
+    game.dlg={lines:[{w:S.w,c:S.c,t:S.t,sfx:S.sfx,slow:S.slow||0.8}], i:0, _i:-1, skip:false, lineStart:game.frame, scene:S.scene, after:'trailer'};
+    game.state='dialogue';
+  } else if(S.type==='card'){ game.cinema=false; game.cinemaSlow=false; game.state='trailercard'; }
+  else if(S.type==='logo'){ game.cinema=false; game.cinemaSlow=false; game.state='keyart'; }
+}
+function trailerDirector(){
+  const tr=game.trailer; if(!tr){ setupTrailerScene(0); return; }
+  tr.t++;
+  game.cinemaSlow = !!(tr.slow && tr.t>=tr.slow[0] && tr.t<=tr.slow[1]);
+  if(tr.t>=tr.dur) setupTrailerScene(tr.scene+1);
+}
+function drawTrailercard(){
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0a0818'); g.addColorStop(1,'#140a16');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.textAlign='center';
+  for(let i=0;i<10;i++){ ctx.globalAlpha=0.06; ctx.fillStyle=['#46e08a','#7ae8ff','#b48cff','#ff5a6a'][i%4]; ctx.font=font(DISP,60);
+    ctx.fillText(['+','−','÷','×'][i%4], (i*191+game.frame*0.4)%(W+120)-60, 110+((i*107)%(H-220))); }
+  ctx.globalAlpha=1; ctx.restore();
+  const c=game.trailer&&game.trailer.card; if(!c) return;
+  const t=game.trailer.t, pop=clamp(t/10,0,1)*(2-clamp(t/10,0,1));
+  ctx.save(); ctx.globalAlpha=pop;
+  txtO(c.text, W/2, c.sub?H/2-12:H/2+8, 38, '#fff', {sw:6});
+  if(c.sub) txtO(c.sub, W/2, H/2+36, 34, '#ff5a6a', {sw:5});
+  ctx.restore();
+}
+function drawTrailerOverlay(){
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,46); ctx.fillRect(0,H-46,W,46);   // consistent cinematic letterbox
+  const tr=game.trailer; if(!tr) return;
+  let fa=0; if(tr.t<15) fa=1-tr.t/15; else if(tr.t>tr.dur-15) fa=(tr.t-(tr.dur-15))/15;   // fade in/out each scene = clean cuts
+  if(fa>0){ ctx.fillStyle='rgba(0,0,0,'+clamp(fa,0,1).toFixed(2)+')'; ctx.fillRect(0,0,W,H); }
+}
 function drawTitle(){
   ctx.fillStyle='rgba(3,2,10,0.45)'; ctx.fillRect(0,0,W,H);
   if(game.profile && (game.profile.matches||0)>0) drawDailyBadge();   // don't shout Daily at a newcomer who hasn't fought yet
@@ -4081,7 +4145,8 @@ function drawTitle(){
     ctx.strokeStyle=sel?'#ffd34d':'#3d2658'; ctx.lineWidth=sel?2:1.2; ctx.stroke();
     txtO((i+1)+' '+DIFF.names[i], r.x+r.w/2, r.y+14, 11, sel?'#ffd34d':'#9a8fb8',{mono:true,sw:0});
   }
-  txtO('W/S navigate · ⏎ select · R records · M music', W/2, 530, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
+  txtO('W/S navigate · ⏎ select · R records · M music', W/2, 514, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
+  txtO('🎬  T trailer  ·  V showcase  ·  K key art', W/2, 532, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});
 }
 function drawWelcome(){   // first-run gate: teach before you ask
   ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
@@ -4590,9 +4655,9 @@ function drawDialogue(){
   let rem=shownN, yy=by+padT;
   ctx.font=font(MONO,15); ctx.textAlign='left'; ctx.fillStyle='#e8ecff';
   for(const ln of wrapped){ if(rem<=0&&!d.skip&&shownN<full) break; ctx.fillText(d.skip?ln:ln.slice(0,Math.max(0,rem)), bx+26, yy); rem-=ln.length+1; yy+=lh; }
-  txtO((d.i+1)+' / '+d.lines.length, bx+bw-30, by+bh-12, 10, '#6a7090',{mono:true,sw:0});
+  if(!game.trailerMode) txtO((d.i+1)+' / '+d.lines.length, bx+bw-30, by+bh-12, 10, '#6a7090',{mono:true,sw:0});
   const ready = d.skip || t >= full/spd + (line.hold||0);    // HOLD: after the line finishes, sit in silence (figure still breathing) before the prompt
-  if(shownN>=full && ready){ const blink=(game.frame/26|0)%2; txtO(blink?'▼  ENTER':'   ENTER', bx+bw-92, by+bh-12, 11, '#ffd34d',{mono:true,sw:0}); }
+  if(shownN>=full && ready && !game.trailerMode){ const blink=(game.frame/26|0)%2; txtO(blink?'▼  ENTER':'   ENTER', bx+bw-92, by+bh-12, 11, '#ffd34d',{mono:true,sw:0}); }
 }
 function drawTraining(){
   ctx.fillStyle='rgba(2,3,8,0.85)'; ctx.fillRect(0,0,W,H);
@@ -5128,6 +5193,7 @@ function render(){
   else if(game.state==='rumbleChoose') drawRumbleChoose();
   else if(game.state==='title') drawTitle();
   else if(game.state==='keyart') drawKeyArt();
+  else if(game.state==='trailercard') drawTrailercard();
   else if(game.state==='records') drawRecords();
   else if(game.state==='select') drawSelect();
   else if(game.state==='howto') drawHowTo();
@@ -5172,6 +5238,7 @@ function render(){
      'M  music   ·   P  resume'
     ].forEach((s,i)=> txtO(s, W/2, 218+i*30, 13, '#b8c0da',{mono:true,sw:0}));
   }
+  if(game.trailerMode) drawTrailerOverlay();   // trailer letterbox + scene cross-fades over everything
 }
 
 //----------------------------------------------------------------------
