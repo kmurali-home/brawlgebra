@@ -3554,8 +3554,8 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
 function drawTimer(){
   const t=Math.max(0,Math.ceil(game.timer));
   ctx.save();
+  panel(W/2-38,16,76,42,9,{fill:'rgba(6,7,18,0.9)'});
   rr(W/2-38,16,76,42,9);
-  ctx.fillStyle='rgba(5,6,16,0.8)'; ctx.fill();
   ctx.strokeStyle = t<=10? '#ff4d5e':'#5a3f8a'; ctx.lineWidth=2; ctx.stroke();
   txtO(String(t), W/2, 48, 30, t<=10?'#ff6a6a':'#fff', {mono:true,sw:0});
   ctx.restore();
@@ -3704,6 +3704,20 @@ function dangerInfo(){
   }
   return best;
 }
+function panel(x,y,w,h,r,opts){   // a material UI panel — drop shadow + glass sheen + inner-top highlight (vs flat fill + hairline)
+  opts=opts||{};
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=16; ctx.shadowOffsetY=5;
+  rr(x,y,w,h,r); ctx.fillStyle=opts.fill||'rgba(10,12,24,0.9)'; ctx.fill();
+  ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+  const gg=ctx.createLinearGradient(0,y,0,y+h);   // glass: top sheen → mid clear → bottom shade
+  gg.addColorStop(0,'rgba(255,255,255,0.08)'); gg.addColorStop(0.13,'rgba(255,255,255,0.02)');
+  gg.addColorStop(0.5,'rgba(255,255,255,0)'); gg.addColorStop(1,'rgba(0,0,0,0.13)');
+  rr(x,y,w,h,r); ctx.fillStyle=gg; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1;   // 1px inner-top highlight
+  ctx.beginPath(); ctx.moveTo(x+r,y+1.3); ctx.lineTo(x+w-r,y+1.3); ctx.stroke();
+  ctx.restore();
+}
 function drawCard(){
   const cw=400, ch=88;
   const shake = cardFx.shake>0? frnd(-cardFx.shake,cardFx.shake)*0.7 : 0;
@@ -3712,8 +3726,8 @@ function drawCard(){
   ctx.save();
   const pw = !game.mode2p && game.state==='fight' && !game.player.ko && perfectFoe(game.player); // inside the tight perfect window NOW
   const gam = !game.mode2p && game.problem && game.problem.gambit;   // high-risk ×2-or-bust problem
+  panel(cx-cw/2,top,cw,ch,14,{fill: gam? 'rgba(44,10,22,0.9)' : 'rgba(9,11,26,0.9)'});   // material panel (shadow + glass)
   rr(cx-cw/2,top,cw,ch,14);
-  ctx.fillStyle = gam? 'rgba(44,10,22,0.86)' : 'rgba(7,9,22,0.82)'; ctx.fill();
   ctx.lineWidth=(pw||gam)?3.5:2.5;
   ctx.strokeStyle = pw
     ? (Math.floor(game.frame/3)%2? '#ffe14d':'#fff7c0')      // gold strobe = SOLVE NOW for a perfect
