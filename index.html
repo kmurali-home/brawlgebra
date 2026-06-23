@@ -3932,7 +3932,7 @@ function drawVS(t){ // round-1 splash — names crash in from the wings
   if(game.enemy.char.quip && t>0.5)
     txtO('“'+game.enemy.char.quip+'”', W/2, 318, 12, '#cabbe0',{mono:true,sw:0,alpha:clamp((t-0.5)*3,0,1)});
 }
-function diffRect(i){ return {x:W/2-186+i*128, y:498, w:118, h:18}; }
+function diffRect(i){ return {x:W/2-186+i*128, y:466, w:118, h:18}; }
 function startRect(){ return {x:W/2-150, y:446, w:300, h:50}; }
 const TAGS=['Solve. Dodge. Destroy.','Your brain is the joystick.',
   'Carry the one. Then carry your opponent.','Divide and conquer. Literally.',
@@ -4144,7 +4144,7 @@ function drawTitle(){
     txtO(m[0], W/2, y+1, 14, sel? '#ffd34d': i===0? '#ffd0d6': hov?'#e8ecff':'#a99cc8', {sw:0});
   });
   if(MENU[game.menuIdx][1])
-    txtO(MENU[game.menuIdx][1], W/2, 486, 10, 'rgba(200,190,230,0.85)',{mono:true,sw:0});
+    txtO(MENU[game.menuIdx][1], W/2, 432, 10, 'rgba(200,190,230,0.85)',{mono:true,sw:0});
   // difficulty chips
   for(let i=0;i<3;i++){
     const r=diffRect(i), sel=DIFF.level===i;
@@ -4153,8 +4153,8 @@ function drawTitle(){
     ctx.strokeStyle=sel?'#ffd34d':'#3d2658'; ctx.lineWidth=sel?2:1.2; ctx.stroke();
     txtO((i+1)+' '+DIFF.names[i], r.x+r.w/2, r.y+14, 11, sel?'#ffd34d':'#9a8fb8',{mono:true,sw:0});
   }
-  txtO('W/S navigate · ⏎ select · R records · M music', W/2, 514, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
-  txtO('🎬  T trailer  ·  V showcase  ·  K key art', W/2, 532, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});
+  txtO('W/S navigate · ⏎ select · R records · M music', W/2, 506, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
+  txtO('🎬  T trailer  ·  V showcase  ·  K key art', W/2, 526, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});
 }
 function drawWelcome(){   // first-run gate: teach before you ask
   ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
