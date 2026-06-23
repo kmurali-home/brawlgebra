@@ -361,9 +361,11 @@ addEventListener("keydown", e => {
     else if(lk==='s'||k==='ArrowDown'){ game.menuIdx=(game.menuIdx+1)%MENU.length; SFX.ui(); }
     else if(k==='Enter'||k===' ') menuActivate(game.menuIdx);
     else if(lk==='r'){ enterRecords(); }
+    else if(lk==='k'){ game.state='keyart'; const h=document.getElementById('hint'); if(h) h.style.display='none'; SFX.ui(); }   // KEY ART screen (store capsule / social) — clean frame, press any key to exit
     if(k==='1') DIFF.set(0); if(k==='2') DIFF.set(1); if(k==='3') DIFF.set(2);
     return;
   }
+  if(game.state==='keyart'){ game.state='title'; const h=document.getElementById('hint'); if(h && !game.cinema) h.style.display=''; SFX.ui(); return; }
   if(game.state==='modes'){   // sub-list of the deeper modes
     const items=MODES_SUB;
     if(lk==='w'||k==='ArrowUp'){ game.modeIdx=(game.modeIdx+items.length-1)%items.length; SFX.ui(); }
@@ -2896,7 +2898,7 @@ function step(){
 
   if(game.online && net.role==='guest'){ guestTick(); return; } // guests render, never simulate
 
-  if(['splash','welcome','title','modes','rumbleChoose','matchend','select','howto','settings','interlude','lobby','story','dialogue','training','reward','codex','naming','records'].includes(game.state)){
+  if(['splash','welcome','title','keyart','modes','rumbleChoose','matchend','select','howto','settings','interlude','lobby','story','dialogue','training','reward','codex','naming','records'].includes(game.state)){
     if(game.state==='splash' && --game.splashT<=0) game.state = game.seenHow? 'title' : 'welcome';   // first run → learn-to-fight gate
     p.update(false); e.update(false);
     if(game.state==='select') for(const pv of previews) pv.update(false);
@@ -4004,6 +4006,36 @@ function drawWordmark(cx, cy, sc){   // the BRAWL·GEBRA logo — beveled, embos
   ctx.font=font(MONO,13); ctx.fillStyle='rgba(255,211,77,0.9)'; ctx.fillText('+   −   ×   ÷', 0, 45);
   ctx.restore();
 }
+function drawKeyArt(){   // a dedicated hero composition for the store capsule / social preview — press K from the title, screenshot it
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0a0820'); g.addColorStop(0.5,'#150b28'); g.addColorStop(1,'#1c0a12');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.strokeStyle='rgba(150,110,255,0.10)'; ctx.lineWidth=1;     // math-tech perspective floor
+  for(let x=-200;x<=W+200;x+=70){ ctx.beginPath(); ctx.moveTo(W/2+(x-W/2)*0.2, H*0.62); ctx.lineTo(x, H+40); ctx.stroke(); }
+  ctx.restore();
+  const cg=ctx.createRadialGradient(W/2,H*0.6,20,W/2,H*0.6,H*0.75);          // central clash glow
+  cg.addColorStop(0,'rgba(180,130,255,0.16)'); cg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=cg; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.globalCompositeOperation='lighter';                       // operator-colour glow behind each hero
+  for(const [x,col] of [[W*0.30,'#7ae8ff'],[W*0.70,'#ff5a6a']]){
+    const rg=ctx.createRadialGradient(x,H*0.66,10,x,H*0.66,210); rg.addColorStop(0,hexA(col,0.34)); rg.addColorStop(1,hexA(col,0));
+    ctx.fillStyle=rg; ctx.fillRect(x-230,H*0.28,460,H*0.62); }
+  ctx.restore();
+  ctx.save(); ctx.textAlign='center';                                       // math-glyph storm
+  for(let i=0;i<26;i++){ const a=i*0.62+game.frame*0.008, r=140+((i*61)%280), x=W/2+Math.cos(a)*r*1.35, y=H*0.58+Math.sin(a)*r*0.62;
+    ctx.globalAlpha=0.10+0.10*Math.sin(game.frame*0.02+i*1.3); ctx.fillStyle=['#46e08a','#7ae8ff','#b48cff','#ff5a6a'][i%4];
+    ctx.font=font(DISP, 26+(i%3)*14); ctx.fillText(['+','−','÷','×'][i%4], x, y); }
+  ctx.globalAlpha=1; ctx.restore();
+  const fL=cutsceneFighter(PROTAG); fL.facing=1; try{fL.update(false);}catch(e){}     // two heroes leaning into the clash
+  const fR=cutsceneFighter(ROSTER[0]); fR.facing=-1; try{fR.update(false);}catch(e){}
+  ctx.save(); ctx.translate(W*0.30,H*0.80); ctx.scale(2.5,2.5); drawPose(fL,fL.P,0,0,1,null,-0.08); ctx.restore();
+  ctx.save(); ctx.translate(W*0.70,H*0.80); ctx.scale(2.7,2.7); drawPose(fR,fR.P,0,0,1,null,0.08); ctx.restore();
+  gradeFrame(); vignette();
+  drawWordmark(W/2, 116, 1.18);
+  txtO('SOLVE TO SURVIVE', W/2, 196, 17, '#d8e2ff', {mono:true,sw:3});
+  txtO('a fighting game where mental math is the only weapon', W/2, H-34, 12, 'rgba(205,205,235,0.85)', {mono:true,sw:0});
+  txtO('press any key to return', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
+}
 function drawTitle(){
   ctx.fillStyle='rgba(3,2,10,0.45)'; ctx.fillRect(0,0,W,H);
   if(game.profile && (game.profile.matches||0)>0) drawDailyBadge();   // don't shout Daily at a newcomer who hasn't fought yet
@@ -5081,6 +5113,7 @@ function render(){
   else if(game.state==='modes') drawModes();
   else if(game.state==='rumbleChoose') drawRumbleChoose();
   else if(game.state==='title') drawTitle();
+  else if(game.state==='keyart') drawKeyArt();
   else if(game.state==='records') drawRecords();
   else if(game.state==='select') drawSelect();
   else if(game.state==='howto') drawHowTo();
