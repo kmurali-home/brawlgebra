@@ -4055,18 +4055,24 @@ function drawKeyArt(){   // a dedicated hero composition for the store capsule /
 }
 // ===== AUTO-PLAYING TRAILER — a one-take, director-sequenced cinematic you screen-record =====
 const TRAILER=[
-  {type:'fight', p:'mauler', e:'frost',  stage:'forge', dur:150, music:'mul'},
-  {type:'card',  text:'SOLVE TO FIGHT', sub:'every blow costs math', dur:95},
-  {type:'fight', p:'oracle', e:'mauler', stage:'void',  dur:160, slow:[64,120], music:'mul'},
-  {type:'card',  text:'READ IT.  SOLVE IT.  PUNISH IT.', dur:100},
-  {type:'story', w:'MAXIMILIAN of the PRODUCT', c:'#ff5a6a', scene:'overflow', t:'...wait. That stance. Addison. My son — hiding among the cowards of the Plus?', sfx:'reveal', slow:0.92, dur:235, music:'mul'},
-  {type:'story', w:'LESSING of the DIFFERENCE', c:'#7ae8ff', scene:'difference', t:'What have I taken away?', sfx:'heart', slow:0.6, dur:190, music:'minus'},
-  {type:'card',  text:'AN EPIC TOLD IN', sub:'FOUR OPERATIONS', dur:120},
-  {type:'fight', p:'ember', e:'oracle', stage:'schism', dur:150, music:'div'},
-  {type:'story', w:'SOLOMON, the EQUALS', c:'#ff9f2a', scene:'equals', t:'My name was the smudge. I have been sitting under it the whole time.', sfx:'reveal', slow:0.9, dur:220, music:'james'},
-  {type:'card',  text:'FOUR ORDERS.', sub:'ONE UNKNOWN.', dur:120},
-  {type:'fight', p:'frost', e:'mauler', stage:'frost', dur:165, slow:[88,144], music:'mul'},
-  {type:'logo',  dur:300, music:'james'},
+  // ACT 1 — HOOK: fast, hard combat (rapid cuts)
+  {type:'fight', p:'mauler', e:'frost',  stage:'forge',  dur:74, music:'mul'},
+  {type:'fight', p:'oracle', e:'mauler', stage:'void',   dur:80, slow:[40,66], music:'mul'},
+  {type:'card',  text:'EVERY BLOW IS A PROBLEM', dur:66},
+  {type:'fight', p:'ember',  e:'oracle', stage:'schism', dur:74, music:'mul'},
+  // ACT 2 — THE WORLD (epic framing)
+  {type:'card',  text:'FOUR ORDERS.', sub:'ONE WAR OVER EVERY NUMBER.', dur:86},
+  // ACT 3 — THE HEART (the vulnerable unknown — feel something)
+  {type:'story', w:'YOU', c:'#cfe0ff', scene:'giraffe', t:'Does it get easier — being the thing no one can solve?', sfx:'heart', slow:0.62, dur:158, music:'minus'},
+  // ACT 4 — THE THREAT (the villain, dread)
+  {type:'story', w:'SOLOMON, the EQUALS', c:'#ff9f2a', scene:'equals', t:'I will reduce you all to one answer. Nothing.', sfx:'dread', slow:0.78, dur:162, music:'james'},
+  {type:'card',  text:'EVERYTHING ENDS AT ZERO', dur:74},
+  {type:'fight', p:'frost',  e:'mauler', stage:'frost',  dur:68, music:'mul'},
+  // ACT 5 — THE DEFIANCE (the stand, triumph)
+  {type:'story', w:'YOU', c:'#cfe0ff', scene:'equals', t:'Every sum has two sides. You only counted one.', sfx:'toll', slow:0.62, dur:150, music:'james'},
+  // ACT 6 — CLIMAX + logo
+  {type:'fight', p:'mauler', e:'oracle', stage:'forge',  dur:98, slow:[58,90], music:'mul'},
+  {type:'logo',  dur:250, music:'james'},
 ];
 function enterTrailer(){ game.trailerMode=true; game.trailer=null; const h=document.getElementById('hint'); if(h) h.style.display='none'; setupTrailerScene(0); }
 function exitTrailer(){ game.trailerMode=false; game.cinema=false; game.cinemaSlow=false; const h=document.getElementById('hint'); if(h) h.style.display=''; setMusic('default'); game.state='title'; }
@@ -4080,7 +4086,9 @@ function setupTrailerScene(i){
     game.enemy.setCharacter(ROSTER.find(c=>c.id===S.e)||ROSTER[1]);
     game.stageIdx=Math.max(0,STAGES.findIndex(s=>s.id===S.stage));
     startMatch(); game.state='fight'; game.fightAt=game.frame; game.cinema=true; game.cinemaSlow=false;
-    game.player.reset(WORLD_W/2-200,1); game.enemy.reset(WORLD_W/2+200,-1);
+    game.player.reset(WORLD_W/2-135,1); game.enemy.reset(WORLD_W/2+135,-1);   // close + charged so the short clips land action instantly
+    game.player.aura=game.player.char.auraMax; game.enemy.aura=game.enemy.char.auraMax;
+    game.player.aiThink=8; game.enemy.aiThink=14;
   } else if(S.type==='story'){
     game.cinema=false; game.cinemaSlow=false; game.storyCh=-1;
     game.dlg={lines:[{w:S.w,c:S.c,t:S.t,sfx:S.sfx,slow:S.slow||0.8}], i:0, _i:-1, skip:false, lineStart:game.frame, scene:S.scene, after:'trailer'};
