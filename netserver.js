@@ -125,7 +125,7 @@ function handleMessage(client, raw){
       if (seat < 0) { sendFrame(client.sock, JSON.stringify({ t:"error", msg:"Room full" })); break; }
       leaveRoom(client);
       client.room = room; client.seat = seat; client.host = false;
-      client.name = (m.name||("P"+(seat+1))).slice(0,12); client.charIdx = m.charIdx||0; client.ready = true;
+      client.name = (m.name||("P"+(seat+1))).slice(0,12); client.charIdx = m.charIdx||0; client.ready = false;   // a joining guest must press READY before the host can start
       room.clients.add(client);
       sendFrame(client.sock, JSON.stringify({ t:"joined", room: room.code, seat, host: false }));
       pushRoster(room);
@@ -134,6 +134,13 @@ function handleMessage(client, raw){
     case "char": {
       if (!client.room) break;
       client.charIdx = m.charIdx|0;
+      if (!client.host) client.ready = false;   // changing fighter un-readies you (host is always ready)
+      pushRoster(client.room);
+      break;
+    }
+    case "ready": {
+      if (!client.room) break;
+      client.ready = !!m.r;
       pushRoster(client.room);
       break;
     }
@@ -160,6 +167,7 @@ function handleMessage(client, raw){
       const room = client.room;
       if (!room || !client.host) break;
       room.started = false;
+      for (const c of room.clients) if (!c.host) c.ready = false;   // each guest must re-ready for the next set
       broadcast(room, { t:"rematch" });
       pushRoster(room);
       break;
