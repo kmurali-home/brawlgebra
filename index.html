@@ -399,6 +399,7 @@ addEventListener("keydown", e => {
   if(game.state==='lobby'){
     if(net.lobby){ // seated in a room
       if(lk==='t'||k==='Escape'){ lobbyLeave(); return; }
+      if(lk==='y'){ copyRoomLink(); return; }   // copy the invite link
       if(lk==='a'||k==='ArrowLeft'){ lobbyPickChar(game.charIdx+3); return; }
       if(lk==='d'||k==='ArrowRight'){ lobbyPickChar(game.charIdx+1); return; }
       if(/^[1-4]$/.test(k)){ lobbyPickChar(+k-1); return; }
@@ -719,6 +720,7 @@ cv.addEventListener("click", ()=>{
     const hit=r=> r && mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h;
     if(net.lobby){
       if(rs.chars) for(let i=0;i<rs.chars.length;i++) if(hit(rs.chars[i])){ lobbyPickChar(i); return; }
+      if(hit(rs.copy)){ copyRoomLink(); return; }
       if(net.role==='host' && hit(rs.start)){ lobbyStart(); return; }
       if(net.role==='host' && hit(rs.stage)){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); return; }
       if(net.role==='host' && hit(rs.warmup)){ game.warmupOn=!game.warmupOn; store('warmupOn',game.warmupOn); SFX.ui(); return; }
@@ -731,7 +733,10 @@ cv.addEventListener("click", ()=>{
     }
   } else if(game.state==='howto'){
     if(game.howReturn==='fight') startMatch(); else if(game.howReturn==='story') game.state='story'; else game.state='title';
-  } else if(game.state==='matchend'){ matchendAdvance(); }
+  } else if(game.state==='matchend'){
+    if(game.online){ if(net.role==='host') lobbyRematch(); return; }   // click mirrors the keyboard: host re-opens the room, guests wait — never silent-leave to title
+    matchendAdvance();
+  }
 });
 function matchendAdvance(){ // one routing for Enter AND click
   if(game.online){ lobbyLeave(); return; }
@@ -4345,7 +4350,15 @@ function drawLobby(){
 
   // ---- in a room ----
   const seatN = duel?2:5;
-  txtO(duel?'SHARE THIS CODE WITH YOUR FRIEND':'ROOM', W/2, 138, 12, '#8fd8f8',{sw:0});
+  if(net.notice && game.frame-net.notice.at<100){   // someone left — a fading human cue
+    const a=1-(game.frame-net.notice.at)/100; ctx.globalAlpha=a;
+    txtO('— '+net.notice.txt+' —', W/2, 116, 13, '#ff9f6a',{mono:true,sw:0}); ctx.globalAlpha=1;
+  }
+  const copied = net.codeCopied && game.frame-net.codeCopied<120;
+  txtO(copied? 'COPIED ✓  —  paste the invite link to your friend'
+             : (duel?'SHARE THIS CODE  ·  click it or press Y to copy a link':'ROOM  ·  click to copy a link'),
+       W/2, 138, 12, copied?'#46e08a':'#8fd8f8',{mono:true,sw:0});
+  R.copy={x:W/2-130,y:158,w:260,h:46};
   txtO(net.room, W/2, 180, 46, '#ffd34d',{sw:5});
   // seat roster
   const rx=W/2-230, ry=206, rw=460;
@@ -5329,7 +5342,17 @@ function render(){
      'M  music   ·   P  resume'
     ].forEach((s,i)=> txtO(s, W/2, 218+i*30, 13, '#b8c0da',{mono:true,sw:0}));
   }
+  if(game.online && net.role==='guest') drawNetHealth();   // tell the guest when it's the network, not them
   if(game.trailerMode) drawTrailerOverlay();   // trailer letterbox + scene cross-fades over everything
+}
+function drawNetHealth(){   // guest-only connection pip, reads net.snapAt (already stamped each snapshot)
+  if(!(game.state==='fight'||game.state==='intro')) return;
+  const age=performance.now()-(net.snapAt||0);
+  const col = age<700?'#46e08a' : age<1500?'#ffd34d' : '#ff5a6a';
+  const lvl = age<700?3 : age<1500?2 : 1, x=W/2, y=16;
+  for(let i=0;i<3;i++){ rr(x-17+i*12, y, 8, 8, 2); ctx.fillStyle = i<lvl? col : 'rgba(255,255,255,0.12)'; ctx.fill(); }
+  if(age>1500) txtO('RECONNECTING…', x, y+26, 11, '#ff8a8a',{mono:true,sw:0});
+  if(age>6000){ ctx.fillStyle='rgba(2,3,10,0.5)'; ctx.fillRect(0,0,W,H); txtO('LOST CONNECTION — waiting…', W/2, H/2, 16, '#ff8a8a',{sw:2}); }
 }
 
 //----------------------------------------------------------------------
@@ -6380,6 +6403,8 @@ function netHandle(m){
     case 'snap': if(net.role==='guest') applySnapshot(m.d); break;
     case 'wu': if(net.role==='host') hostRecvWarmup(m.seat, m.fr); break;
     case 'rematch': onRematch(); break;
+    case 'left': onPeerLeft(m.seat); break;
+    case 'pong': break;                                  // keepalive ack — nothing to do, just don't drop it
     case 'hostleft': netToTitle('host left — back to title'); break;
   }
 }
@@ -6392,8 +6417,23 @@ function lobbyStart(){
   if(net.gm==='duel' && net.roster.length<2){ net.err='waiting for your friend to join'; SFX.wrong(); return; }
   netSend({t:'start', stage:game.stageIdx, gm:net.gm, wu:game.warmupOn?1:0});
 }
+function copyRoomLink(){   // one-tap invite: code + a deep link that pre-fills the join screen
+  if(!net.room) return;
+  const link=location.origin+location.pathname+'?room='+net.room;
+  try{ navigator.clipboard && navigator.clipboard.writeText('Join my BRAWLGEBRA room '+net.room+' → '+link); }catch(e){}
+  net.codeCopied=game.frame; SFX.ui();
+}
 function lobbyRematch(){ if(net.role==='host') netSend({t:'rematch'}); }
 function onRematch(){ game.online=false; net.lobby=true; net.err=''; game.state='lobby'; }   // back to the room — host can START again
+function onPeerLeft(seat){   // server told us a non-host seat dropped
+  if(net.lobby && !game.online){   // in the room: human cue under the roster
+    net.notice={txt:'P'+(seat+1)+' left', at:game.frame}; SFX.ui();
+  } else if(game.online && game.onlineDuel && net.role==='host' && game.state!=='matchend'){
+    const foe=game.fighters && game.fighters.find(f=>f.seat===seat);   // opponent rage-quit a duel → award the bout, don't punch a dummy
+    if(foe){ foe.hp=0; foe.hpShown=0; foe.eliminated=true; game.playerWon=true; game.grade=null;
+      announce('OPPONENT LEFT — YOU WIN','#ffd34d'); game.state='matchend'; SFX.ko(); }
+  }
+}
 function lobbyLeave(){ try{ if(net.ws) net.ws.close(); }catch(e){} net.ws=null; net.lobby=false; net.role=null; net.roster=[]; game.state='title'; }
 function lobbyPickChar(i){ game.charIdx=(i+4)%4; netSend({t:'char',charIdx:game.charIdx}); SFX.ui(); }
 
@@ -6663,6 +6703,10 @@ function loop(now){
     requestAnimationFrame(loop);
   }
 }
+// invite deep link: ?room=XXXX drops a friend straight onto the JOIN screen with the code pre-filled
+try{ const _r=new URLSearchParams(location.search).get('room');
+  if(_r){ const code=_r.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
+    if(code.length>=3){ enterOnlineLobby('duel'); net.field='code'; net.input=code; } } }catch(e){}
 requestAnimationFrame(loop);
 </script>
 </body>
