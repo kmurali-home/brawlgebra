@@ -487,7 +487,7 @@ addEventListener("keydown", e => {
     else if(lk==='t') enterTraining(FUNCS[0].key);
     else if(lk==='l') enterCodex();
     else if(lk==='n' && game.storyProg>=STORY.length){ game.ngPlus=!game.ngPlus; store('ngPlus',game.ngPlus?1:0); SFX.ui(); flash(0.08, game.ngPlus?'#ffd34d':'#3d4668'); }   // NEW GAME+ toggle (unlocked after finishing the saga)
-    else if(k==='Escape'){ setMusic('default'); if(game._vsStage!=null){ game.stageIdx=game._vsStage; game._vsStage=null; } game.state='title'; }
+    else if(k==='Escape'){ setMusic('default'); if(game._vsStage!=null){ game.stageIdx=game._vsStage; game._vsStage=null; } if(game.storyChallenge!=null) DIFF.level=game.storyChallenge; game.state='title'; }
     return;
   }
   if(game.state==='codex'){
@@ -4515,6 +4515,9 @@ function drawStory(){
   ctx.fillStyle='rgba(2,3,8,0.82)'; ctx.fillRect(0,0,W,H);
   txtO('THE BROTHERHOOD OF FUNCTIONS', W/2, 52, 26, '#efe9ff',{sw:5});
   txtO('an epic, told in four operations', W/2, 74, 11, '#9aa3c8',{mono:true,sw:0});
+  { const sc=clamp(game.storyChallenge!=null?game.storyChallenge:DIFF.level,0,2);   // story now honors the title difficulty pick
+    txtO('CHALLENGE: '+['EASY','NORMAL','HARD'][sc], 40, 44, 10, ['#8fd8f8','#cabbe0','#ff9f6a'][sc], {mono:true,sw:0,align:'left'});
+    txtO('(set on title)', 40, 60, 9, '#7a7390', {mono:true,sw:0,align:'left'}); }
   if(game.storyProg>=STORY.length){   // NEW GAME+ unlocked once the saga is cleared
     const on=game.ngPlus, pulse=on?(0.65+0.35*Math.sin(game.frame*0.1)):1;
     txtO((on?'★ NEW GAME+ ON':'NEW GAME+ OFF')+' · N', W/2+330, 52, 10, on?'rgba(255,211,77,'+pulse.toFixed(2)+')':'#7a7390',{mono:true,sw:on?2:0});
@@ -6240,6 +6243,7 @@ function enterCodex(){ setMusic('default'); game.codexSel=0; game.codexScroll=0;
 function enterStory(){
   setMusic('default');
   game.mode='story';
+  game.storyChallenge = DIFF.level;   // the title EASY/NORMAL/HARD pick becomes the CAMPAIGN difficulty modifier (story used to ignore it)
   if(game.ngPlus===undefined) game.ngPlus=!!load('ngPlus',0);   // NEW GAME+ persists once unlocked
   game.storySel=Math.min(game.storyProg, STORY.length-1);
   PROTAG.name=game.heroName||'INITIATE'; applyHeroLook();    // start as the nameless initiate
@@ -6287,17 +6291,17 @@ function startStoryChapter(ci){
   if(game._vsStage==null) game._vsStage=game.stageIdx||0;            // remember the player's versus stage once, to restore on exit
   const si=STAGES.findIndex(s=>s.order===ch.theme);                  // SHOW DON'T TELL: fight each chapter in its order's own arena
   game.stageIdx = si>=0? si : STAGES.findIndex(s=>s.id==='proving'); // Plus→Chasm, Minus→Frost Spire, Divide→Schism Library, Multiply→Overflow Forge, Solomon→The Equals
-  DIFF.level=ch.diff;
-  game.cpuTier = ch.cpuTier!=null? ch.cpuTier : null;   // climax chapters can press harder than the math difficulty (escalation curve)
-  game.chRule = ch.rule || null;                        // per-foe combat philosophy (overflow / subtract / read / zero)
+  // STORY DIFFICULTY — the title EASY/NORMAL/HARD pick is a campaign modifier; combat is lifted +1 by default so no chapter is a passive pushover; NEW GAME+ stacks on top.
+  const _mod=(game.storyChallenge!=null?game.storyChallenge:1)-1, _ngp=game.ngPlus?1:0;   // EASY −1 / NORMAL 0 / HARD +1
+  const _baseTier=(ch.cpuTier!=null?ch.cpuTier:ch.diff);
+  game.cpuTier = clamp(_baseTier + 1 + _mod + _ngp, 0, 3);   // +1 default lift: even the opening foes now actually fight; HARD / NG+ reach the fastest tier
+  DIFF.level   = clamp(ch.diff + _mod + _ngp, 0, 2);          // math shifts with the chosen challenge; a faster foe also pressures the math (threat-coupled)
+  game.chRule = ch.rule || null;                              // per-foe combat philosophy (overflow / subtract / read / zero)
   PROTAG.name=game.heroName||'INITIATE';
   game.player.setCharacter(PROTAG);   // always yourself; the four are who you MEET
   game.enemy.setCharacter(ch.opp==='boss'? BOSS_CHAR : ROSTER[ch.opp]);
-  if(game.ngPlus){   // NEW GAME+ — the whole saga, harder: tougher foes, sharper AI, harder math
-    DIFF.level=Math.min(2, ch.diff+1);
-    game.cpuTier=Math.min(3, (game.cpuTier!=null?game.cpuTier:ch.diff)+1);
-    const c=game.enemy.char; game.enemy.char=Object.assign({},c,{hp:Math.round(c.hp*1.4), dmg:+(c.dmg*1.2).toFixed(2)});
-  }
+  const _hpMul=1 + 0.15*Math.max(0,_mod) + 0.4*_ngp, _dmgMul=1 + 0.10*Math.max(0,_mod) + 0.2*_ngp;   // HARD and/or NG+ give the foe a meatier, bitier body so fights aren't a race the player always wins
+  if(_hpMul!==1 || _dmgMul!==1){ const c=game.enemy.char; game.enemy.char=Object.assign({},c,{hp:Math.round(c.hp*_hpMul), dmg:+(c.dmg*_dmgMul).toFixed(2)}); }
   game.dlg={lines:ch.intro, i:0, after:'fight', scene:sceneFor(ch.theme)};
   game.state='dialogue';
 }
