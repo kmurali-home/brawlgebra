@@ -636,7 +636,7 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => { keys[e.key.toLowerCase()]=false; });
 addEventListener("blur", ()=>{
   for(const k in keys) keys[k]=false; // no stuck movement after refocus
-  if(game.state==='fight') game.paused=true;
+  if(game.state==='fight' && !game.online) game.paused=true;   // never pause an online match — it would freeze the opponent and trip their disconnect watchdog
 });
 
 cv.addEventListener("mousemove", e=>{
@@ -3900,6 +3900,10 @@ function drawBanners(){
     if(game.mode==='rumble') letterBanner('RUMBLE', 230, 64, '#ffd34d', (120-game.introT)/40);
     else if(game.round===1) drawVS((120-game.introT)/40);
     else letterBanner('ROUND '+game.round, 250, 56, '#efe9ff', (120-game.introT)/40);
+    if(game.online){   // synced 3-2-1 off the shared introT so both clients commit on the same frame
+      const c = game.introT>95?'3' : game.introT>75?'2' : '1', top = game.introT>95?115 : game.introT>75?95 : 75;
+      slamText(c, 158, 78, '#9fdcff', clamp((top-game.introT)/9,0,1));
+    }
   }
   const sinceFight = game.fightAt? game.frame-game.fightAt : 999;
   if((game.state==='intro'&&game.introT<=55) || (game.state==='fight'&&sinceFight<24))
@@ -6414,7 +6418,9 @@ function netHandle(m){
         const joined=m.roster.find(p=>p.seat!==net.seat && !had.has(p.seat));
         if(joined){ net.notice={txt:'P'+(joined.seat+1)+' joined', at:game.frame}; SFX.pickup(); }
       }
-      net.roster=m.roster; break;
+      net.roster=m.roster;
+      { const me=m.roster && m.roster.find(p=>p.seat===net.seat); if(me) net.role=me.host?'host':'guest'; }   // host migration: re-derive my role from the server's truth (a promoted survivor becomes host)
+      break;
     }
     case 'error': net.err=m.msg; net.field=net.lobby?'room':'code'; break;
     case 'start': startOnlineMatch(m.seats, m.seed, m.stage, m.gm, m.wu); break;
@@ -6429,7 +6435,7 @@ function netHandle(m){
         const foe=game.fighters.find(f=>f.seat!==net.seat);
         if(foe){ foe.hp=0; foe.hpShown=0; foe.eliminated=true; }
         game.playerWon=true; game.grade=null; announce('OPPONENT LEFT — YOU WIN','#ffd34d'); game.state='matchend'; SFX.ko();
-      } else netToTitle('host left — back to title');
+      } else if(game.online) netToTitle('host left — back to title');   // mid-match (rumble/non-duel): bail. In the LOBBY, do nothing — the 'roster' message promotes the survivor in place.
       break;
   }
 }
@@ -6626,6 +6632,8 @@ function guestTick(){
     f.x += (f.netX-f.x)*0.4; f.y += (f.netY-f.y)*0.4;
     f.animT++; f.updatePose();
     if(f.iframe>0)f.iframe--; if(f.flashT>0)f.flashT--; if(f.dodgeT>0)f.dodgeT--;
+    if(f.chipDelay>0) f.chipDelay--; else f.hpShown += (f.hp-f.hpShown)*0.07;   // ghost health-bar drain (mirrors Fighter.update)
+    if(f.hpShown<f.hp) f.hpShown=f.hp;
   }
 }
 // ---- snapshot encode (host) / decode (guest) ----
@@ -6659,7 +6667,11 @@ function applySnapshot(d){
   net.snapAt=performance.now();
   if(game.fighters && d.f) for(const fs of d.f){
     const f=game.fighters[fs[0]]; if(!f) continue;
-    f.netX=fs[1]; f.netY=fs[2]; f.facing=fs[3]; f.hp=fs[4]; f.hpShown=fs[4]; f.aura=fs[5]; f.auraShown=fs[5];
+    f.netX=fs[1]; f.netY=fs[2]; f.facing=fs[3];
+    const _nh=fs[4];
+    if(_nh>f.hp) f.hpShown=_nh;            // healed / round-reset → snap the bar up
+    else if(_nh<f.hp) f.chipDelay=14;      // took damage → hold the red ghost, then drain (guestTick)
+    f.hp=_nh; f.aura=fs[5]; f.auraShown=fs[5];
     f.dizzy=fs[6]; f.hurtT=fs[7]; f.stun=fs[8]; f.blocking=!!fs[9]; f.grounded=!!fs[10];
     f.frozenT=fs[11]; f.streak=fs[12]; f.iframes=fs[13]; f.dodgeT=fs[14]; f.vx=fs[15]; f.landT=fs[16];
     f.attack = fs[17]? {type:fs[17],kind:fs[18],ph:fs[19],t:fs[20],def:{wind:fs[21],act:fs[22],rec:fs[23]}} : null;
