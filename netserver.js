@@ -140,9 +140,22 @@ function handleMessage(client, raw){
     case "start": {
       const room = client.room;
       if (!room || !client.host) break;
+      // duel needs exactly two humans; refuse a lonely start so nobody drops into an empty duel
+      if (m.gm === "duel" && room.clients.size < 2) {
+        sendFrame(client.sock, JSON.stringify({ t:"error", msg:"Waiting for your friend to join" }));
+        break;
+      }
       room.started = true;
       broadcast(room, { t:"start", seed: crypto.randomInt(1e9), stage: m.stage|0,
-                        seats: roster(room) });
+                        gm: m.gm || "rumble", seats: roster(room) });
+      break;
+    }
+    case "rematch": { // host re-opens the room for another match without anyone re-entering a code
+      const room = client.room;
+      if (!room || !client.host) break;
+      room.started = false;
+      broadcast(room, { t:"rematch" });
+      pushRoster(room);
       break;
     }
     case "input": { // guest -> host only

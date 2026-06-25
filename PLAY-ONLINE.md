@@ -22,10 +22,17 @@ the little relay server (`netserver.js`) running on a host that supports WebSock
 
 - You and your friend both open the **Render URL** (not the Pages link).
 - The relay serves the game itself, so the **online** options will connect automatically.
-- One of you creates a room → share the 4-letter **code** → the other enters it → start.
+- On the title screen pick **MULTIPLAYER**, then choose your mode (below).
+- One of you creates a room → share the 4-letter **code** → the other enters it → **START**.
+- After a match, the host can hit **REMATCH** to replay with the same friend — no new code needed.
 
-## Today vs. the 1v1 build
-- **Today:** online is **RUMBLE** — a 5-player free-for-all (empty seats are AI). You + your
-  friend both join the same room and you're both in the brawl. Internet play, but not a clean duel.
-- **Coming:** a proper **1v1 ONLINE** mode (you vs. your friend, no AI). That's a code change in
-  `index.html` (host-authoritative 2-player standard fight) — built on top of this same relay.
+## Two online modes (title → MULTIPLAYER)
+- **1v1 DUEL** — you vs **one** friend, live, best-of-3 rounds. No AI; the host must wait for the
+  friend to join before START unlocks. This is the clean duel.
+- **RUMBLE (online)** — up to **5** friends in one free-for-all; any empty seats are filled by AI,
+  so 2 players is enough to start.
+- (**RUMBLE same-screen** is also there for local vs AI — no server needed.)
+
+> The link you share for online play must be the **relay URL** (Render), not the GitHub Pages link.
+> Pages is static hosting and can't run the live connection — if you try online there, the game now
+> tells you so instead of just hanging.

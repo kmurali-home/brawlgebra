@@ -376,9 +376,10 @@ addEventListener("keydown", e => {
     else if(lk==='t'||k==='Escape'){ game.state='title'; SFX.ui(); }
     return;
   }
-  if(game.state==='rumbleChoose'){   // local vs online
-    if(lk==='w'||k==='ArrowUp'||lk==='s'||k==='ArrowDown'){ game.rumbleOnline=!game.rumbleOnline; SFX.ui(); }
-    else if(k==='Enter'||k===' '){ startRumbleChoice(); }
+  if(game.state==='rumbleChoose'){   // 1v1 online / rumble online / local rumble
+    if(lk==='w'||k==='ArrowUp'){ game.mpIdx=((game.mpIdx||0)+MP_OPTS.length-1)%MP_OPTS.length; SFX.ui(); }
+    else if(lk==='s'||k==='ArrowDown'){ game.mpIdx=((game.mpIdx||0)+1)%MP_OPTS.length; SFX.ui(); }
+    else if(k==='Enter'||k===' '){ mpActivate(game.mpIdx||0); }
     else if(lk==='t'||k==='Escape'){ game.state='title'; SFX.ui(); }
     return;
   }
@@ -525,7 +526,11 @@ addEventListener("keydown", e => {
     return;
   }
   if(game.state==='matchend'){
-    if(game.online){ if(k==='Enter'||k===' '||lk==='t'||lk==='c') lobbyLeave(); return; }
+    if(game.online){
+      if(lk==='t'||k==='Escape'){ lobbyLeave(); return; }                                  // leave to title
+      if((k==='Enter'||k===' ') && net.role==='host'){ lobbyRematch(); return; }            // host re-opens the room for another round
+      return;                                                                               // guests wait for the host to rematch
+    }
     if(lk==='x' && game.daily && game.dailyResult){   // copy the shareable daily result
       try{ navigator.clipboard && navigator.clipboard.writeText(dailyShareString()); }catch(e){}
       game.dailyShared=true; SFX.ui(); return;
@@ -641,7 +646,7 @@ cv.addEventListener("click", ()=>{
   if(game.state==='rumbleChoose'){
     const rr2=game.rumbleRects||[];
     for(let i=0;i<rr2.length;i++){ const r=rr2[i];
-      if(mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h){ game.rumbleOnline=(i===1); startRumbleChoice(); return; } }
+      if(mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h){ game.mpIdx=i; mpActivate(i); return; } }
     if(game.backRect && mouse.x>game.backRect.x&&mouse.x<game.backRect.x+game.backRect.w&&mouse.y>game.backRect.y&&mouse.y<game.backRect.y+game.backRect.h){ game.state='title'; SFX.ui(); }
     return;
   }
@@ -2555,7 +2560,7 @@ function startKO(loser, pit=false){
   const winnerHuman = winner===game.player || game.mode2p;
   const matchPoint = game.mode==='gauntlet'? loser===game.enemy
       : ((winner===game.player?game.pWins:game.eWins)+1)>=(game.galaxy?1:2);   // GALAXY = single decisive round
-  if(!pit && winnerHuman && matchPoint){ // PROVE IT — solve the final problem to erase them
+  if(!pit && winnerHuman && matchPoint && !game.online){ // PROVE IT — solve the final problem to erase them (solo only; online KOs are direct)
     game.state='finisher'; game.koLoser=loser; game.pitFinish=false;
     game.finT=360; game.finProblem=hardProblem();
     loser.daze=true; loser.attack=null; loser.stun=9999; loser.dizzy=9999; loser.vx=0;
@@ -2788,7 +2793,7 @@ function finishKO(){
       if(game.galaxy && game.playerWon && !game.practice){   // GALAXY: rank up — next match's math + combos get harder
         game.galaxyLevel=clamp((game.galaxyLevel||1)+1,1,5); store('galaxyLevel',game.galaxyLevel); game.galaxyLevelUp=true;
       }
-      if(!game.mode2p){ game.grade=computeGrade(); if(game.playerWon) saveBest(''); recordScore(); }
+      if(!game.mode2p && !game.online){ game.grade=computeGrade(); if(game.playerWon) saveBest(''); recordScore(); }   // online duels don't touch solo records
     }
   } else startRound();
 }
@@ -2827,8 +2832,8 @@ function rumbleRank(leaders){ // leaders first (winner / hp-sorted survivors), t
   game.playerWon = game.rumbleWinner===game.player;
   game.rumblePlace = rank.indexOf(game.player)+1;
   game.grade=computeGrade();
-  if(game.playerWon) saveBest('rumble_');
-  game.state='matchend'; recordScore();
+  if(game.playerWon && !game.online) saveBest('rumble_');
+  game.state='matchend'; if(!game.online) recordScore();   // online play doesn't touch solo records
 }
 function endRumble(winner){
   rumbleRank(winner?[winner]:[]);
@@ -2934,6 +2939,7 @@ function step(){
     if(game.cinema && !game.mode2p && !game.tutorial && !game.practice && !game.galaxy){ p.opp=game.enemy; controlCPU(p); cpuTelegraphDrift(p); }   // SHOWCASE: the player auto-fights too
     else controlPlayer(p);
     if(game.mode2p) controlP2(e);
+    else if(game.online){ const gs=net.guestState[e.seat]||{}; e.moveX=gs.mv||0; e.wantBlock=!!gs.bl; }   // ONLINE DUEL: the foe is your friend — drive from streamed input, not AI
     else if(!game.tutorial && !game.practice){ controlCPU(e); cpuTelegraphDrift(e); }   // tutorial dummy is script-controlled; PRACTICE dummy just stands there
     p.update(true); e.update(true);
     if(game.ally){ allyControl(game.ally); game.ally.update(true); }   // LESSING fights at your side in the finale
@@ -4187,27 +4193,32 @@ function drawModes(){
   ctx.strokeStyle='#3d2658'; ctx.lineWidth=1.2; ctx.stroke();
   txtO('‹ BACK   (T)', W/2, 461, 12, '#a99cc8', {mono:true,sw:0});
 }
+const MP_OPTS=[
+  ['⚔  1v1 DUEL  (online)','you vs ONE friend, live — share a link & a 4-letter code'],
+  ['👥  RUMBLE  (online)','up to 5 friends in one brawl — AI fills any empty seats'],
+  ['🕹  RUMBLE  (same screen)','5-fighter free-for-all vs the computer, right here'],
+];
 function drawRumbleChoose(){
   ctx.fillStyle='rgba(3,2,10,0.55)'; ctx.fillRect(0,0,W,H);
-  txtO('RUMBLE', W/2, 120, 40, '#efe9ff', {sw:6});
-  txtO('5-fighter free-for-all — last one standing', W/2, 158, 12, '#cabbe0', {mono:true,sw:0});
-  const opts=[['SAME SCREEN','play vs the computer, right here'],['ONLINE WITH FRIENDS','share a code & play over the internet']];
+  txtO('MULTIPLAYER', W/2, 104, 38, '#efe9ff', {sw:6});
+  txtO('play your friends — pick how', W/2, 140, 12, '#cabbe0', {mono:true,sw:0});
   game.rumbleRects=[];
-  opts.forEach((o,i)=>{
-    const sel=(i===1)===!!game.rumbleOnline, y=224+i*72;
-    const r={x:W/2-230,y:y-26,w:460,h:54}; game.rumbleRects.push(r);
+  MP_OPTS.forEach((o,i)=>{
+    const sel=i===(game.mpIdx||0), y=192+i*66;
+    const r={x:W/2-250,y:y-26,w:500,h:54}; game.rumbleRects.push(r);
     const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h, on=sel||hov;
     rr(r.x,r.y,r.w,r.h,10);
     ctx.fillStyle=on?'rgba(50,32,80,0.92)':'rgba(18,14,32,0.85)'; ctx.fill();
     ctx.strokeStyle=on?'#ffd34d':'#3d2658'; ctx.lineWidth=on?2.4:1.2; ctx.stroke();
-    txtO(o[0], W/2, y-3, 19, on?'#ffd34d':'#e8ecff', {sw:0});
+    txtO(o[0], W/2, y-3, 18, on?'#ffd34d':'#e8ecff', {sw:0});
     txtO(o[1], W/2, y+17, 11, 'rgba(200,190,230,0.85)', {mono:true,sw:0});
   });
-  game.backRect={x:W/2-70,y:388,w:140,h:32};
+  game.backRect={x:W/2-70,y:404,w:140,h:32};
   rr(game.backRect.x,game.backRect.y,140,32,8); ctx.fillStyle='rgba(18,14,32,0.85)'; ctx.fill();
   ctx.strokeStyle='#3d2658'; ctx.lineWidth=1.2; ctx.stroke();
-  txtO('‹ BACK   (T)', W/2, 409, 12, '#a99cc8', {mono:true,sw:0});
-  txtO('W/S choose · ⏎ go · T back', W/2, 470, 10, 'rgba(160,150,190,0.75)', {mono:true,sw:0});
+  txtO('‹ BACK   (T)', W/2, 425, 12, '#a99cc8', {mono:true,sw:0});
+  txtO('online needs the relay server running — see PLAY-ONLINE', W/2, 462, 10, 'rgba(150,150,190,0.6)', {mono:true,sw:0});
+  txtO('W/S choose · ⏎ go · T back', W/2, 482, 10, 'rgba(160,150,190,0.75)', {mono:true,sw:0});
 }
 function pipRow(label,n,col,x,y,w){
   ctx.font=font(MONO,9); ctx.textAlign='left'; ctx.fillStyle='#8a93b8';
@@ -4286,11 +4297,12 @@ function btn(label, x, y, w, h, hot){
   return {x,y,w,h};
 }
 function drawLobby(){
+  const duel=net.gm==='duel';
   ctx.fillStyle='rgba(2,3,8,0.8)'; ctx.fillRect(0,0,W,H);
-  txtO('ONLINE RUMBLE', W/2, 70, 34, '#efe9ff',{sw:6});
+  txtO(duel?'1v1 ONLINE DUEL':'ONLINE RUMBLE', W/2, 70, 34, '#efe9ff',{sw:6});
   const R=game.lobbyRects={};
   if(net.err) txtO(net.err, W/2, 98, 12, '#ff6a6a',{mono:true,sw:0});
-  else txtO('5 players over the net · empty seats play as AI', W/2, 98, 11, '#9aa3c8',{mono:true,sw:0});
+  else txtO(duel?'you vs ONE friend — live':'5 players over the net · empty seats play as AI', W/2, 98, 11, '#9aa3c8',{mono:true,sw:0});
 
   if(!net.lobby){
     // name field (always shown)
@@ -4320,43 +4332,50 @@ function drawLobby(){
   }
 
   // ---- in a room ----
-  txtO('ROOM', W/2, 142, 12, '#8fd8f8',{sw:0});
-  txtO(net.room, W/2, 184, 46, '#ffd34d',{sw:5});
-  // seat roster (5 rows)
-  const rx=W/2-230, ry=212, rw=460;
-  for(let s=0;s<5;s++){
+  const seatN = duel?2:5;
+  txtO(duel?'SHARE THIS CODE WITH YOUR FRIEND':'ROOM', W/2, 138, 12, '#8fd8f8',{sw:0});
+  txtO(net.room, W/2, 180, 46, '#ffd34d',{sw:5});
+  // seat roster
+  const rx=W/2-230, ry=206, rw=460;
+  for(let s=0;s<seatN;s++){
     const occ=net.roster.find(p=>p.seat===s);
     const y=ry+s*34;
     rr(rx,y,rw,30,7);
     ctx.fillStyle = occ?'rgba(14,18,32,0.92)':'rgba(20,10,12,0.85)'; ctx.fill();
     ctx.lineWidth=1.2; ctx.strokeStyle = occ? (occ.seat===net.seat?'#ffd34d':'#3d4668'):'#2a2030'; ctx.stroke();
     ctx.font=font(MONO,12); ctx.textAlign='left'; ctx.fillStyle='#8a93b8';
-    ctx.fillText('SEAT '+(s+1), rx+12, y+19);
+    ctx.fillText('P'+(s+1), rx+12, y+19);
     if(occ){
       const ch=ROSTER[clamp(occ.charIdx|0,0,3)];
-      txtO(occ.name, rx+110, y+20, 14, occ.seat===net.seat?'#ffd34d':'#e8ecff',{align:'left',sw:0});
+      txtO(occ.name, rx+90, y+20, 14, occ.seat===net.seat?'#ffd34d':'#e8ecff',{align:'left',sw:0});
       ctx.font=font(MONO,11); ctx.textAlign='right';
       ctx.fillStyle=ch.gi; ctx.fillText(ch.name, rx+rw-14, y+19);
       if(occ.host){ ctx.fillStyle='#46e08a'; ctx.fillText('HOST', rx+rw-90, y+19); }
-    } else { txtO('— AI —', rx+rw/2, y+20, 13, '#9aa3c8',{mono:true,sw:0}); }
+    } else { txtO(duel?'— waiting for your friend… —':'— AI —', rx+rw/2, y+20, 13,
+        duel&&((game.frame/30|0)%2)?'#ffd34d':'#9aa3c8',{mono:true,sw:0}); }
   }
   // your character picker
-  txtO('YOUR FIGHTER', W/2, ry+182, 11, '#8fd8f8',{sw:0});
+  const pickL=ry+seatN*34+22, pickY=pickL+10;
+  txtO('YOUR FIGHTER', W/2, pickL, 11, '#8fd8f8',{sw:0});
   R.chars=[];
   const cw=104, gap=10, x0=W/2-(cw*4+gap*3)/2;
   for(let i=0;i<4;i++){
-    const c=ROSTER[i], x=x0+i*(cw+gap), y=ry+192, sel=i===game.charIdx;
+    const c=ROSTER[i], x=x0+i*(cw+gap), y=pickY, sel=i===game.charIdx;
     rr(x,y,cw,40,8); ctx.fillStyle=sel?'rgba(60,40,96,0.95)':'rgba(16,14,30,0.9)'; ctx.fill();
     ctx.lineWidth=sel?2.5:1.2; ctx.strokeStyle=sel?'#ffd34d':c.gi; ctx.stroke();
     txtO(c.name, x+cw/2, y+18, 12, sel?'#ffd34d':c.gi,{sw:0});
     txtO('math '+c.mathNeed+'/5', x+cw/2, y+32, 9, '#9aa3c8',{mono:true,sw:0});
     R.chars.push({x,y,w:cw,h:40});
   }
+  const ctlY=pickY+62;
+  const ready = duel? net.roster.length>=2 : true;   // a duel needs both fighters before START
   if(net.role==='host'){
-    R.stage=btn('STAGE: '+STAGES[game.stageIdx].name, W/2-220, ry+248, 200, 44, false);
-    R.start=btn('START  ⏎', W/2+20, ry+248, 200, 44, true);
+    R.stage=btn('STAGE: '+STAGES[game.stageIdx].name, W/2-220, ctlY, 200, 44, false);
+    if(ready){ R.start=btn('START  ⏎', W/2+20, ctlY, 200, 44, true); }
+    else { R.start=null; btn('waiting…', W/2+20, ctlY, 200, 44, false);
+      txtO('send your friend the code above', W/2, ctlY+62, 11, (game.frame/30|0)%2?'#ffd34d':'#cabbe0',{mono:true,sw:0}); }
   } else {
-    txtO('waiting for host to start…', W/2, ry+274, 14,
+    txtO('waiting for host to start…', W/2, ctlY+22, 14,
       (game.frame/30|0)%2?'#ffd34d':'#cabbe0',{mono:true,sw:0});
   }
   R.leave=btn('LEAVE (T)', W/2-70, H-46, 140, 30, false);
@@ -4969,8 +4988,20 @@ function drawUnlockBanner(){            // celebratory line at the very bottom w
   txtO('✦  NEW UNLOCK  ✦', W/2, H-56, 14, '#46e08a',{sw:4});
   ctx.globalAlpha=pulse; txtO(game.newUnlocks[0], W/2, H-36, 11, '#dfffe0',{mono:true,sw:0}); ctx.globalAlpha=1;
 }
+function drawDuelEnd(){   // 1v1 online result + rematch
+  const won=game.playerWon, me=game.player, foe=game.enemy;
+  letterBanner(won?'YOU WIN':'YOU LOSE', 132, 64, won?'#ffd34d':'#ff6a8a', 1);
+  txtO((me?me.name:'YOU')+'   '+(game.pWins|0)+' — '+(game.eWins|0)+'   '+(foe?foe.name:'RIVAL'),
+       W/2, 200, 18, '#e8ecff',{mono:true,sw:0});
+  const acc=Math.round(100*game.stats.correct/Math.max(1,game.stats.asked));
+  txtO('YOUR MATH '+acc+'%'+(game.stats.maxStreak?'   ·   BEST STREAK ×'+game.stats.maxStreak:''),
+       W/2, 238, 12, '#b8c0da',{mono:true,sw:0});
+  if(net.role==='host') txtO('⏎ REMATCH   ·   T LEAVE', W/2, 312, 15, (game.frame/30|0)%2?'#ffd34d':'#cabbe0',{mono:true,sw:0});
+  else txtO('waiting for host to rematch…   ·   T LEAVE', W/2, 312, 13, '#cabbe0',{mono:true,sw:0});
+}
 function drawMatchEnd(){
   ctx.fillStyle='rgba(3,2,10,0.62)'; ctx.fillRect(0,0,W,H);
+  if(game.online && game.onlineDuel){ drawDuelEnd(); return; }
   if(game.mode==='rumble'){
     const won=game.playerWon, rank=game.rumbleRank||[];
     const wnr=game.rumbleWinner;
@@ -4994,8 +5025,9 @@ function drawMatchEnd(){
     const acc=Math.round(100*game.stats.correct/Math.max(1,game.stats.asked));
     txtO('YOUR MATH ACCURACY '+acc+'%'+(game.stats.maxStreak?'   ·   BEST STREAK ×'+game.stats.maxStreak:''),
          W/2, 390, 11, '#b8c0da',{mono:true,sw:0});
-    if(game.lastScore!=null) txtO('SCORE '+fmtScore(game.lastScore)+(game.lastBest?'   ★ NEW BEST':''), W/2, 412, 14, '#ffd34d',{mono:true,sw:0});
-    txtO('⏎ REMATCH   ·   C CHANGE FIGHTER   ·   T TITLE', W/2, 436, 13, '#cabbe0',{mono:true,sw:0});
+    if(game.lastScore!=null && !game.online) txtO('SCORE '+fmtScore(game.lastScore)+(game.lastBest?'   ★ NEW BEST':''), W/2, 412, 14, '#ffd34d',{mono:true,sw:0});
+    if(game.online) txtO(net.role==='host'?'⏎ REMATCH   ·   T LEAVE':'waiting for host to rematch…   ·   T LEAVE', W/2, 436, 13, '#cabbe0',{mono:true,sw:0});
+    else txtO('⏎ REMATCH   ·   C CHANGE FIGHTER   ·   T TITLE', W/2, 436, 13, '#cabbe0',{mono:true,sw:0});
     drawUnlockBanner();
     return;
   }
@@ -5351,7 +5383,7 @@ const MENU=[
   ['PLAY','1v1 vs the computer — pick STANDARD or GALAXY BRAIN combat on the next screen'],
   ['MODES','more ways to fight — boss ladder, endless run, story & practice'],
   ['DAILY FIGHT','one fight everyone in the world gets today — win it to grow your streak'],
-  ['RUMBLE','5-fighter free-for-all — same screen vs AI, or online with friends'],
+  ['MULTIPLAYER','play your friends online — 1v1 duel, or 5-player rumble (AI fills empty seats)'],
   ['HOW TO PLAY',''],
   ['SETTINGS',''],
 ];
@@ -5368,7 +5400,7 @@ function menuActivateLabel(label){
   if(label==='PLAY'){ game.mode='cpu'; style(); game.pickPhase=0; game.state='select'; }              // 1v1; the style is picked on the select screen
   else if(label==='MODES'){ game.modeIdx=0; game.state='modes'; }
   else if(label==='DAILY FIGHT') startDailyChallenge();
-  else if(label==='RUMBLE'){ game.rumbleOnline=false; game.state='rumbleChoose'; }                     // ask local vs online on click
+  else if(label==='MULTIPLAYER'){ game.mpIdx=0; game.state='rumbleChoose'; }                            // pick 1v1 online / rumble online / local rumble
   else if(label==='THE TOWER'){ game.mode='tower'; game.pickPhase=0; game.state='select'; }
   else if(label==='GAUNTLET'){ game.mode='gauntlet'; game.gWins=0; game.gMut=null; game.pickPhase=0; game.state='select'; }
   else if(label==='STORY MODE') enterStory();
@@ -5376,10 +5408,15 @@ function menuActivateLabel(label){
   else if(label==='HOW TO PLAY'){ game.howReturn='title'; game.state='howto'; }
   else game.state='settings';
 }
-function startRumbleChoice(){
+function enterOnlineLobby(gm){   // gm: 'duel' (1v1) or 'rumble' (5-player)
+  net.gm=gm; game.online=false; net.lobby=false; net.field='name';
+  net.input=''; net.err=''; net.roster=[]; game.state='lobby';
+}
+function mpActivate(i){
   SFX.ui();
-  if(game.rumbleOnline){ game.online=false; net.lobby=false; net.field='menu'; net.input=''; net.err=''; net.roster=[]; game.state='lobby'; }
-  else { game.mode='rumble'; game.pickPhase=0; game.state='select'; }
+  if(i===0) enterOnlineLobby('duel');            // 1v1 online
+  else if(i===1) enterOnlineLobby('rumble');     // rumble online
+  else { game.mode='rumble'; game.rumbleOnline=false; game.pickPhase=0; game.state='select'; }   // local rumble vs AI
 }
 function startDailyChallenge(){   // one shared date-seeded fight: same champion, foe, stage & math for everyone today
   game.mode='cpu'; game.pickPhase=0;
@@ -6257,22 +6294,28 @@ function trainSubmit(){
 //   Math is client-authoritative (each client solves locally and reports
 //   the result); physics & combat are host-authoritative.
 //----------------------------------------------------------------------
-const net = { ws:null, role:null, seat:-1, room:'', roster:[], status:'offline', err:'',
+const net = { ws:null, role:null, seat:-1, room:'', roster:[], status:'offline', err:'', gm:'rumble',
   inEdges:[], pendingSolve:null, guestState:{}, snap:null, snapAt:0, sendAcc:0, bcAcc:0,
-  name:load('name','PLAYER'), field:'menu', input:'', camX:WORLD_W/2, camTz:0.7, lobby:false };
+  name:load('name','PLAYER'), field:'name', input:'', camX:WORLD_W/2, camTz:0.7, lobby:false };
 function netURL(){
   if(location.protocol==='file:'||!location.host) return 'ws://localhost:8080';
   return (location.protocol==='https:'?'wss://':'ws://')+location.host;
 }
 function netSend(o){ try{ if(net.ws && net.ws.readyState===1) net.ws.send(JSON.stringify(o)); }catch(e){} }
 function netConnect(then){
-  net.err=''; net.status='connecting';
-  let ws; try{ ws=new WebSocket(netURL()); }catch(e){ net.err='cannot reach server'; net.status='offline'; return; }
+  net.err=''; net.status='connecting'; let opened=false;
+  // why a connection might fail — point the player at the fix instead of a blank screen
+  const onPages = location.host && /github\.io|githubusercontent/.test(location.host);
+  const failMsg = onPages
+    ? 'this link (GitHub Pages) can’t host online play — open the RELAY url instead'
+    : 'couldn’t reach the relay server — is it running? (see PLAY-ONLINE)';
+  let ws; try{ ws=new WebSocket(netURL()); }catch(e){ net.err=failMsg; net.status='offline'; return; }
   net.ws=ws;
-  ws.onopen=()=>{ net.status='online'; if(then) then();
+  ws.onopen=()=>{ opened=true; net.status='online'; if(then) then();
     clearInterval(net.ka); net.ka=setInterval(()=>netSend({t:'ping'}), 8000); }; // keepalive (survives bg throttle)
-  ws.onclose=()=>{ net.status='offline'; clearInterval(net.ka); if(game.online) netToTitle('disconnected'); };
-  ws.onerror=()=>{ net.err='connection error'; };
+  ws.onclose=()=>{ net.status='offline'; clearInterval(net.ka);
+    if(game.online) netToTitle('disconnected'); else if(!opened) net.err=failMsg; };
+  ws.onerror=()=>{ if(!opened) net.err=failMsg; };
   ws.onmessage=(e)=>{ let m; try{m=JSON.parse(e.data);}catch(_){return;} netHandle(m); };
 }
 function netToTitle(msg){ game.online=false; net.role=null; net.lobby=false; if(msg) net.err=msg; game.state='title'; }
@@ -6280,10 +6323,11 @@ function netHandle(m){
   switch(m.t){
     case 'joined': net.role=m.host?'host':'guest'; net.seat=m.seat; net.room=m.room; net.lobby=true; net.field='room'; net.err=''; SFX.ui(); break;
     case 'roster': net.roster=m.roster; break;
-    case 'error': net.err=m.msg; net.field=net.lobby?'room':'menu'; break;
-    case 'start': startOnlineMatch(m.seats, m.seed, m.stage); break;
+    case 'error': net.err=m.msg; net.field=net.lobby?'room':'code'; break;
+    case 'start': startOnlineMatch(m.seats, m.seed, m.stage, m.gm); break;
     case 'input': if(net.role==='host') hostRecvInput(m.seat, m.d); break;
     case 'snap': if(net.role==='guest') applySnapshot(m.d); break;
+    case 'rematch': onRematch(); break;
     case 'hostleft': netToTitle('host left — back to title'); break;
   }
 }
@@ -6291,23 +6335,60 @@ function netHandle(m){
 function lobbyCreate(){ store('name',net.name); netConnect(()=>netSend({t:'create',name:net.name,charIdx:game.charIdx})); }
 function lobbyJoin(){ if(net.input.length<4){ net.err='enter a 4-letter code'; return; } store('name',net.name);
   netConnect(()=>netSend({t:'join',room:net.input,name:net.name,charIdx:game.charIdx})); }
-function lobbyStart(){ if(net.role==='host') netSend({t:'start', stage:game.stageIdx}); }
+function lobbyStart(){
+  if(net.role!=='host') return;
+  if(net.gm==='duel' && net.roster.length<2){ net.err='waiting for your friend to join'; SFX.wrong(); return; }
+  netSend({t:'start', stage:game.stageIdx, gm:net.gm});
+}
+function lobbyRematch(){ if(net.role==='host') netSend({t:'rematch'}); }
+function onRematch(){ game.online=false; net.lobby=true; net.err=''; game.state='lobby'; }   // back to the room — host can START again
 function lobbyLeave(){ try{ if(net.ws) net.ws.close(); }catch(e){} net.ws=null; net.lobby=false; net.role=null; net.roster=[]; game.state='title'; }
 function lobbyPickChar(i){ game.charIdx=(i+4)%4; netSend({t:'char',charIdx:game.charIdx}); SFX.ui(); }
 
 // ---- match bootstrap ----
-function startOnlineMatch(seats, seed, stage){
-  game.online=true; game.mode='rumble'; game.mode2p=false; game.stageIdx=stage||0;
-  PLATFORMS = RUMBLE_PLATFORMS;
-  buildOnlineFighters(seats);
+function startOnlineMatch(seats, seed, stage, gm){
+  gm = gm || net.gm || 'rumble'; net.gm = gm;
+  const duel = gm==='duel';
+  game.online=true; game.onlineDuel=duel; game.mode2p=false; game.stageIdx=stage||0;
+  game.galaxy=false; game.practice=false; game.daily=false; game.tutorial=null; game.ally=null;   // online is its own clean mode
+  if(duel){
+    game.mode='cpu';
+    PLATFORMS = (ST().platforms||STD_PLATFORMS);
+    buildOnlineDuel(seats);
+    game.pWins=0; game.eWins=0; game.round=1; game.grade=null; game.koLoser=null; game.timeUp=false;
+    game.timer=75;
+  } else {
+    game.mode='rumble';
+    PLATFORMS = RUMBLE_PLATFORMS;
+    buildOnlineFighters(seats);
+    game.placements=[]; game.rumbleRank=null; game.rumbleWinner=null; game.rumblePlace=null;
+    game.timer=99;
+  }
   game.stats ={asked:0,correct:0,perfects:0,maxStreak:0,dmg:0,auraEarned:0};
   game.stats2={asked:0,correct:0,perfects:0,maxStreak:0,dmg:0,auraEarned:0};
-  game.placements=[]; game.rumbleRank=null; game.rumbleWinner=null;
-  game.timer=99; game.heat=0; game.problem=newProblem(0); ans1=''; ans2='';
+  game.heat=0; game.problem=newProblem(0); ans1=''; ans2='';
+  game.hpFired={}; game.tauntCd=0; game.overflow=0; game.lastSolveOp=null; game.banner=null; game.taunt=null; game.reveal=null;
+  game.focusOp=null; game.burstChallenge=null; game.rushMeter=0; game.rush=null; game.relockAtk=null;
   pickups.length=0; pickupTimer=300; projs.length=0; hazards.length=0; parts.length=0; floaters.length=0;
-  net.snap=null; net.inEdges=[]; net.pendingSolve=null; net.lobby=false;
+  net.snap=null; net.inEdges=[]; net.pendingSolve=null; net.lobby=false; net.guestState={};
+  setMusic('default');
   game.introT=120; game.state='intro';
   SFX.round();
+}
+function buildOnlineDuel(seats){   // exactly two humans: seat 0 = left, seat 1 = right
+  const all=[];
+  for(let i=0;i<2;i++){
+    const s=seats.find(x=>x.seat===i);
+    const cdef = ROSTER[clamp((s&&s.charIdx|0)||0,0,3)];
+    const x = i===0? WORLD_W/2-420 : WORLD_W/2+420, face = i===0? 1 : -1;
+    const f=new Fighter({name:(s&&s.name)||('P'+(i+1)), x, facing:face, gi:cdef.gi, trim:cdef.trim, char:cdef});
+    f.reset(x, face); f.eliminated=false; f.seat=i; f.human=true; f.netX=f.x; f.netY=f.y;   // ko is derived from hp; reset() restores full hp
+    all.push(f);
+  }
+  game.fighters=all;
+  const me=clamp(net.seat,0,1);
+  game.player = all[me]; game.enemy = all[1-me];
+  game.player.opp = game.enemy; game.enemy.opp = game.player;
 }
 function buildOnlineFighters(seats){
   const xs=[1100,380,1820,740,1460], aiPool=[ROSTER[0],ROSTER[1],ROSTER[2],ROSTER[3],BASE_CHAR];
@@ -6337,7 +6418,7 @@ function hostRecvInput(seat, d){
     else if(e==='dashL') f.tryDash(-1);
     else if(e==='dashR') f.tryDash(1);
   }
-  if(d.solve) applySolve(f, d.solve, game.stats2);
+  if(d.solve){ const sv=d.solve; if(typeof sv==='string') applySolve(f, sv, game.stats2); else applySolve(f, sv.r, game.stats2, sv.op); }
 }
 // ---- guest: send my input, interpolate toward the latest snapshot ----
 function gatherMove(){ let mv=0; if(keys[KEYS.left]||keys['arrowleft'])mv--; if(keys[KEYS.right]||keys['arrowright'])mv++; return mv; }
@@ -6348,7 +6429,7 @@ function sendMyInput(){
   netSend({t:'input', d});
 }
 function netLocalCosmetic(result){ // immediate feedback on the guest; host applies the real effect
-  net.pendingSolve=result;
+  net.pendingSolve={r:result, op:(game.problem&&game.problem.op)||null};   // carry the operator so the host can bank my Function Strike
   if(result==='perfect'){ announce('PERFECT DODGE','#ffd34d'); flash(0.18,'#fff1c0'); SFX.perfect(); }
   else if(result==='miss') SFX.wrong(); else SFX.correct();
 }
@@ -6366,16 +6447,24 @@ function fSnap(f){
   return [f.seat, Math.round(f.x), Math.round(f.y), f.facing, Math.round(f.hp), Math.round(f.aura),
     f.dizzy|0, f.hurtT|0, f.stun|0, f.blocking?1:0, f.grounded?1:0, f.frozenT|0, f.streak|0, f.iframes|0, f.dodgeT|0,
     Math.round(f.vx*10)/10, f.landT|0,
-    a?a.type:'', a?(a.kind||'dash'):'', a?a.ph:'', a?a.t|0:0, a?a.def.wind|0:0, a?a.def.act|0:0, a?a.def.rec|0:0];
+    a?a.type:'', a?(a.kind||'dash'):'', a?a.ph:'', a?a.t|0:0, a?a.def.wind|0:0, a?a.def.act|0:0, a?a.def.rec|0:0,
+    f.ko?1:0, f.gone?1:0, f.dissolveT?Math.round(f.dissolveT*100):0];
 }
 function hostSnapshot(){
-  return { f: game.fighters.map(fSnap),
+  if(!game.fighters) return null;
+  const d={ f: game.fighters.map(fSnap),
     pj: projs.map(p=>[Math.round(p.x),Math.round(p.y),Math.round(p.vx*10)/10]),
     hz: hazards.map(h=>[Math.round(h.x),h.t|0]),
     tm: Math.ceil(game.timer), st: game.state, it: game.introT|0, al: living().length,
     cx: Math.round(cam.x), cz: Math.round(cam.tz*100),
     rk: game.rumbleRank? game.rumbleRank.map(f=>f.seat):null,
     wn: game.rumbleWinner? game.rumbleWinner.seat:-1, pl: game.rumblePlace|0 };
+  if(game.onlineDuel){   // 1v1 round/match state, indexed by SEAT (host is seat 0)
+    d.du=1; d.rw=[game.pWins|0, game.eWins|0]; d.rd=game.round|0;
+    d.kl=(game.koLoser? game.koLoser.seat : -1); d.tu=game.timeUp?1:0; d.kt=game.koTimer|0;
+    if(game.state==='matchend') d.mw = game.playerWon?0:1;   // winner seat
+  }
+  return d;
 }
 function applySnapshot(d){
   net.snapAt=performance.now();
@@ -6385,13 +6474,22 @@ function applySnapshot(d){
     f.dizzy=fs[6]; f.hurtT=fs[7]; f.stun=fs[8]; f.blocking=!!fs[9]; f.grounded=!!fs[10];
     f.frozenT=fs[11]; f.streak=fs[12]; f.iframes=fs[13]; f.dodgeT=fs[14]; f.vx=fs[15]; f.landT=fs[16];
     f.attack = fs[17]? {type:fs[17],kind:fs[18],ph:fs[19],t:fs[20],def:{wind:fs[21],act:fs[22],rec:fs[23]}} : null;
+    f.gone=!!fs[25]; f.dissolveT=(fs[26]||0)/100;   // ko is derived from hp (set above); gone/dissolve aren't, so sync them for a clean downed/dissolving read on the guest
     if(fs[4]<=0) f.eliminated=true;
   }
   projs.length=0; if(d.pj) for(const p of d.pj) projs.push({x:p[0],y:p[1],vx:p[2],life:999,owner:game.player});
   hazards.length=0; if(d.hz) for(const h of d.hz) hazards.push({x:h[0],t:h[1],owner:game.player});
   game.timer=d.tm; game.introT=d.it;
   net.camX=d.cx; net.camTz=d.cz/100;
-  if(d.st==='matchend'){
+  if(d.du){   // 1v1 duel: map seat-indexed round state into MY perspective
+    game.onlineDuel=true; game.mode='cpu';
+    const me=clamp(net.seat,0,1);
+    game.round=d.rd||1;
+    game.pWins=(d.rw?d.rw[me]:0)|0; game.eWins=(d.rw?d.rw[1-me]:0)|0;
+    game.koLoser=(d.kl>=0 && game.fighters)? game.fighters[d.kl] : null;
+    game.koTimer=d.kt|0; game.timeUp=!!d.tu;
+    if(d.st==='matchend') game.playerWon=(d.mw===me);
+  } else if(d.st==='matchend'){
     game.rumbleRank=(d.rk||[]).map(s=>game.fighters[s]).filter(Boolean);
     game.rumbleWinner=d.wn>=0? game.fighters[d.wn]:null;
     game.rumblePlace=d.pl||(game.rumbleRank.indexOf(game.player)+1);
@@ -6446,11 +6544,11 @@ function loop(now){
     acc += Math.min(64, now-last)*timeScale; last=now;
     let n=0;
     while(acc>=STEP && n++<4){ step(); acc-=STEP; }
-    if(game.online && net.role==='host'){ net.bcAcc=(net.bcAcc+1)%2; if(net.bcAcc===0) netSend({t:'snap',d:hostSnapshot()}); }
+    if(game.online && net.role==='host' && game.fighters){ net.bcAcc=(net.bcAcc+1)%2; if(net.bcAcc===0){ const s=hostSnapshot(); if(s) netSend({t:'snap',d:s}); } }
     if(AC) musicTick();
     render();
   } catch(e){
-    if(!game._loopErr){ game._loopErr=1; try{ console.error('loop error (recovered):', e); }catch(_){} }   // never hard-freeze a player mid-fight — keep the frames coming
+    if(!game._loopErr){ game._loopErr=1; game._loopErrMsg=(e&&e.message)+' @ '+((e&&e.stack)||'').split('\n').slice(1,3).join(' | '); try{ console.error('loop error (recovered):', e); }catch(_){} }   // never hard-freeze a player mid-fight — keep the frames coming
   } finally {
     requestAnimationFrame(loop);
   }
