@@ -147,7 +147,13 @@ function handleMessage(client, raw){
       }
       room.started = true;
       broadcast(room, { t:"start", seed: crypto.randomInt(1e9), stage: m.stage|0,
-                        gm: m.gm || "rumble", seats: roster(room) });
+                        gm: m.gm || "rumble", wu: m.wu?1:0, seats: roster(room) });
+      break;
+    }
+    case "wu": { // warm-up solve result, guest -> host
+      const room = client.room; if (!room) break;
+      const host = hostOf(room);
+      if (host && host !== client) sendFrame(host.sock, JSON.stringify({ t:"wu", seat: client.seat, fr: m.fr|0 }));
       break;
     }
     case "rematch": { // host re-opens the room for another match without anyone re-entering a code

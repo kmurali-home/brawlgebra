@@ -352,6 +352,15 @@ addEventListener("keydown", e => {
     if(AC&&!musicMuted) MUS.next=AC.currentTime+0.05;
     return; }
 
+  if(game.state==='warmup'){   // BIG-BRAIN BONUS — race the opener
+    const w=game.warmup;
+    if(w && !w.done){
+      if(/^[0-9]$/.test(k)){ if(w.ans.length<3) w.ans+=k; return; }
+      if(k==='Backspace'){ w.ans=w.ans.slice(0,-1); return; }
+      if(k==='Enter'||k===' '){ warmupSubmit(); return; }
+    }
+    return;
+  }
   if(game.state==='welcome'){   // first-run gate → learn to fight
     if(k==='Enter'||k===' '){ game.seenHow=true; store('how',true); startTutorial(); SFX.ui(); }
     else if(lk==='t'||k==='Escape'){ game.seenHow=true; store('how',true); game.state='title'; SFX.ui(); }   // skip
@@ -394,6 +403,7 @@ addEventListener("keydown", e => {
       if(lk==='d'||k==='ArrowRight'){ lobbyPickChar(game.charIdx+1); return; }
       if(/^[1-4]$/.test(k)){ lobbyPickChar(+k-1); return; }
       if(lk==='g' && net.role==='host'){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); return; }
+      if(lk==='b' && net.role==='host'){ game.warmupOn=!game.warmupOn; store('warmupOn',game.warmupOn); SFX.ui(); return; }   // BIG-BRAIN BONUS toggle
       if((k==='Enter'||k===' ') && net.role==='host'){ lobbyStart(); return; }
       return;
     }
@@ -711,6 +721,7 @@ cv.addEventListener("click", ()=>{
       if(rs.chars) for(let i=0;i<rs.chars.length;i++) if(hit(rs.chars[i])){ lobbyPickChar(i); return; }
       if(net.role==='host' && hit(rs.start)){ lobbyStart(); return; }
       if(net.role==='host' && hit(rs.stage)){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); return; }
+      if(net.role==='host' && hit(rs.warmup)){ game.warmupOn=!game.warmupOn; store('warmupOn',game.warmupOn); SFX.ui(); return; }
       if(hit(rs.leave)){ lobbyLeave(); return; }
     } else if(net.field==='code'){
       if(hit(rs.joinGo)){ lobbyJoin(); return; }
@@ -2904,6 +2915,7 @@ function step(){
   if(game.tip && game.tip.t>0) game.tip.t--;
   if(game.reveal && game.reveal.t>0) game.reveal.t--;
 
+  if(game.state==='warmup'){ warmupTick(); return; }   // both sides solve the opener locally (guests run it too, then follow snapshots once the host rings the bell)
   if(game.online && net.role==='guest'){ guestTick(); return; } // guests render, never simulate
 
   if(['splash','welcome','title','keyart','trailercard','modes','rumbleChoose','matchend','select','howto','settings','interlude','lobby','story','dialogue','training','reward','codex','naming','records'].includes(game.state)){
@@ -4378,7 +4390,45 @@ function drawLobby(){
     txtO('waiting for host to start…', W/2, ctlY+22, 14,
       (game.frame/30|0)%2?'#ffd34d':'#cabbe0',{mono:true,sw:0});
   }
+  // BIG-BRAIN BONUS toggle (host sets it; everyone sees it)
+  const on=!!game.warmupOn, ty=H-88;
+  if(net.role==='host'){
+    R.warmup={x:W/2-180,y:ty-15,w:360,h:30};
+    rr(R.warmup.x,R.warmup.y,R.warmup.w,R.warmup.h,8);
+    ctx.fillStyle=on?'rgba(60,48,20,0.9)':'rgba(20,14,28,0.85)'; ctx.fill();
+    ctx.strokeStyle=on?'#ffd34d':'#3d2658'; ctx.lineWidth=1.4; ctx.stroke();
+    txtO('⚡ BIG-BRAIN BONUS  '+(on?'ON':'OFF')+'   (B)', W/2, ty+5, 13, on?'#ffd34d':'#8a93b8',{mono:true,sw:0});
+  } else {
+    txtO('⚡ BIG-BRAIN BONUS — solve an opener for a health edge (host decides)', W/2, ty, 11, '#8fb8d8',{mono:true,sw:0});
+  }
   R.leave=btn('LEAVE (T)', W/2-70, H-46, 140, 30, false);
+}
+function drawWarmup(){
+  const w=game.warmup;
+  ctx.fillStyle='rgba(2,3,10,0.9)'; ctx.fillRect(0,0,W,H);
+  txtO('⚡ BIG-BRAIN BONUS', W/2, 92, 30, '#ffd34d', {sw:5});
+  txtO(game.onlineDuel? 'first to solve starts the duel with a health-bar edge'
+                      : 'solve it to start at full — miss it and you start chipped', W/2, 128, 12, '#cabbe0',{mono:true,sw:0});
+  if(!w) return;
+  const elapsed=game.frame-w.start, left=Math.max(0, Math.ceil(WARMUP_SECS - elapsed/60));
+  rr(W/2-220, 184, 440, 156, 16); ctx.fillStyle='rgba(10,12,28,0.95)'; ctx.fill();
+  ctx.strokeStyle=w.done?'#46e08a':'#ffd34d'; ctx.lineWidth=2.5; ctx.stroke();
+  if(w.done){
+    txtO(w.solvedFr>=0? 'SOLVED!' : 'TIME!', W/2, 244, 32, w.solvedFr>=0?'#9fe89a':'#ff8a8a',{sw:3});
+    txtO(w.solvedFr>=0? 'nice — waiting for the others…' : 'no edge — waiting…', W/2, 300, 13,
+      (game.frame/30|0)%2?'#ffd34d':'#cabbe0',{mono:true,sw:0});
+  } else {
+    txtO('SOLVE FOR x', W/2, 214, 12, '#8fd8f8',{sw:0});
+    txtO(w.prob.text, W/2, 262, 36, '#fff',{sw:0});
+    const cur=(game.frame/24|0)%2?'_':' ';
+    txtO('x = '+(w.ans||'')+cur, W/2, 318, 26, '#ffd34d',{mono:true,sw:0});
+    if(w.miss) txtO('not quite — try again', W/2, 344, 11, '#ff6a6a',{mono:true,sw:0});
+  }
+  const frac=clamp((WARMUP_SECS*60-elapsed)/(WARMUP_SECS*60),0,1);
+  rr(W/2-180, 366, 360, 12, 6); ctx.fillStyle='rgba(255,255,255,0.1)'; ctx.fill();
+  if(frac>0){ rr(W/2-180, 366, 360*frac, 12, 6); ctx.fillStyle=frac<0.3?'#ff5a6a':'#ffd34d'; ctx.fill(); }
+  txtO(left+'s', W/2, 398, 13, '#cabbe0',{mono:true,sw:0});
+  if(!w.done) txtO('type the answer · ENTER to lock it in', W/2, 424, 11, '#8a93b8',{mono:true,sw:0});
 }
 function drawFnPanel(cx, top, w){ // the four functions + levels + xp bars
   const rh=30, x=cx-w/2;
@@ -5239,6 +5289,7 @@ function render(){
   else if(game.state==='howto') drawHowTo();
   else if(game.state==='settings') drawSettings();
   else if(game.state==='lobby') drawLobby();
+  else if(game.state==='warmup') drawWarmup();
   else if(game.state==='naming') drawNaming();
   else if(game.state==='story') drawStory();
   else if(game.state==='codex') drawCodex();
@@ -6324,9 +6375,10 @@ function netHandle(m){
     case 'joined': net.role=m.host?'host':'guest'; net.seat=m.seat; net.room=m.room; net.lobby=true; net.field='room'; net.err=''; SFX.ui(); break;
     case 'roster': net.roster=m.roster; break;
     case 'error': net.err=m.msg; net.field=net.lobby?'room':'code'; break;
-    case 'start': startOnlineMatch(m.seats, m.seed, m.stage, m.gm); break;
+    case 'start': startOnlineMatch(m.seats, m.seed, m.stage, m.gm, m.wu); break;
     case 'input': if(net.role==='host') hostRecvInput(m.seat, m.d); break;
     case 'snap': if(net.role==='guest') applySnapshot(m.d); break;
+    case 'wu': if(net.role==='host') hostRecvWarmup(m.seat, m.fr); break;
     case 'rematch': onRematch(); break;
     case 'hostleft': netToTitle('host left — back to title'); break;
   }
@@ -6338,7 +6390,7 @@ function lobbyJoin(){ if(net.input.length<4){ net.err='enter a 4-letter code'; r
 function lobbyStart(){
   if(net.role!=='host') return;
   if(net.gm==='duel' && net.roster.length<2){ net.err='waiting for your friend to join'; SFX.wrong(); return; }
-  netSend({t:'start', stage:game.stageIdx, gm:net.gm});
+  netSend({t:'start', stage:game.stageIdx, gm:net.gm, wu:game.warmupOn?1:0});
 }
 function lobbyRematch(){ if(net.role==='host') netSend({t:'rematch'}); }
 function onRematch(){ game.online=false; net.lobby=true; net.err=''; game.state='lobby'; }   // back to the room — host can START again
@@ -6346,8 +6398,9 @@ function lobbyLeave(){ try{ if(net.ws) net.ws.close(); }catch(e){} net.ws=null; 
 function lobbyPickChar(i){ game.charIdx=(i+4)%4; netSend({t:'char',charIdx:game.charIdx}); SFX.ui(); }
 
 // ---- match bootstrap ----
-function startOnlineMatch(seats, seed, stage, gm){
+function startOnlineMatch(seats, seed, stage, gm, wu){
   gm = gm || net.gm || 'rumble'; net.gm = gm;
+  game._seed = (seed>>>0) || 1;
   const duel = gm==='duel';
   game.online=true; game.onlineDuel=duel; game.mode2p=false; game.stageIdx=stage||0;
   game.galaxy=false; game.practice=false; game.daily=false; game.tutorial=null; game.ally=null;   // online is its own clean mode
@@ -6372,8 +6425,58 @@ function startOnlineMatch(seats, seed, stage, gm){
   pickups.length=0; pickupTimer=300; projs.length=0; hazards.length=0; parts.length=0; floaters.length=0;
   net.snap=null; net.inEdges=[]; net.pendingSolve=null; net.lobby=false; net.guestState={};
   setMusic('default');
-  game.introT=120; game.state='intro';
-  SFX.round();
+  if(wu){ enterWarmup(); }                        // BIG-BRAIN BONUS: race an opener before the bell
+  else { game.introT=120; game.state='intro'; SFX.round(); }
+}
+// ---- WARM-UP: a shared algebra opener; the faster/correct solver spots a health edge ----
+const WARMUP_EDGE=0.20, WARMUP_SECS=15;
+function makeWarmupProblem(seed){   // deterministic from the match seed so both sides see the SAME problem
+  let s=(seed>>>0)||1; const R=()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; };
+  const x=2+Math.floor(R()*8), a=2+Math.floor(R()*4), b=1+Math.floor(R()*9);
+  return {text:a+'x + '+b+' = '+(a*x+b), ans:x};
+}
+function enterWarmup(){
+  game.warmup={ prob:makeWarmupProblem(game._seed), start:game.frame, ans:'', solvedFr:null, done:false, miss:0, results:{}, adj:false };
+  game.state='warmup'; ans1=''; SFX.round();
+}
+function warmupSubmit(){
+  const w=game.warmup; if(!w||w.done||w.ans==='') return;
+  if(+w.ans===w.prob.ans){ w.solvedFr=game.frame-w.start; w.done=true; flash(0.2,'#9fdcff'); SFX.correct();
+    warmupReport(net.seat, w.solvedFr); }
+  else { w.ans=''; w.miss++; cardFx.shake=10; cardFx.flash=12; cardFx.col='#ff4d5e'; SFX.wrong(); }
+}
+function warmupReport(seat, fr){ if(net.role==='host') hostRecvWarmup(seat, fr); else netSend({t:'wu', fr:fr}); }
+function hostRecvWarmup(seat, fr){ const w=game.warmup; if(w && w.results[seat]===undefined) w.results[seat]=fr; }
+function warmupTick(){
+  const w=game.warmup; if(!w) return;
+  const left=WARMUP_SECS*60-(game.frame-w.start);
+  if(!w.done && left<=0){ w.done=true; w.solvedFr=-1; warmupReport(net.seat,-1); }      // ran out of time → no edge
+  if(net.role==='host' && !w.adj){
+    const humans=game.fighters.filter(f=>f.human).map(f=>f.seat);
+    const allIn=humans.every(s=>w.results[s]!==undefined);
+    if(allIn || left<=-45){                                                            // everyone reported, or a grace beat past the buzzer
+      for(const s of humans) if(w.results[s]===undefined) w.results[s]=-1;
+      warmupAdjudicate();
+    }
+  }
+}
+function warmupAdjudicate(){
+  const w=game.warmup; w.adj=true;
+  const humans=game.fighters.filter(f=>f.human);
+  const correct=humans.filter(f=>(w.results[f.seat]!=null) && w.results[f.seat]>=0);
+  const edge=new Set();
+  if(game.onlineDuel){ if(correct.length){ let best=correct[0]; for(const f of correct) if(w.results[f.seat]<w.results[best.seat]) best=f; edge.add(best.seat); } }
+  else { for(const f of correct) edge.add(f.seat); }                                    // rumble: each solver keeps full HP
+  for(const f of game.fighters){
+    f.warmEdge=false; f.warmLost=false;
+    if(f.human && !edge.has(f.seat)){ f.hp=Math.round(f.char.hp*(1-WARMUP_EDGE)); f.hpShown=f.hp; f.warmLost=true; }
+    else if(f.human && edge.has(f.seat)) f.warmEdge=true;
+  }
+  game.warmupOutcome={edge:[...edge], results:Object.assign({},w.results)};
+  const me=game.player;
+  if(me) announce(me.warmEdge?'WARM-UP WON — EDGE!':me.warmLost?'RIVAL TOOK THE EDGE':'EVEN START',
+                  me.warmEdge?'#ffd34d':me.warmLost?'#ff8a8a':'#cabbe0');
+  game.warmup=null; game.introT=120; game.state='intro'; SFX.round();                   // ring the bell
 }
 function buildOnlineDuel(seats){   // exactly two humans: seat 0 = left, seat 1 = right
   const all=[];
@@ -6459,6 +6562,7 @@ function hostSnapshot(){
     cx: Math.round(cam.x), cz: Math.round(cam.tz*100),
     rk: game.rumbleRank? game.rumbleRank.map(f=>f.seat):null,
     wn: game.rumbleWinner? game.rumbleWinner.seat:-1, pl: game.rumblePlace|0 };
+  if(game.warmupOutcome) d.we=game.warmupOutcome.edge;   // warm-up edge winners (by seat) so guests can show the right banner
   if(game.onlineDuel){   // 1v1 round/match state, indexed by SEAT (host is seat 0)
     d.du=1; d.rw=[game.pWins|0, game.eWins|0]; d.rd=game.round|0;
     d.kl=(game.koLoser? game.koLoser.seat : -1); d.tu=game.timeUp?1:0; d.kt=game.koTimer|0;
@@ -6495,6 +6599,11 @@ function applySnapshot(d){
     game.rumblePlace=d.pl||(game.rumbleRank.indexOf(game.player)+1);
     game.playerWon=game.rumbleWinner===game.player;
   }
+  if(net._prevSt==='warmup' && d.st==='intro'){   // guest crossing from the warm-up into the bout — tell them how the opener went
+    const iWon=d.we && d.we.indexOf(net.seat)>=0, any=d.we && d.we.length;
+    announce(iWon?'WARM-UP WON — EDGE!':any?'RIVAL TOOK THE EDGE':'EVEN START', iWon?'#ffd34d':any?'#ff8a8a':'#cabbe0');
+  }
+  net._prevSt=d.st;
   game.state=d.st;
 }
 
@@ -6517,6 +6626,7 @@ game.mode2p=false; game.mode='cpu'; game.pickPhase=0; game.p1Idx=1; game.rebind=
 game.menuIdx=0; game.towerIdx=0; game.ladder=null; game.gWins=0;
 game.towerDone=false; game.gOver=false; game.interKind='';
 game.stageIdx=load('stage',0); game.showCtl=load('ctl',true);
+game.warmupOn=load('warmupOn',true);   // BIG-BRAIN BONUS — pre-fight algebra race for a health edge (online)
 game.galaxyLevel=load('galaxyLevel',1);   // GALAXY BRAIN progression — persists across sessions
 game.galaxy=load('galaxyStyle',0)===1;    // remembered COMBAT STYLE (Standard ↔ Galaxy Brain)
 loadAssets();   // pull in any real-art PNGs from assets/ (procedural fallback if none)
@@ -6544,7 +6654,7 @@ function loop(now){
     acc += Math.min(64, now-last)*timeScale; last=now;
     let n=0;
     while(acc>=STEP && n++<4){ step(); acc-=STEP; }
-    if(game.online && net.role==='host' && game.fighters){ net.bcAcc=(net.bcAcc+1)%2; if(net.bcAcc===0){ const s=hostSnapshot(); if(s) netSend({t:'snap',d:s}); } }
+    if(game.online && net.role==='host' && game.fighters && game.state!=='warmup'){ net.bcAcc=(net.bcAcc+1)%2; if(net.bcAcc===0){ const s=hostSnapshot(); if(s) netSend({t:'snap',d:s}); } }
     if(AC) musicTick();
     render();
   } catch(e){
