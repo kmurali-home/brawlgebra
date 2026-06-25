@@ -6396,7 +6396,14 @@ function netToTitle(msg){ game.online=false; net.role=null; net.lobby=false; if(
 function netHandle(m){
   switch(m.t){
     case 'joined': net.role=m.host?'host':'guest'; net.seat=m.seat; net.room=m.room; net.lobby=true; net.field='room'; net.err=''; SFX.ui(); break;
-    case 'roster': net.roster=m.roster; break;
+    case 'roster': {
+      if(net.lobby && !game.online && Array.isArray(m.roster) && (net.roster||[]).length>0){   // a friend arrived — chime + fading notice (mirror of the leave cue)
+        const had=new Set((net.roster||[]).map(p=>p.seat));
+        const joined=m.roster.find(p=>p.seat!==net.seat && !had.has(p.seat));
+        if(joined){ net.notice={txt:'P'+(joined.seat+1)+' joined', at:game.frame}; SFX.pickup(); }
+      }
+      net.roster=m.roster; break;
+    }
     case 'error': net.err=m.msg; net.field=net.lobby?'room':'code'; break;
     case 'start': startOnlineMatch(m.seats, m.seed, m.stage, m.gm, m.wu); break;
     case 'input': if(net.role==='host') hostRecvInput(m.seat, m.d); break;
@@ -6405,7 +6412,13 @@ function netHandle(m){
     case 'rematch': onRematch(); break;
     case 'left': onPeerLeft(m.seat); break;
     case 'pong': break;                                  // keepalive ack — nothing to do, just don't drop it
-    case 'hostleft': netToTitle('host left — back to title'); break;
+    case 'hostleft':
+      if(game.online && game.onlineDuel && game.state!=='matchend' && game.fighters){   // host bailed a live duel → the guest wins, not a silent bounce
+        const foe=game.fighters.find(f=>f.seat!==net.seat);
+        if(foe){ foe.hp=0; foe.hpShown=0; foe.eliminated=true; }
+        game.playerWon=true; game.grade=null; announce('OPPONENT LEFT — YOU WIN','#ffd34d'); game.state='matchend'; SFX.ko();
+      } else netToTitle('host left — back to title');
+      break;
   }
 }
 // ---- lobby actions ----
@@ -6432,6 +6445,9 @@ function onPeerLeft(seat){   // server told us a non-host seat dropped
     const foe=game.fighters && game.fighters.find(f=>f.seat===seat);   // opponent rage-quit a duel → award the bout, don't punch a dummy
     if(foe){ foe.hp=0; foe.hpShown=0; foe.eliminated=true; game.playerWon=true; game.grade=null;
       announce('OPPONENT LEFT — YOU WIN','#ffd34d'); game.state='matchend'; SFX.ko(); }
+  } else if(game.online && !game.onlineDuel && net.role==='host' && game.state!=='matchend'){
+    const f=game.fighters && game.fighters.find(x=>x.seat===seat);   // rumble: hand the dropped seat to the AI so it fights & dies normally (no immortal statue)
+    if(f && !f.ko){ f.human=false; delete net.guestState[seat]; announce('P'+(seat+1)+' LEFT — AI TAKES OVER','#ffd34d'); }
   }
 }
 function lobbyLeave(){ try{ if(net.ws) net.ws.close(); }catch(e){} net.ws=null; net.lobby=false; net.role=null; net.roster=[]; game.state='title'; }
@@ -6578,6 +6594,8 @@ function netLocalCosmetic(result){ // immediate feedback on the guest; host appl
 }
 function guestTick(){
   net.sendAcc++; if(net.sendAcc>=2){ net.sendAcc=0; sendMyInput(); }
+  // watchdog: a half-open/crashed host never sends 'hostleft', so free a guest stuck on a frozen frame
+  if(net.snapAt>0 && (game.state==='intro'||game.state==='fight') && performance.now()-net.snapAt>12000){ netToTitle('host connection lost'); return; }
   if(game.fighters) for(const f of game.fighters){
     f.x += (f.netX-f.x)*0.4; f.y += (f.netY-f.y)*0.4;
     f.animT++; f.updatePose();
