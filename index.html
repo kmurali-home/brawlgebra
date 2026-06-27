@@ -40,7 +40,7 @@
   <div id="frame"><canvas id="game"></canvas></div>
   <div id="hint">
     <kbd>←</kbd><kbd>→</kbd> move (2×tap = dash) · <kbd>↑</kbd> jump · <kbd>↓</kbd> block (↓+↑ drop) · <kbd>A</kbd> punch · <kbd>S</kbd> kick · <kbd>D</kbd> special
-    &nbsp;|&nbsp; attacks spend <b>AURA</b> (prices vary by fighter) — solve math + <kbd>⏎</kbd> to refill &amp; dodge &nbsp;|&nbsp; <kbd>M</kbd> music · <kbd>P</kbd> pause
+    &nbsp;|&nbsp; attacks spend <b>AURA</b> (prices vary by fighter) — answer + <kbd>⏎</kbd> to refill &amp; slip &nbsp;|&nbsp; <kbd>M</kbd> music · <kbd>P</kbd> pause
   </div>
 </div>
 
@@ -1493,7 +1493,7 @@ class Fighter {
     const ov=this.char.atk&&this.char.atk[type];               // per-character identity normal
     const def=ov? Object.assign({},ATK[type],ov) : ATK[type];
     if(!game.galaxy && !this.spend(ATK[type].cost)){ // STANDARD: every swing spends aura. GALAXY: attacks are FREE (the gate is your unlocked combos, not aura)
-      if(this===game.player) tip('noaura','No aura — solve a problem to power your strikes.');
+      if(this===game.player) tip('noaura','No aura — answer to power your strikes.');
       return false;
     }
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
@@ -1557,7 +1557,7 @@ class Fighter {
       // an UNTIMED solve no longer grants invulnerability — to avoid the hit you must TIME the ⚡NOW window or BLOCK.
       // (it still gives the aura/charge, handled in applySolve, plus a small repositioning hop)
       this.vx = -this.facing*3.4; this.dodgeT=8; this.dodgeCd=30;   // tag a brief post-solve window the CPU can pressure
-      if(this===game.player){ const o=computeDanger(this); if(o && framesToHit(o)<=70) floatText(this.x,this.y-150,'too early — wait for ⚡NOW, or BLOCK','#9aa3c8',12); }
+      if(this===game.player){ const o=computeDanger(this); if(o && framesToHit(o)<=70) floatText(this.x,this.y-150,'too early — wait for the NOW window, or BLOCK','#9aa3c8',12); }
       return;
     }
     if(parry){ // PARRY — held toward the foe: stay in the pocket to cash the counter-stagger, but commit to a SHORTER window
@@ -1583,7 +1583,7 @@ class Fighter {
     if((this.comboedHits||0)<2 || this.ko) return false;
     if(!free && this.aura<cost) return false;
     if(!free) this.aura-=cost;
-    if(free){ slowmo(240,0.4); flash(0.22,'#ffd34d'); addTrauma(0.55); floatText(this.x,this.y-210,'MATH BURST!','#ffd34d',22); }
+    if(free){ slowmo(240,0.4); flash(0.22,'#ffd34d'); addTrauma(0.55); floatText(this.x,this.y-210,'BURST — UNBOUND','#ffd34d',20); }
     game.burstChallenge=null;
     this.auraChipT=18; this.comboedHits=0; this.bufferedInput=null;
     this.stun=0; this.hurtT=0; this.dizzy=0; this.frozenT=0; this.missWobble=0; this.iframes=24; this.attack=null;
@@ -2333,7 +2333,7 @@ function resolveHits(att,def){
     if(att.attack && hb.type!=='special') att.attack.cancelOK=22;   // a confirmed normal opens a cancel window (~0.37s — forgiving enough to feel)
     if(chain){ announce('CHAIN!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212,'CHAIN FINISHER','#ff9f2a',20); }
     else if(att.combo>=2) floatText(att.x,att.y-202,'COMBO ×'+att.combo,'#ffd34d',15+Math.min(9,att.combo));
-    if(overclocked){ ring(cx,cy,'#ffd34d',46,4); floatText(cx,cy-30,'⚡',('#ffd34d'),22); }
+    if(overclocked){ ring(cx,cy,'#ffd34d',46,4); floatText(cx,cy-30,'◆',('#ffd34d'),20); }
     if(gcombo){ const big=gcombo>=3; flash(0.22,'#ffd9f0'); addTrauma(0.45+gcombo*0.06); ring(cx,cy, big?'#ff7ac0':'#ffd34d', 70+gcombo*16, 7); slowmo(240,0.4);
       floatText(def.x,def.y-212, '✦ COMBO ×'+gcombo, big?'#ff7ac0':'#ffd34d', 22+Math.min(8,gcombo*2));
       if(att.attack && att.attack.galaxyLaunch){ def.vy=-13; def.grounded=false; def.stun=Math.max(def.stun,34); def.dizzy=Math.max(def.dizzy,80); } }  // bigger combos launch
@@ -2399,7 +2399,7 @@ function applySolve(f, result, st, op){
     if(result==='miss') game.skill=clamp((game.skill||0.5)-0.06,0,1);
     else                game.skill=clamp((game.skill||0.5)+(took<70?0.05:took<140?0.03:0.012),0,1);
     store('skill', game.skill);
-    if(result!=='miss' && took<40){ f.overclock=game.frame+90; floatText(f.x,f.y-204,'⚡ OVERCLOCK',' #ffd34d'.trim(),15); }  // a FAST solve arms a +25% next swing
+    if(result!=='miss' && took<40){ f.overclock=game.frame+90; floatText(f.x,f.y-204,'SHARPENED','#ffd34d',15); }  // a FAST solve arms a +25% next swing
   }
   if(result==='miss'){
     // a wrong answer RATTLES you — but doesn't freeze you out: short stun, and you can BLOCK through the wobble (missWobble) to recover
@@ -2433,7 +2433,7 @@ function applySolve(f, result, st, op){
   f.doDodge(perfect, parry); f.addAura(gain); st.auraEarned=(st.auraEarned||0)+gain;
   floatText(f.x,f.y-(perfect?190:170),'+'+gain+' AURA','#7ae8ff',17);
   if(qtag) floatText(f.x,f.y-(perfect?214:194), qtag, qcol, 15);
-  if(gambit){ f.chargedHit=true; f.comboT=Math.max(f.comboT,80); floatText(f.x,f.y-(perfect?240:220),'🎲 GAMBIT ×2!','#ff7ac0',17); flash(0.1,'#ff7ac0'); }
+  if(gambit){ f.chargedHit=true; f.comboT=Math.max(f.comboT,80); floatText(f.x,f.y-(perfect?240:220),'GAMBIT — DOUBLED','#ff7ac0',16); flash(0.1,'#ff7ac0'); }
   if(perfect){
     const o=perfectFoe(f)||computeDanger(f); if(o) o.staggered(f.char.perfectStun, f.char.id==='frost');
     st.perfects=(st.perfects||0)+1; slowmo(380,0.45); flash(0.22,'#fff1c0'); addTrauma(0.2);
@@ -2584,7 +2584,7 @@ function startKO(loser, pit=false){
     loser.daze=true; loser.attack=null; loser.stun=9999; loser.dizzy=9999; loser.vx=0;
     winner.attack=null; projs.length=0; hazards.length=0;
     ans1=''; ans2='';
-    announce('PROVE IT','#ff3040');
+    announce('ERASE THEM','#ff3040');
     slowmo(600,0.35); SFX.charge();
     return;
   }
@@ -2685,7 +2685,7 @@ function rushSubmit(f,buf){
     if(r.kind==='galaxy'){   // GALAXY BURST — solving UNLOCKS combos, it does NOT attack
       const kit=game.galaxyKit||[]; let just=null; for(const k of kit) if(r.solved===k.thr) just=k;   // a combo unlocked right now?
       sparks(p.x,p.y-90,7,'#b48cff',4); ring(p.x,p.y-90,'#b48cff',34,3); addTrauma(0.14); SFX.correct(); slowmo(130,0.3);
-      floatText(p.x,p.y-160-Math.min(40,r.solved*4), just? just.pat.split('').join(' ')+' UNLOCKED!' : '+'+r.solved, '#c8a8ff', just?18:16);
+      floatText(p.x,p.y-160-Math.min(40,r.solved*4), just? just.pat.split('').join(' ')+' UNBOUND' : '+'+r.solved, '#c8a8ff', just?18:16);
       r.t=Math.min(GBURST_DUR, r.t+8);
       game.problem=rushProblem(); game.problemAt=game.frame; ans1='';
       if(r.solved>=GBURST_CAP) exitRush();
@@ -2717,7 +2717,7 @@ function exitRush(){
     flash(0.22,'#b48cff'); addTrauma(0.5); ring(p.x,p.y-90,'#b48cff',150,8); slowmo(380,0.45);
     const kit=game.galaxyKit||[], unlocked=kit.filter(k=>game.galaxyBest>=k.thr);
     const top=unlocked[unlocked.length-1];
-    announce(top? top.pat.split('').join(' ')+' — UNLOCKED!' : 'solve more to unlock combos!', '#c8a8ff');
+    announce(top? top.pat.split('').join(' ')+' — UNBOUND' : 'answer more to unbind your forms', '#c8a8ff');
     floatText(p.x,p.y-205, unlocked.length+'/'+kit.length+' COMBOS','#b48cff',24); SFX.special();
     game.rush=null; game.problem=newProblem(0); ans1=''; game.fightAt=game.frame;
     return;
@@ -2740,7 +2740,7 @@ function drawRush(){
   ctx.globalAlpha=0.09; ctx.strokeStyle=C; ctx.lineWidth=2;
   for(let i=0;i<10;i++){ const yy=(i*73+(game.frame*6)%73); ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy+34); ctx.stroke(); }
   ctx.restore();
-  slamText(gx?'THE RITE':'SOLVE RUSH', 116, gx?52:52, C, clamp((game.frame-(r.startAt||0))/12,0,1));
+  slamText(gx?'THE RITE':'ONSLAUGHT', 116, gx?52:52, C, clamp((game.frame-(r.startAt||0))/12,0,1));
   if(gx){
     const kit=game.galaxyKit||[], best=Math.max(r.solved, game.galaxyBest||0);
     txtO('BURST '+(r.gn||1)+'/2   ·   LV '+(game.galaxyLevel||1)+'   ·   solved '+r.solved, W/2, 176, 16, C2, {sw:0,mono:true});
@@ -2752,7 +2752,7 @@ function drawRush(){
   const cw=400, ch=92, cx=W/2, top=H-ch-16;
   rr(cx-cw/2,top,cw,ch,16); ctx.fillStyle = gx?'rgba(18,8,30,0.92)':'rgba(6,16,30,0.92)'; ctx.fill();
   ctx.lineWidth=3.5; ctx.strokeStyle=(game.frame>>2)%2?C:C2; ctx.stroke();
-  txtO(gx?'⚡ SOLVE FAST — UNLOCK YOUR COMBOS ⚡':'⚡ SOLVE FAST — KEEP THE COMBO GOING ⚡', cx, top+20, 11.5, C2, {sw:0});
+  txtO(gx?'ANSWER FAST — UNBIND YOUR FORMS':'ANSWER FAST — HOLD THE CHAIN', cx, top+20, 11.5, C2, {sw:0});
   txtO(game.problem.text+' = '+ans1+((game.frame/14|0)%2?'_':' '), cx, top+62, 34, '#fff', {mono:true,sw:0});
   ctx.fillStyle = gx?'rgba(180,140,255,0.25)':'rgba(120,232,255,0.25)'; ctx.fillRect(cx-cw/2+14, top+ch-13, cw-28, 5);
   ctx.fillStyle=C; ctx.fillRect(cx-cw/2+14, top+ch-13, (cw-28)*clamp(r.t/(gx?GBURST_DUR:RUSH_DUR),0,1), 5);
@@ -2897,7 +2897,7 @@ function rumbleStep(){
   updatePickups(); updateProjs(); updateHazards();
   game.playerHidden=false; game.hiddenRecent=0;
   if(!game.player.ko){
-    if(dangerInfo()>0) tip('teln','⚠ Someone\'s winding up — solve NOW to dodge!');
+    if(dangerInfo()>0) tip('teln','A strike is drawn — answer NOW to slip it.');
     if(game.player.spReady()) tip('spn','SPECIAL ready — press '+keyLabel(KEYS.special));
   }
   for(const a of fs) if(!a.ko) for(const b of fs) if(b!==a && !b.ko) resolveHits(a,b);
@@ -2979,7 +2979,7 @@ function step(){
     game.playerHidden = !game.mode2p && isConcealed(p,e);
     game.hiddenRecent = game.playerHidden? 20 : Math.max(0,(game.hiddenRecent||0)-1);
     if(game.playerHidden) tip('hide','Hidden! But your rival banks aura while you rest…');
-    if(dangerInfo()>0) tip('tel','⚠ He\'s winding up — solve NOW for a PERFECT DODGE');
+    if(dangerInfo()>0) tip('tel','He commits — answer in the NOW window to slip it clean.');
     // ANSWER RELOCK — when a strike crosses into its tight perfect window, your typed answer is WIPED.
     // A perfect dodge now demands SOLVING inside the ⚡NOW window (or BLOCK) — no holding a pre-typed answer from neutral.
     if(!game.mode2p && !game.online && !game.galaxy){   // GALAXY has no solve-dodge — math lives only in the bursts
@@ -2988,8 +2988,8 @@ function step(){
         if(pf.attack!==game.relockAtk){ game.relockAtk=pf.attack;
           if(ans1!==''){ ans1=''; cardFx.shake=Math.max(cardFx.shake||0,9); }
           cardFx.flash=Math.max(cardFx.flash||0,11); cardFx.col='#ffd34d';
-          floatText(p.x,p.y-200,'SOLVE NOW!','#ffd34d',18);
-          tip('relock','Your answer clears when he commits — re-solve in the ⚡NOW window, or BLOCK.');
+          floatText(p.x,p.y-200,'ANSWER — NOW','#ffd34d',18);
+          tip('relock','Your answer clears the instant he commits — answer again in the NOW window, or BLOCK.');
         }
       } else game.relockAtk=null;
     }
@@ -3617,7 +3617,7 @@ function drawDangerSolve(){   // FUSION FIX: during the ⚡NOW window, float the
   ctx.save(); ctx.textAlign='center';
   ctx.font=font(MONO,18); const w=ctx.measureText(txt).width+24;
   const pulse=0.55+Math.sin(game.frame*0.45)*0.45;
-  ctx.globalAlpha=pulse; txtO('⚡ NOW — SOLVE', sx, sy-32, 13, '#ffd34d', {sw:0,mono:true}); ctx.globalAlpha=1;
+  ctx.globalAlpha=pulse; txtO('◆ NOW — ANSWER', sx, sy-32, 13, '#ffd34d', {sw:0,mono:true}); ctx.globalAlpha=1;
   rr(sx-w/2, sy-24, w, 27, 7); ctx.fillStyle='rgba(8,10,20,0.85)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2; ctx.stroke();
   txtO(txt, sx, sy-5, 18, '#fff', {mono:true,sw:0});
@@ -3631,7 +3631,7 @@ function drawBurstChallenge(){   // MATH BURST — a 1-digit escape prompt over 
   ctx.save(); ctx.textAlign='center';
   ctx.globalAlpha=pulse; rr(sx-92,sy-30,184,31,8); ctx.fillStyle='rgba(50,8,14,0.9)'; ctx.fill();
   ctx.strokeStyle='#ff5a5a'; ctx.lineWidth=2; ctx.stroke(); ctx.globalAlpha=1;
-  txtO('🔥 BURST — press '+bc.ans, sx, sy-9, 15, '#ffd34d', {mono:true,sw:0});
+  txtO('BURST — '+bc.ans, sx, sy-9, 15, '#ffd34d', {mono:true,sw:0});
   ctx.fillStyle='#ff5a5a'; ctx.fillRect(sx-84, sy-3, 168*clamp(bc.t/100,0,1), 2);
   ctx.restore();
 }
@@ -3775,7 +3775,7 @@ function drawCard(){
   }
   ctx.font=font(DISP,11); ctx.textAlign='center';
   ctx.fillStyle = pw? '#ffe14d' : danger>0? '#ff8a8a': gam? '#ff7ac0':'#8fd8f8';
-  ctx.fillText(pw? '⚡ NOW! — SOLVE FOR A PERFECT DODGE ⚡' : danger>0?'⚠ INCOMING — solve to dodge ⚠': gam?'🎲 GAMBIT — ×2 AURA + CHARGE, or lose it ALL':'SOLVE — DODGE & GAIN AURA', cx, top+19);
+  ctx.fillText(pw? 'NOW — ANSWER, AND SLIP THE BLOW' : danger>0?'INCOMING — ANSWER TO SLIP IT': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL':'ANSWER — SLIP & DRAW AURA', cx, top+19);
   if(!game.mode2p && game.problem && game.problem.op && FN_STRIKE[game.problem.op]){ // what this solve will arm
     const fs=FN_STRIKE[game.problem.op];
     ctx.font=font(MONO,9.5); ctx.textAlign='right'; ctx.fillStyle=fs.col;
@@ -3817,7 +3817,7 @@ function drawCard(){
     rr(-30,-13,60,26,13);
     ctx.fillStyle=f.streak>=5?'#3a2604':'#0c2433'; ctx.fill();
     ctx.strokeStyle=f.streak>=5?'#ffd34d':'#2e9adf'; ctx.lineWidth=2; ctx.stroke();
-    txtO((f.streak>=5?'🔥':'⚡')+'×'+f.streak, 0, 6, 14, f.streak>=5?'#ffd34d':'#9fdcff',{sw:0,mono:true});
+    txtO('×'+f.streak, 0, 6, 14, f.streak>=5?'#ffd34d':'#9fdcff',{sw:0,mono:true});
     ctx.restore();
   };
   chip(game.player, cx+cw/2-36);
@@ -3830,7 +3830,7 @@ function drawFinisherCard(){
   ctx.fillStyle='rgba(24,5,12,0.9)'; ctx.fill();
   ctx.lineWidth=3;
   ctx.strokeStyle=(game.frame>>2)%2? '#ff3040':'#ffd34d'; ctx.stroke();
-  txtO('SOLVE TO ERASE THEM FROM THE EQUATION', cx, top+19, 12, '#ff8a8a',{sw:0});
+  txtO('ANSWER TO ERASE THEM FROM THE EQUATION', cx, top+19, 12, '#ff8a8a',{sw:0});
   const winner = game.koLoser===game.player? game.enemy : game.player;
   const buf = (game.mode2p && winner===game.enemy)? ans2 : ans1;
   txtO(game.finProblem.text+' = '+buf+((game.frame/24|0)%2?'_':''), cx, top+58, 30, '#fff',{mono:true,sw:0});
@@ -3859,7 +3859,7 @@ function drawCtlStrip(){ // always-visible command reference (C toggles)
   x=cap(x,H-14,keyLabel(KEYS.jump),'jump');
   x=cap(x,H-14,keyLabel(KEYS.block),'block');
   if(!game.mode2p) x=cap(x,H-14,'F','focus op');
-  if(!game.mode2p) x=cap(x,H-14,'R','SOLVE RUSH (focus full)');
+  if(!game.mode2p) x=cap(x,H-14,'R','ONSLAUGHT (focus full)');
   if(game.mode2p){
     let rx=W-238;
     rx=cap(rx,H-36,'←→↑↓','P2 move');
@@ -3867,7 +3867,7 @@ function drawCtlStrip(){ // always-visible command reference (C toggles)
     cap(W-238,H-14,'NUM 0-9 + NUM⏎','P2 solve');
   } else {
     ctx.font=font(MONO,9); ctx.fillStyle='#8a93b8'; ctx.textAlign='right';
-    ctx.fillText('0-9 · − · . · ⏎ solve · C hide keys', W-16, H-14);
+    ctx.fillText('0-9 · − · . · ⏎ answer · C hide keys', W-16, H-14);
   }
   ctx.restore(); ctx.globalAlpha=1;
 }
@@ -3932,7 +3932,7 @@ function drawBanners(){
   }
   if(game.state==='qed'){
     ctx.save(); ctx.translate(frnd(-3,3),frnd(-2,2));
-    slamText('SOLVED',250,92,'#ff2050',(150-game.mathT)/10);
+    slamText('QED',250,112,'#ff2050',(150-game.mathT)/10);
     ctx.restore();
     if(game.mathT<120) txtO('Q.E.D.', W/2, 300, 16, '#ffd34d',{mono:true,sw:3});
   }
@@ -5173,7 +5173,7 @@ function drawMatchEnd(){
     txtO(game.grade,0,24,64,gradeCol,{sw:0});
     ctx.restore();
   }
-  if(game.stats.qed) txtO('☠ SOLVED', W/2+140, 352, 12, '#ff3050',{mono:true,sw:3});
+  if(game.stats.qed) txtO('QED', W/2+140, 352, 12, '#ff3050',{mono:true,sw:3});
   drawScoreRow(400);
   if(game.weakOp){   // remediation hook: turn the weakness stat into a one-key targeted drill
     const wpulse=0.65+Math.sin(game.frame*0.1)*0.35; ctx.save(); ctx.globalAlpha=wpulse;
@@ -5332,7 +5332,7 @@ function render(){
     if(game.state==='fight'){
       if(game.galaxy) drawGalaxyHUD();   // GALAXY fight = no math card; show your unlocked combos instead
       else { if(!(game.mode==='rumble'&&game.player.ko)) drawCard();
-        if(!game.cinema && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.player.ko){ const pz=0.55+Math.sin(game.frame*0.3)*0.45; ctx.save(); ctx.globalAlpha=pz; txtO('⚡ FOCUS FULL — press R for SOLVE RUSH', W/2, H-142, 14, '#ffd34d', {sw:3}); ctx.restore(); } }
+        if(!game.cinema && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.player.ko){ const pz=0.55+Math.sin(game.frame*0.3)*0.45; ctx.save(); ctx.globalAlpha=pz; txtO('FOCUS FULL — press R for ONSLAUGHT', W/2, H-142, 14, '#ffd34d', {sw:3}); ctx.restore(); } }
       if(!game.cinema){ drawTip(); drawCtlStrip(); if(game.tutorial) drawTutorBanner(); } }
     // cinematic letterbox on KO (lb advances in updateFx)
     if(game.lb>0.01){
@@ -5374,7 +5374,7 @@ function drawNetHealth(){   // guest-only connection pip, reads net.snapAt (alre
 const BASE_CHAR={id:'james',name:'SOLOMON',tagline:'THE FINAL ANSWER',gi:'#ff4d5e',trim:'#ff9f2a',sigil:'=',
   hp:100,speed:1,scale:1,costMul:1,gainMul:1,dmg:1,auraMax:100,regen:0,streakMul:1,blockMul:1,
   perfectStun:46,mathNeed:0,upside:0,spKind:'dash',spName:'HAVOC DASH', build:{torso:23,head:'crown'},
-  quip:'I balance every line. Eventually, yours.'};
+  quip:'I balance every line. In the end, every one — to zero.'};
 // You. The unsworn initiate — the variable no method could solve for; sworn to none, so the robe is bare.
 const PROTAG={id:'initiate',name:'INITIATE',tagline:'THE UNSOLVED-FOR',gi:'#6f7fa8',trim:'#d8e0f0',sigil:null,
   hp:100,speed:1,scale:1,costMul:1,gainMul:1,dmg:1,auraMax:100,regen:0,streakMul:1,blockMul:1,
@@ -5438,21 +5438,21 @@ const SOLOMON_CHAR=Object.assign({},BASE_CHAR,{
   blurb:'The Equals, made playable.'});
 const ROSTER=[
  {id:'mauler',name:'MAXIMILIAN',tagline:'THE BOUNDLESS PRODUCT',gi:'#ff5a6a',trim:'#ffcf6a',sigil:'×',
-  quip:'Why count when you can crush?',
+  quip:'Everything that can grow, must. I am only the proof.',
   hp:125,speed:0.8,scale:1.13,costMul:0.55,gainMul:0.6,dmg:1.2,auraMax:70,regen:0.05,
   streakMul:0,blockMul:1,perfectStun:46,mathNeed:1,upside:2,
   spKind:'slam',spName:'QUAKE SLAM', build:{torso:28,head:'horns'},
   atk:{kick:{dmg:15,reach:96,wind:12,act:6,rec:22,heavy:true,hy:-66}},   // slow, armored crusher kick
-  blurb:'Barely needs math. Low ceiling, hard fists.'},
+  blurb:'Crude and near-unkillable. A low ceiling, fists like millstones.'},
  {id:'ember',name:'ADDISON',tagline:'THE MEASURED SUM',gi:'#46e08a',trim:'#d8f5e4',sigil:'+',
-  quip:'Measured. Always measured. Carry the one.',
+  quip:'I add only what is owed — not one more, not one less.',
   hp:100,speed:1.05,scale:1,costMul:1,gainMul:1,dmg:1,auraMax:100,regen:0,
   streakMul:1,blockMul:1,perfectStun:50,mathNeed:2,upside:3,
   spKind:'dash',spName:'INFERNO DASH', build:{torso:21,head:'topknot'},
   atk:{punch:{dmg:6,wind:4,act:4,rec:9}},   // measured, crisp jab
-  blurb:'Balanced fire. Math feeds the flame.'},
+  blurb:'Balanced and exact. Every answer feeds the flame.'},
  {id:'frost',name:'LESSING',tagline:'THE LAST DIFFERENCE',gi:'#7ae8ff',trim:'#e8f4ff',sigil:'−',
-  quip:'Take only what you need. I’ll be counting.',
+  quip:'Take enough away, and what is left cannot lie.',
   hp:100,speed:1,scale:1,costMul:1.1,gainMul:1,dmg:0.85,auraMax:100,regen:0,
   streakMul:1,blockMul:0.35,perfectStun:85,mathNeed:3,upside:4,
   spKind:'spear',spName:'GLACIAL LANCE', build:{torso:18,head:'hood',cape:true},
@@ -5464,7 +5464,7 @@ const ROSTER=[
   streakMul:2,blockMul:1,perfectStun:60,mathNeed:5,upside:5,
   spKind:'sigil',spName:'THEOREM BURST', build:{torso:17,head:'halo'},
   atk:{punch:{dmg:4,wind:3,act:3,rec:7}},   // fast, frail rekka jab
-  blurb:'Math is power. Power is everything.'},
+  blurb:'Frail, and fastest of all. The answer is power; power is the only proof.'},
 ];
 const MENU=[
   ['PLAY','1v1. Choose your form on the next screen — Standard, or the Rite of Silence.'],
