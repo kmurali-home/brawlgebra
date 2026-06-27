@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BRAWLGEBRA</title>
+<title>MODULUS</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
   html,body {
@@ -47,7 +47,7 @@
 <script>
 "use strict";
 //======================================================================
-//  BRAWLGEBRA — solve to survive. A math-powered fighting game.
+//  MODULUS — the one no one can solve. A fighter where the mind is the blade.
 //  Single file, Canvas 2D, zero dependencies. Double-click to play.
 //======================================================================
 const cv = document.getElementById("game");
@@ -2406,7 +2406,7 @@ function applySolve(f, result, st, op){
     f.streak=0; f.dizzy=30; f.stun=16; f.missWobble=30; f.flashT=5;
     if(f===game.player && game.problem && game.problem.gambit){ f.aura=0; f.auraChipT=18; f.dizzy=46;  // GAMBIT bust — you bet your bank and lost it
       floatText(f.x,f.y-198,'GAMBIT LOST!','#ff4d5e',20); addTrauma(0.06); }
-    floatText(f.x,f.y-170,'SCRAMBLED!','#ff4d5e',21); addTrauma(0.12); SFX.wrong();
+    floatText(f.x,f.y-170,'THE LINE BROKE','#ff4d5e',20); addTrauma(0.12); SFX.wrong();
     if(f===game.player) reactBanter('onMiss');
     if(f===game.player && game.chRule && game.chRule.tag==='subtract' && game.enemy && !game.enemy.ko){   // LESSING VIII: a sloppy answer leaves a false part standing — it heals him
       game.enemy.hp=Math.min(game.enemy.char.hp, game.enemy.hp+6); floatText(game.enemy.x,game.enemy.y-172,'+ false part','#ff9f6a',14); }
@@ -2740,7 +2740,7 @@ function drawRush(){
   ctx.globalAlpha=0.09; ctx.strokeStyle=C; ctx.lineWidth=2;
   for(let i=0;i<10;i++){ const yy=(i*73+(game.frame*6)%73); ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy+34); ctx.stroke(); }
   ctx.restore();
-  slamText(gx?'GALAXY BURST':'SOLVE RUSH', 116, gx?46:52, C, clamp((game.frame-(r.startAt||0))/12,0,1));
+  slamText(gx?'THE RITE':'SOLVE RUSH', 116, gx?52:52, C, clamp((game.frame-(r.startAt||0))/12,0,1));
   if(gx){
     const kit=game.galaxyKit||[], best=Math.max(r.solved, game.galaxyBest||0);
     txtO('BURST '+(r.gn||1)+'/2   ·   LV '+(game.galaxyLevel||1)+'   ·   solved '+r.solved, W/2, 176, 16, C2, {sw:0,mono:true});
@@ -3966,9 +3966,12 @@ function drawVS(t){ // round-1 splash — names crash in from the wings
 }
 function diffRect(i){ return {x:W/2-186+i*128, y:466, w:118, h:18}; }
 function startRect(){ return {x:W/2-150, y:446, w:300, h:50}; }
-const TAGS=['Solve. Dodge. Destroy.','Your brain is the joystick.',
-  'Carry the one. Then carry your opponent.','Divide and conquer. Literally.',
-  'Pure PK. Pure math.','Position wins fights. Scavengers win wars.'];
+const TAGS=['Draw. Hold. Erase.',
+  'They mastered one operation. You will master four.',
+  'Carry the one. Carry nothing else out of this hall.',
+  'Everyone breaks along a seam. Find his.',
+  'No spell. No steel. Only the answer, and the hand fast enough to draw it.',
+  'Hold your ground. Take what the dead leave behind.'];
 function drawSplash(){   // KMURALI PRODUCTIONS — Kinetic Minimal studio bumper
   const p = 1 - game.splashT/200;                       // 0..1
   ctx.fillStyle='#161A21'; ctx.fillRect(0,0,W,H);       // brand Ink
@@ -4024,35 +4027,24 @@ function drawDailyBadge(){     // surfaces the Daily + at-risk streak EXACTLY wh
   if(line2) txtO(line2, W/2, 51, 9.5, '#ffd34d', {mono:true,sw:0});
   ctx.restore();
 }
-function drawWordmark(cx, cy, sc){   // the BRAWL·GEBRA logo — beveled, embossed, sheened, operator-accented (canvas-drawn, works offline in the desktop build)
-  sc=sc||1; const sh=(game.frame%200)/200;
-  ctx.save(); ctx.translate(cx,cy); ctx.rotate(-0.02); ctx.scale(sc,sc);
-  ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font=font(DISP,68);
-  const wA=ctx.measureText('BRAWL').width, wB=ctx.measureText('GEBRA').width, tot=wA+wB;
-  const ax=-tot/2+wA/2, bx=-tot/2+wA+wB/2;
-  // operator glyphs orbiting behind the mark (the math motif)
-  ctx.font=font(DISP,30); ctx.globalAlpha=0.16;
-  ['+','−','×','÷'].forEach((o,i)=>{ const a=game.frame*0.009+i*1.57; ctx.fillStyle=i<2?'#ff7a88':'#7ad0ff';
-    ctx.fillText(o, Math.cos(a)*(tot/2+46), Math.sin(a)*28-8); });
-  ctx.globalAlpha=1; ctx.font=font(DISP,68);
-  const drawHalf=(txt,x,c)=>{
-    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillText(txt,x+5,7);                 // depth shadow
-    ctx.fillStyle=c.dark; ctx.fillText(txt,x+2.5,3);                          // dark bevel underside
-    const g=ctx.createLinearGradient(0,-52,0,12);                            // main face
-    g.addColorStop(0,c.hi); g.addColorStop(0.5,c.mid); g.addColorStop(1,c.lo);
-    ctx.fillStyle=g; ctx.fillText(txt,x,0);
-    ctx.save(); ctx.beginPath(); ctx.rect(-tot/2-16,-58,tot+32,26); ctx.clip();   // top emboss highlight
-    ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.fillText(txt,x,0); ctx.restore();
-  };
-  drawHalf('BRAWL', ax, {hi:'#ff9aa4',mid:'#ff4d5e',lo:'#a31f30',dark:'#240810'});
-  drawHalf('GEBRA', bx, {hi:'#a9e6ff',mid:'#2bb3ff',lo:'#0f6aa8',dark:'#06121f'});
-  ctx.save(); ctx.beginPath(); ctx.rect(-tot/2-16,-58,tot+32,72); ctx.clip();     // sheen sweep
-  const gx=-tot/2+sh*(tot+60), sg=ctx.createLinearGradient(gx-30,0,gx+30,0);
-  sg.addColorStop(0,'rgba(255,255,255,0)'); sg.addColorStop(0.5,'rgba(255,255,255,0.32)'); sg.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle=sg; ctx.fillText('BRAWL',ax,0); ctx.fillText('GEBRA',bx,0); ctx.restore();
-  ctx.strokeStyle='rgba(255,255,255,0.32)'; ctx.lineWidth=2;                      // math-rule underline + operators
-  ctx.beginPath(); ctx.moveTo(-tot/2,28); ctx.lineTo(tot/2,28); ctx.stroke();
-  ctx.font=font(MONO,13); ctx.fillStyle='rgba(255,211,77,0.9)'; ctx.fillText('+   −   ×   ÷', 0, 45);
+function drawWordmark(cx, cy, sc){   // MODULUS — a stark, cold-steel lockup flanked by the modulus bars |x|. The math is the accent, never the joke. (canvas-drawn, offline-safe)
+  sc=sc||1;
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(sc,sc);
+  ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font=font(DISP,64);
+  const txt='MODULUS', w=ctx.measureText(txt).width;
+  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillText(txt,4,6);                    // depth
+  ctx.fillStyle='#0a0d14'; ctx.fillText(txt,2,3);                            // dark bevel underside
+  const g=ctx.createLinearGradient(0,-46,0,12);                              // bone-white → cold steel
+  g.addColorStop(0,'#f5f8ff'); g.addColorStop(0.5,'#c4cedd'); g.addColorStop(1,'#717f93');
+  ctx.fillStyle=g; ctx.fillText(txt,0,0);
+  ctx.save(); ctx.beginPath(); ctx.rect(-w/2-30,-50,w+60,20); ctx.clip();     // top emboss
+  ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fillText(txt,0,0); ctx.restore();
+  // the modulus bars | … | — absolute value, the indivisible one. The single neon accent; the math, stated not winked.
+  const bx=w/2+28, ah=46, pulse=0.7+0.3*Math.sin(game.frame*0.05);
+  ctx.strokeStyle='#7ae8ff'; ctx.lineWidth=4; ctx.lineCap='round';
+  ctx.shadowColor='#7ae8ff'; ctx.shadowBlur=12*pulse;
+  ctx.beginPath(); ctx.moveTo(-bx,-ah); ctx.lineTo(-bx,12); ctx.moveTo(bx,-ah); ctx.lineTo(bx,12); ctx.stroke();
+  ctx.shadowBlur=0;
   ctx.restore();
 }
 function drawKeyArt(){   // a dedicated hero composition for the store capsule / social preview — press K from the title, screenshot it
@@ -4081,8 +4073,8 @@ function drawKeyArt(){   // a dedicated hero composition for the store capsule /
   ctx.save(); ctx.translate(W*0.70,H*0.80); ctx.scale(2.7,2.7); drawPose(fR,fR.P,0,0,1,null,0.08); ctx.restore();
   gradeFrame(); vignette();
   drawWordmark(W/2, 116, 1.18);
-  txtO('SOLVE TO SURVIVE', W/2, 196, 17, '#d8e2ff', {mono:true,sw:3});
-  txtO('a fighting game where mental math is the only weapon', W/2, H-34, 12, 'rgba(205,205,235,0.85)', {mono:true,sw:0});
+  txtO('NO ONE HAS SOLVED YOU YET', W/2, 196, 16, '#d8e2ff', {mono:true,sw:3});
+  txtO('four sworn Orders · one war over every number', W/2, H-34, 12, 'rgba(205,205,235,0.85)', {mono:true,sw:0});
   txtO('press any key to return', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
 }
 // ===== AUTO-PLAYING TRAILER — a one-take, director-sequenced cinematic you screen-record =====
@@ -4157,11 +4149,13 @@ function drawTrailerOverlay(){
 function drawTitle(){
   ctx.fillStyle='rgba(3,2,10,0.45)'; ctx.fillRect(0,0,W,H);
   if(game.profile && (game.profile.matches||0)>0) drawDailyBadge();   // don't shout Daily at a newcomer who hasn't fought yet
-  // logo — the styled, beveled wordmark
-  drawWordmark(W/2, 192, 1);
-  // rotating tagline
+  // logo — the cold MODULUS lockup
+  drawWordmark(W/2, 190, 1);
+  // positioning line — fixed, stated not sold
+  txtO('THE ONE NO ONE CAN SOLVE', W/2, 232, 12, '#aeb8cc', {mono:true, sw:2});
+  // rotating line — secondary
   const tag=TAGS[Math.floor(game.frame/260)%TAGS.length];
-  txtO(tag, W/2, 260, 14, '#cabbe0', {mono:true, sw:0});
+  txtO(tag, W/2, 260, 11, 'rgba(150,160,185,0.7)', {mono:true, sw:0});
   // mode menu
   game.menuRects=[];
   MENU.forEach((m,i)=>{
@@ -4186,17 +4180,17 @@ function drawTitle(){
     txtO((i+1)+' '+DIFF.names[i], r.x+r.w/2, r.y+14, 11, sel?'#ffd34d':'#9a8fb8',{mono:true,sw:0});
   }
   txtO('W/S navigate · ⏎ select · R records · M music', W/2, 506, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
-  txtO('🎬  T trailer  ·  V showcase  ·  K key art', W/2, 526, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});
+  txtO('T trailer  ·  V showcase  ·  K key art', W/2, 526, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});
 }
 function drawWelcome(){   // first-run gate: teach before you ask
   ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
   drawWordmark(W/2, 142, 0.66);
-  txtO('Solve math to power your punches.', W/2, 200, 16, '#9fdcff', {sw:0});
+  txtO('Answer, and your strikes land. Falter, and they don’t.', W/2, 200, 15, '#9fdcff', {sw:0});
   const pulse=0.55+Math.sin(game.frame*0.08)*0.45;
   rr(W/2-230, 268, 460, 96, 16); ctx.fillStyle='rgba(14,10,30,0.94)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5; ctx.stroke();
-  txtO('NEW HERE?', W/2, 300, 23, '#ffd34d', {sw:4});
-  txtO('Learn to fight in 60 seconds', W/2, 330, 15, '#e8ecff', {sw:0});
+  txtO('UNSWORN', W/2, 300, 23, '#ffd34d', {sw:4});
+  txtO('Learn the form in 60 seconds', W/2, 330, 15, '#e8ecff', {sw:0});
   ctx.globalAlpha=pulse; txtO('press ENTER  ·  or click anywhere', W/2, 354, 12, '#ffd34d', {mono:true,sw:0}); ctx.globalAlpha=1;
   txtO('(already know it? press T to skip)', W/2, 396, 10, 'rgba(160,150,190,0.7)', {mono:true,sw:0});
 }
@@ -4424,18 +4418,18 @@ function drawLobby(){
     rr(R.warmup.x,R.warmup.y,R.warmup.w,R.warmup.h,8);
     ctx.fillStyle=on?'rgba(60,48,20,0.9)':'rgba(20,14,28,0.85)'; ctx.fill();
     ctx.strokeStyle=on?'#ffd34d':'#3d2658'; ctx.lineWidth=1.4; ctx.stroke();
-    txtO('⚡ BIG-BRAIN BONUS  '+(on?'ON':'OFF')+'   (B)', W/2, ty+5, 13, on?'#ffd34d':'#8a93b8',{mono:true,sw:0});
+    txtO('FIRST BLOOD  '+(on?'ON':'OFF')+'   (B)', W/2, ty+5, 13, on?'#ffd34d':'#8a93b8',{mono:true,sw:0});
   } else {
-    txtO('⚡ BIG-BRAIN BONUS — solve an opener for a health edge (host decides)', W/2, ty, 11, '#8fb8d8',{mono:true,sw:0});
+    txtO('FIRST BLOOD — the faster mind enters the bout already winning (host decides)', W/2, ty, 11, '#8fb8d8',{mono:true,sw:0});
   }
   R.leave=btn('LEAVE (T)', W/2-70, H-46, 140, 30, false);
 }
 function drawWarmup(){
   const w=game.warmup;
   ctx.fillStyle='rgba(2,3,10,0.9)'; ctx.fillRect(0,0,W,H);
-  txtO('⚡ BIG-BRAIN BONUS', W/2, 92, 30, '#ffd34d', {sw:5});
-  txtO(game.onlineDuel? 'first to solve starts the duel with a health-bar edge'
-                      : 'solve it to start at full — miss it and you start chipped', W/2, 128, 12, '#cabbe0',{mono:true,sw:0});
+  txtO('FIRST BLOOD', W/2, 92, 30, '#d8e2ff', {sw:4});
+  txtO(game.onlineDuel? 'the faster mind draws first — and enters the bout already winning'
+                      : 'answer, and you enter whole — falter, and you enter bleeding', W/2, 128, 12, '#cabbe0',{mono:true,sw:0});
   if(!w) return;
   const elapsed=game.frame-w.start, left=Math.max(0, Math.ceil(WARMUP_SECS - elapsed/60));
   rr(W/2-220, 184, 440, 156, 16); ctx.fillStyle='rgba(10,12,28,0.95)'; ctx.fill();
@@ -4890,10 +4884,10 @@ function drawSelect(){
     const g=game.galaxy;
     ctx.font=font(MONO,12);
     const segW=158, cgap=5, ctrlW=segW*2+cgap, gap=18, x0=W/2-(ctrlW+gap+spw)/2;
-    const gloss = g? 'GALAXY BRAIN — do 2 math bursts to unlock combo strings, then brawl free (no math mid-fight)'
-                   : 'STANDARD — solve math during the fight to power every move';
+    const gloss = g? 'RITE OF SILENCE — prove yourself twice at the bell, then fight unbound, on instinct alone'
+                   : 'STANDARD — every blow is paid for in answers, mid-fight, in real time';
     game.arcadeRect={x:x0, y:rowY, w:ctrlW, h:24};   // clicking the control flips the style (so does E)
-    [['STANDARD',false,'#7ae8ff'],['GALAXY BRAIN',true,'#b48cff']].forEach((s,i)=>{
+    [['STANDARD',false,'#7ae8ff'],['RITE OF SILENCE',true,'#b48cff']].forEach((s,i)=>{
       const active=(s[1]===g), sx=x0+i*(segW+cgap);
       rr(sx,rowY,segW,24,8); ctx.fillStyle=active?hexA(s[2],0.20):'rgba(14,17,28,0.9)'; ctx.fill();
       ctx.strokeStyle=active?s[2]:'#3d4668'; ctx.lineWidth=active?2.2:1.2; ctx.stroke();
@@ -5473,10 +5467,10 @@ const ROSTER=[
   blurb:'Math is power. Power is everything.'},
 ];
 const MENU=[
-  ['PLAY','1v1 vs the computer — pick STANDARD or GALAXY BRAIN combat on the next screen'],
-  ['MODES','more ways to fight — boss ladder, endless run, story & practice'],
-  ['DAILY FIGHT','one fight everyone in the world gets today — win it to grow your streak'],
-  ['MULTIPLAYER','play your friends online — 1v1 duel, or 5-player rumble (AI fills empty seats)'],
+  ['PLAY','1v1. Choose your form on the next screen — Standard, or the Rite of Silence.'],
+  ['MODES','the boss ladder, the endless gauntlet, the campaign, the training hall'],
+  ['DAILY FIGHT','one trial the whole world is set today — win it, and the streak holds'],
+  ['MULTIPLAYER','face other initiates online — a 1v1 duel, or a five-way rumble (the lost are filled by AI)'],
   ['HOW TO PLAY',''],
   ['SETTINGS',''],
 ];
@@ -5650,7 +5644,7 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
   const r=game.dailyResult||{}, day=dayIndex();
   const acc=game.stats? Math.round(100*(game.stats.correct||0)/Math.max(1,game.stats.asked||0)) : 0;
   const grid=['🟩','🟩','🟩','🟦','🟦'].map((g,i)=> i<Math.round(acc/20)? '🟩':'⬛').join('');
-  return 'BRAWLGEBRA Daily #'+day+'\n'+(r.score||0)+' pts · '+acc+'% · ✦'+(r.streak||0)+'-day\n'+grid+'\nbrawlgebra';
+  return 'MODULUS · Trial #'+day+'\n'+(r.score||0)+' pts · '+acc+'% · ✦'+(r.streak||0)+'-day\n'+grid+'\nmodulus';
 }
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
@@ -6466,7 +6460,7 @@ function copyRoomLink(){   // one-tap invite: code + a deep link that pre-fills 
   const canCopy = navigator.clipboard && location.protocol!=='file:';   // clipboard needs a secure-ish context; file:// origin is the literal 'null'
   if(!canCopy){ net.shareFail=1; return; }                              // be honest: fall back to showing the code, don't fake a ✓
   const link=location.origin+location.pathname+'?room='+net.room;
-  navigator.clipboard.writeText('Join my BRAWLGEBRA room '+net.room+' → '+link)
+  navigator.clipboard.writeText('Step into my circle in MODULUS — room '+net.room+' → '+link)
     .then(()=>{ net.codeCopied=game.frame; net.shareFail=0; })
     .catch(()=>{ net.shareFail=1; });
 }
