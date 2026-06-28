@@ -39,8 +39,8 @@
 <div id="wrap">
   <div id="frame"><canvas id="game"></canvas></div>
   <div id="hint">
-    <kbd>←</kbd><kbd>→</kbd> move (2×tap = dash) · <kbd>↑</kbd> jump · <kbd>↓</kbd> block (↓+↑ drop) · <kbd>A</kbd> punch · <kbd>S</kbd> kick · <kbd>D</kbd> special
-    &nbsp;|&nbsp; attacks spend <b>AURA</b> (prices vary by fighter) — answer + <kbd>⏎</kbd> to refill &amp; slip &nbsp;|&nbsp; <kbd>M</kbd> music · <kbd>P</kbd> pause
+    <kbd>←</kbd><kbd>→</kbd> move (2×tap = dash) · <kbd>↑</kbd> jump · <kbd>↓</kbd> block (↓+↑ drop)
+    &nbsp;|&nbsp; answer + <kbd>⏎</kbd> to refill <b>AURA</b> &amp; slip &nbsp;|&nbsp; <kbd>M</kbd> music · <kbd>P</kbd> pause
   </div>
 </div>
 
@@ -3863,16 +3863,10 @@ function drawCtlStrip(){ // always-visible command reference (C toggles)
     ctx.fillStyle='#8a93b8'; ctx.fillText(desc,x+kw+4,y);
     return x+kw+4+ctx.measureText(desc).width+11;
   };
-  let x=16;
-  x=cap(x,H-36,keyLabel(KEYS.punch),'punch');
-  x=cap(x,H-36,keyLabel(KEYS.kick),'kick');
-  x=cap(x,H-36,keyLabel(KEYS.special),'special / BURST');
-  x=16;
+  let x=16;   // only the obvious movement keys down here — the attack/special kit lives in the top-left panel
   x=cap(x,H-14,keyLabel(KEYS.left)+keyLabel(KEYS.right),'move·2×dash');
   x=cap(x,H-14,keyLabel(KEYS.jump),'jump');
   x=cap(x,H-14,keyLabel(KEYS.block),'block');
-  if(!game.mode2p) x=cap(x,H-14,'F','focus op');
-  if(!game.mode2p) x=cap(x,H-14,'R','ONSLAUGHT (focus full)');
   if(game.mode2p){
     let rx=W-238;
     rx=cap(rx,H-36,'←→↑↓','P2 move');
