@@ -4853,16 +4853,17 @@ function drawSelect(){
     ctx.restore();
     txtO(c.name, x+cw/2, y+152, 21, sel?'#ffd34d':'#efe9ff',{sw:4});
     txtO(c.tagline, x+cw/2, y+168, 9, '#8a93b8',{mono:true,sw:0});
-    pipRow('NEEDS MATH', c.mathNeed, '#7ae8ff', x+16, y+194, cw-32);
-    pipRow('MAX POWER',  c.upside,   '#ffd34d', x+16, y+218, cw-32);
-    miniBar('HP',  c.hp/125,                    x+16, y+248, cw-32);
-    miniBar('SPD', c.speed/1.05,                x+16, y+266, cw-32);
-    miniBar('PWR', c.dmg*(1+c.streakMul*0.25)/1.5, x+16, y+284, cw-32);
-    ctx.textAlign='center'; ctx.fillStyle='#9aa3c8';
-    let bf=8.5; ctx.font=font(MONO,bf);                 // auto-shrink the blurb to fit narrower cards
-    while(ctx.measureText(c.blurb).width>cw-16 && bf>6){ bf-=0.5; ctx.font=font(MONO,bf); }
-    ctx.fillText(c.blurb, x+cw/2, y+304);
-    txtO('★ '+c.spName, x+cw/2, y+320, 10, '#ffd34d',{mono:true,sw:0});
+    miniBar('HP',    c.hp/125,    x+16, y+190, cw-32);   // light body archetype (math economy is uniform now)
+    miniBar('SPEED', c.speed/1.1, x+16, y+208, cw-32);
+    txtO('SPECIALS', x+cw/2, y+234, 9, '#8fd8f8',{sw:0});   // the 3-special KIT is the fighter's identity (tier=power identical across all; this is flavor)
+    { const kit=spKitFor(c);
+      for(let t=0;t<3;t++){
+        let nm=(t+1)+'  '+kit[t].name, bf=9.5; ctx.font=font(MONO,bf); ctx.textAlign='center';
+        while(ctx.measureText(nm).width>cw-18 && bf>6.5){ bf-=0.5; ctx.font=font(MONO,bf); }
+        ctx.fillStyle = t===2? (c.gi||'#ffd34d') : '#cdd6ee';
+        ctx.fillText(nm, x+cw/2, y+250+t*16);
+      } }
+    // (blurb dropped from the card — the tagline + SPECIALS kit carry identity now, and the 5-card layout is too narrow for it)
     if(!game.mode2p){ // best grade at this difficulty (versus or tower, whichever ranks higher)
       const b1=bests[c.id+'_'+DIFF.level], b2=bests['tower_'+c.id+'_'+DIFF.level];
       const bg=(GRADE_RANK[b1]||0)>=(GRADE_RANK[b2]||0)? b1 : b2;
@@ -4870,6 +4871,21 @@ function drawSelect(){
     }
     if(game.mode2p && game.pickPhase===2 && i===game.p1Idx)
       txtO('P1 ✓', x+30, y+24, 11, game.player.glow||'#7ae8ff', {mono:true,sw:3});
+    if(charLocked(c)){   // an Order, sealed until the campaign is won
+      rr(x,y,cw,chh,12); ctx.fillStyle='rgba(4,5,12,0.78)'; ctx.fill();
+      ctx.strokeStyle=sel?'#ffd34d':'#3a3354'; ctx.lineWidth=sel?2.5:1.5; ctx.stroke();
+      ctx.save(); ctx.strokeStyle='#8a93b8'; ctx.lineWidth=2.4;   // a small drawn padlock (no emoji)
+      ctx.strokeRect(x+cw/2-11, y+150, 22, 17);
+      ctx.beginPath(); ctx.arc(x+cw/2, y+150, 8, Math.PI, 0); ctx.stroke(); ctx.restore();
+      txtO('SEALED', x+cw/2, y+196, 16, '#cabbe0',{sw:3});
+      txtO('win the campaign', x+cw/2, y+218, 9.5, '#8a93b8',{mono:true,sw:0});
+      txtO('to earn this Order', x+cw/2, y+232, 9.5, '#8a93b8',{mono:true,sw:0});
+    }
+  }
+  if(game.gateMsg && game.frame-game.gateMsg<150){   // tried to pick a sealed Order
+    const a=1-(game.frame-game.gateMsg)/150; ctx.globalAlpha=a;
+    txtO('The four Orders are SEALED until the campaign is won.', W/2, 84, 12, '#ff9f6a',{mono:true,sw:0});
+    ctx.globalAlpha=1;
   }
   // bottom row: ARCADE single/endless toggle (if applicable) + stage picker, side by side, below the cards
   const isArcade = (game.mode==='cpu'||game.mode==='gauntlet'||game.practice);
@@ -5385,7 +5401,9 @@ const BASE_CHAR={id:'james',name:'SOLOMON',tagline:'THE FINAL ANSWER',gi:'#ff4d5
 // You. The unsworn initiate — the variable no method could solve for; sworn to none, so the robe is bare.
 const PROTAG={id:'initiate',name:'INITIATE',tagline:'THE UNSOLVED-FOR',gi:'#6f7fa8',trim:'#d8e0f0',sigil:null,
   hp:100,speed:1,scale:1,costMul:1,gainMul:1,dmg:1,auraMax:100,regen:0,streakMul:1,blockMul:1,
-  perfectStun:50,mathNeed:2,upside:3,spKind:'dash',spName:'PROOF RUSH', build:{torso:21,head:'plain'}};
+  perfectStun:50,mathNeed:2,upside:3,spKind:'dash',spName:'PROOF RUSH', build:{torso:21,head:'plain'},
+  quip:'I was sworn to nothing. That is why I can carry all four.',
+  blurb:'No order, no gimmick — the blank slate the four cannot solve for.'};
 // ---- BUILD YOUR INITIATE: the unsworn fighter you design (name + robe + mark + stance) ----
 const ROBES=[
   {name:'Slate',   gi:'#6f7fa8', trim:'#d8e0f0'},   // canon unsworn grey
@@ -5570,7 +5588,9 @@ function confirmPick(){
     game.state='story'; SFX.ui(); return;
   }
   if(mode!=='2p'){
-    game.player.setCharacter(playableRoster()[game.charIdx]);
+    const pick=playableRoster()[game.charIdx];
+    if(charLocked(pick)){ SFX.wrong(); game.gateMsg=game.frame; return; }   // this Order is still sealed — win the campaign first
+    game.player.setCharacter(pick);
     if(mode==='tower'){
       game.towerIdx=0; game.ladder=buildLadder(game.player.char.id);
       game.enemy.setCharacter(game.ladder[0]);
@@ -5578,7 +5598,7 @@ function confirmPick(){
       game.gWins=0;
       game.enemy.setCharacter(gauntletFoe());
     } else if(mode==='rumble'){
-      const others=[...ROSTER, BASE_CHAR].filter(c=>c.id!==game.player.char.id); // exactly the 4 OTHER fighters
+      const others=[...ROSTER, BASE_CHAR].filter(c=>c.id!==game.player.char.id).slice(0,4); // exactly the 4 OTHER fighters (cap so the Initiate doesn't add a 6th seat)
       game.enemy.setCharacter(others[0]);
       game.extras=others.slice(1).map((c,i)=>
         new Fighter({name:c.name, x:300+i*600, facing:i%2?1:-1, gi:c.gi, trim:c.trim, char:c}));
@@ -5592,7 +5612,8 @@ function confirmPick(){
     startMatch();
     return;
   }
-  if(game.pickPhase===1){ game.p1Idx=game.charIdx; game.pickPhase=2; SFX.ui(); return; }
+  if(game.pickPhase===1){ if(charLocked(playableRoster()[game.charIdx])){ SFX.wrong(); game.gateMsg=game.frame; return; } game.p1Idx=game.charIdx; game.pickPhase=2; SFX.ui(); return; }
+  if(charLocked(playableRoster()[game.charIdx])){ SFX.wrong(); game.gateMsg=game.frame; return; }
   game.player.setCharacter(playableRoster()[game.p1Idx]);
   const c2=playableRoster()[game.charIdx];
   game.enemy.setCharacter(c2);
@@ -5776,9 +5797,11 @@ function checkUnlocks(){
   if(newly.length){ store('unlocks',u); game.newUnlocks=(game.newUnlocks||[]).concat(newly); }
   game.unlocks=u; return u;
 }
-function playableRoster(){                              // ROSTER + SOLOMON once unlocked
-  return (game.unlocks&&game.unlocks.solomon)? [...ROSTER, SOLOMON_CHAR] : ROSTER;
+function playableRoster(){   // the Initiate is always yours; the four Orders are EARNED by finishing the campaign; SOLOMON once unlocked
+  const base=[PROTAG, ...ROSTER];
+  return (game.unlocks&&game.unlocks.solomon)? [...base, SOLOMON_CHAR] : base;
 }
+function charLocked(c){ return ROSTER.includes(c) && (game.storyProg||0) < STORY.length; }   // an Order, before the saga is won
 // the achievement checklist shown on the RECORDS screen — the "what's left to chase" list
 function achievements(){
   const p=game.profile||load('profile',freshProfile());
@@ -6720,8 +6743,8 @@ game.player = new Fighter({name:'AXIOM', x:WORLD_W/2-420, facing:1,  gi:'#2bb3ff
 game.enemy  = new Fighter({name:'CHAOS', x:WORLD_W/2+420, facing:-1, gi:'#ff4d5e', trim:'#ff9f2a', isCPU:true});
 game.player.setCharacter(ROSTER[1]); game.player.reset(WORLD_W/2-420,1); // EMBER by default
 game.enemy.setCharacter(ROSTER[2]); game.enemy.reset(WORLD_W/2+420,-1);   // a real default foe so a boot-fired tutorial lands on a valid fight
-game.charIdx=1;
-const previews=[...ROSTER, SOLOMON_CHAR].map(c=> new Fighter({name:c.name, x:0, facing:1, gi:c.gi, trim:c.trim, char:c}));
+game.charIdx=0;   // default to the Initiate (always unlocked; the four Orders are sealed until the campaign is won)
+const previews=[PROTAG, ...ROSTER, SOLOMON_CHAR].map(c=> new Fighter({name:c.name, x:0, facing:1, gi:c.gi, trim:c.trim, char:c}));   // order matches playableRoster() (Initiate first)
 game.player.opp = game.enemy; game.enemy.opp = game.player;
 game.pWins=0; game.eWins=0; game.round=1; game.timer=75; game.heat=0;
 game.playerHidden=false; game.hiddenRecent=0; game.lastTapKey=''; game.lastTapAt=-99;
