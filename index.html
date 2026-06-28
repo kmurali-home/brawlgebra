@@ -557,12 +557,7 @@ addEventListener("keydown", e => {
     return;
   }
   if(lk==='p' && !game.online && (game.state==='fight'||game.state==='intro')){ game.paused=!game.paused; SFX.ui(); return; }
-  if(lk==='f' && game.state==='fight' && !game.mode2p){   // OP FOCUS — bias the math stream to a chosen operation so you can arm that strike on demand
-    const seq=[null,'+','−','×','÷']; game.focusOp=seq[(seq.indexOf(game.focusOp)+1)%seq.length]; game.fDone=(game.fDone||0)+1; SFX.ui();
-    if(game.focusOp) floatText(game.player.x,game.player.y-150,'FOCUS '+game.focusOp,FN_STRIKE[game.focusOp].col,16);
-    else floatText(game.player.x,game.player.y-150,'FOCUS OFF','#9aa3c8',14);
-    return;
-  }
+  // (retired) OP FOCUS (F) — biased the math stream to arm an operator-strike; specials are the per-fighter KIT now, so F does nothing
   if(game.paused) return;
   if(lk==='c' && game.state==='fight'){ game.showCtl=!game.showCtl; store('ctl',game.showCtl); return; }
 
@@ -1228,6 +1223,7 @@ const projs=[];   // FROST's glacial lances
 const hazards=[]; // ORACLE's theorem sigils
 function fireSpecial(f,a){
   const kind=a.kind||'dash';
+  if(kind==='dash') return;   // a dash is a melee lunge resolved by normal hit-resolution — no projectile/hazard (else it double-dips damage + drops a stray glyph)
   const col=a.spCol || f.accent;
   const dmg=(a.def&&a.def.dmg)||14;
   const targets = game.mode==='rumble'? rumbleFoes(f) : [f.opp];
@@ -1730,7 +1726,10 @@ class Fighter {
       if(a.ph==='tel' && game.frame%3===0) converge(this, this.cols.trim);
       if(a.t<=0){
         if(a.ph==='tel'){ a.ph='wind'; a.t=a.def.wind; SFX.whoosh(); }
-        else if(a.ph==='wind'){ a.ph='act'; a.t=a.def.act; if(a.type==='special') fireSpecial(this,a); }
+        else if(a.ph==='wind'){ a.ph='act'; a.t=a.def.act;
+          if(a.type==='special') fireSpecial(this,a);
+          if(a.rise){ this.vy=-13.5; this.grounded=false; ring(this.x,this.y-6,a.spCol||this.accent,84,5); for(let i=0;i<11;i++) ember(this.x+frnd(-16,16), this.y-frnd(0,44), a.spCol||this.accent); }   // CARRY THE ONE = a rising uppercut, not a flat lunge
+        }
         else if(a.ph==='act'){ a.ph='rec'; a.t=a.def.rec;
           if(!this.hitThisSwing){ dust(this.x+this.facing*22, this.floorY||GROUND, 3, 1.7); if(this===game.player) addTrauma(0.05); if(a.def.heavy) a.t+=3; }  // WHIFF: felt over-commitment + a touch more recovery on heavies
         }
@@ -3789,12 +3788,7 @@ function drawCard(){
   ctx.font=font(DISP,11); ctx.textAlign='center';
   ctx.fillStyle = pw? '#ffe14d' : danger>0? '#ff8a8a': gam? '#ff7ac0':'#8fd8f8';
   ctx.fillText(pw? 'NOW — ANSWER, AND SLIP THE BLOW' : danger>0?'INCOMING — ANSWER TO SLIP IT': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL':'ANSWER — SLIP & DRAW AURA', cx, top+19);
-  if(!game.mode2p && game.problem && game.problem.op && FN_STRIKE[game.problem.op]){ // what this solve will arm
-    const fs=FN_STRIKE[game.problem.op];
-    ctx.font=font(MONO,9.5); ctx.textAlign='right'; ctx.fillStyle=fs.col;
-    ctx.fillText('arms '+game.problem.op, cx+cw/2-12, top+19);
-    ctx.textAlign='center'; ctx.font=font(DISP,11);
-  }
+  // (retired) the "arms <op>" hint — specials are the per-fighter KIT now (D fires the best you can afford), not operator-armed
   if(game.reveal && game.reveal.t>0){ // show what the answer was — AND how to get it (teach, don't just test)
     ctx.globalAlpha=Math.min(1,game.reveal.t/40);
     ctx.font=font(MONO,13); ctx.fillStyle='#ff8a8a';
@@ -4288,7 +4282,7 @@ function drawHowTo(){
   ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
   const rows=[
    ['#7ae8ff','SOLVE MATH',
-    'Type the answer + ⏎ anytime. Correct = +AURA. Wrong = scrambled (we show you the answer + the method). Press F to FOCUS one operation and steer the stream.'],
+    'Type the answer + ⏎ anytime. Correct = +AURA. Wrong = scrambled — we show you the answer and the method, so you learn it.'],
    ['#ffd34d','SPEND AURA',
     'Every attack — punch (A), kick (S), special (D) — spends AURA up front. No aura, no swing. Solving math is your only refuel, so keep solving.'],
    ['#ff9f2a','COMBO & CANCEL',
@@ -5685,8 +5679,7 @@ const TUTOR_STEPS=[
   'STEP 3 — CANCEL: land a '+keyLabel(KEYS.punch)+' punch, then quickly press '+keyLabel(KEYS.kick)+' to chain into a kick before the window closes.',
   'STEP 4 — BURST: the dummy is comboing you. Press '+keyLabel(KEYS.special)+' while stunned to BURST out — combos are an exchange, not a free juggle.',
   'STEP 5 — The dummy attacks (red ! ). Your answer CLEARS when it commits — re-solve in the gold ⚡NOW window to PERFECT-DODGE and stagger it.',
-  'STEP 6 — Press F to FOCUS an operation: it biases the problem stream so you can farm one function and arm its STRIKE on demand.',
-  'You’ve got it: solve to power up, chain & burst, time the ⚡NOW solve to dodge, and focus an op to arm strikes. Your first real fight begins…',
+  'You’ve got it: solve to power up, chain & burst, and time the ⚡NOW solve to dodge. In the fight, '+keyLabel(KEYS.special)+' fires the strongest of your three SPECIALS you can afford. Your first real fight begins…',
 ];
 function startTutorial(){
   // capture a SAFE fight to land on after the lesson (the boot enemy may be unset → default to a real ROSTER foe)
@@ -5734,11 +5727,7 @@ function tutorTick(){
     if(!E.attack && E.grounded && game.tutorT%96===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 92); SFX.charge(); } // a slow, readable telegraph
     if((game.stats.perfects||0)>=1){ game.tutorStep=5; game.tutorT=0; announce('PERFECT DODGE!','#ffd34d'); }
     else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; announce('keep practising it!','#9fdcff'); }   // SOFT-LOCK GUARD
-  } else if(game.tutorStep===5){                        // OP FOCUS — one F press
-    game.tutorT++;
-    if((game.fDone||0)>=1){ game.tutorStep=6; game.tutorT=0; announce('FOCUSED!','#7ae8ff'); }
-    else if(game.tutorT>600){ game.tutorStep=6; game.tutorT=0; }
-  } else if(game.tutorStep===6){
+  } else if(game.tutorStep===5){                        // wrap-up (OP FOCUS step retired with the operator-strike system)
     game.tutorT++;
     if(game.tutorT>150) endTutorial();
   }
