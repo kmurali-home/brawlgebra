@@ -1228,47 +1228,60 @@ const projs=[];   // FROST's glacial lances
 const hazards=[]; // ORACLE's theorem sigils
 function fireSpecial(f,a){
   const kind=a.kind||'dash';
+  const col=a.spCol || f.accent;
+  const dmg=(a.def&&a.def.dmg)||14;
+  const targets = game.mode==='rumble'? rumbleFoes(f) : [f.opp];
   if(kind==='slam'){
-    const col = a.fnCol || f.accent;
-    const guard = a.fnFlag==='guard', launch = a.fnFlag==='launch';
-    addTrauma(0.5); hitstop=Math.max(hitstop,4);
-    dust(f.x,f.y,18,5);
-    ring(f.x,f.y-8,col,130,6); ring(f.x,f.y-4,col,70,4);
+    const guard=!!a.guard, launch=!!a.launch, big=!!a.big;
+    addTrauma(big?0.8:0.5); hitstop=Math.max(hitstop, big?6:4);
+    dust(f.x,f.y, big?28:18, big?7:5);
+    ring(f.x,f.y-8,col, big?175:130, big?7:6); ring(f.x,f.y-4, big?'#ffffff':col, big?100:70, 4);
+    if(big) flash(0.2, col);
     SFX.heavy();
-    const targets = game.mode==='rumble'? rumbleFoes(f) : [f.opp];
     for(const o of targets){
-      if(!o.ko && Math.abs(o.x-f.x)<160 && o.y>GROUND-170){
-        const res=o.takeHit(Math.round((launch?26:22)*f.dmgMul), o.x<f.x?-1:1, true, guard);  // LAUNCHER is the hardest-hitting special
-        if(res==='hit' && launch){ o.vy=-15; o.grounded=false; o.stun=Math.max(o.stun,34); o.dizzy=Math.max(o.dizzy,88); floatText(o.x,o.y-204,'LAUNCHED — punish on landing!',col,15); }  // pops high; dizzy outlasts the air-time so they land DAZED for a ×1.3 follow-up
+      if(!o.ko && Math.abs(o.x-f.x)<(big?178:160) && o.y>GROUND-170){
+        const res=o.takeHit(Math.round(dmg*f.dmgMul), o.x<f.x?-1:1, true, guard);
+        if(res==='hit' && launch){ o.vy=-15; o.grounded=false; o.stun=Math.max(o.stun,34); o.dizzy=Math.max(o.dizzy,88); floatText(o.x,o.y-204,'LAUNCHED',col,16); }
         if(res==='hit' && o.hp<=0) lethal(o,true);
       }
     }
-  } else if(kind==='spear'){
-    projs.push({x:f.x+f.facing*32, y:f.y-92, vx:f.facing*9.5, owner:f, life:160,
-                col: a.fnCol || f.accent, freeze: f.char.id==='frost'});   // owner-tinted; only LESSING's lance freezes
+  } else if(kind==='spear'){   // a long instant poke / travelling bolt
+    projs.push({x:f.x+f.facing*32, y:f.y-92, vx:f.facing*(a.slow?4.2:a.fast?12:9.5), owner:f, life:160, col, dmg, freeze:!!a.freeze, slim:!!a.fast});
     SFX.whoosh();
-  } else if(kind==='sigil'){
-    hazards.push({x:f.opp.x, t:34, owner:f, col: a.fnCol || f.accent, glyph: f.char.sigil||'∴'}); // themed rune burst
+  } else if(kind==='wave'){   // a slow ground-hugging front that crawls toward the foe
+    projs.push({x:f.x+f.facing*40, y:GROUND-24, vx:f.facing*(a.big?3.4:4.4), owner:f, life:260, col, dmg, freeze:!!a.freeze, wave:true, r:(a.big?120:90)});
+    addTrauma(0.3); dust(f.x,f.y,12,4); SFX.heavy();
+  } else if(kind==='fan'){   // LONG DIVISION — one input divides into three angled shards
+    const sh=Math.max(8,Math.round(dmg*0.5));   // each shard ~half-tier; a clean read connects one or two
+    for(const vy of [-3.4,0,3.4]) projs.push({x:f.x+f.facing*30, y:f.y-92, vx:f.facing*9, vy, owner:f, life:150, col, dmg:sh, slim:true});
+    addTrauma(0.3); SFX.charge();
+  } else { // 'beam' (vertical pillar) / 'drop' (overhead) / 'sigil' — a positioned burst ON the foe
+    const o=f.opp;
+    hazards.push({x:o?o.x:f.x+f.facing*200, t:(kind==='drop'?30:16), owner:f, col, dmg,
+                  glyph:(kind==='drop'?'∴':kind==='beam'?'Q':(f.char.sigil||'∴')), r:(a.big?92:78), vr:210, pillar:(kind==='beam')});
     SFX.charge();
   }
 }
 function updateProjs(){
   for(let i=projs.length-1;i>=0;i--){
-    const pr=projs[i]; pr.x+=pr.vx; pr.life--;
+    const pr=projs[i]; pr.x+=pr.vx; if(pr.vy) pr.y+=pr.vy; pr.life--;
     const pcol=pr.col||'#bfe8ff';
     if(game.frame%2===0) ember(pr.x-pr.vx, pr.y+frnd(-4,4), pcol);
+    if(pr.wave && game.frame%2===0){ dust(pr.x, GROUND-6, 2, 2); }
     let dead = pr.life<=0 || pr.x<-40 || pr.x>WORLD_W+40;
-    for(const pl of PILLARS)
+    if(!pr.wave) for(const pl of PILLARS)
       if(Math.abs(pr.x-pl.x)<18 && pr.y>GROUND-116){ sparks(pr.x,pr.y,8,pcol,4); SFX.block(); dead=true; }
     const cands = game.mode==='rumble'? rumbleFoes(pr.owner) : [pr.owner.opp];
     for(const t of cands){
       if(dead) break;
       const bd=t.body();
-      if(pr.x>bd.x && pr.x<bd.x+bd.w && pr.y>bd.y && pr.y<bd.y+bd.h){
+      const hit = pr.wave ? (Math.abs(pr.x-t.x)<(pr.r||90)*0.5 && t.grounded)
+                          : (pr.x>bd.x && pr.x<bd.x+bd.w && pr.y>bd.y && pr.y<bd.y+bd.h);
+      if(hit){
         dead=true;
-        const res=t.takeHit(Math.round(18*pr.owner.dmgMul), pr.vx>0?1:-1, true);
+        const res=t.takeHit(Math.round((pr.dmg||18)*pr.owner.dmgMul), pr.vx>0?1:-1, true);
         if(res==='hit' && pr.freeze){ t.frozenT=64; t.stun=Math.max(t.stun,64); floatText(t.x,t.y-176,'FROZEN!','#bfe8ff',20); }
-        if(res!=='dodge') ring(pr.x,pr.y,pcol,42,4);
+        if(res!=='dodge'){ ring(pr.x, pr.wave?GROUND-20:pr.y, pcol, pr.wave?(pr.r||90):42, pr.wave?6:4); if(pr.wave) addTrauma(0.35); }
         if(t.hp<=0) lethal(t,true);
       }
     }
@@ -1278,8 +1291,21 @@ function updateProjs(){
 function drawProjs(){
   for(const pr of projs){
     const col=pr.col||'#bfe8ff';
+    if(pr.wave){   // a crawling ground ridge, not a bolt
+      const R=pr.r||90, gy=GROUND-6;
+      ctx.save(); ctx.translate(pr.x,gy);
+      const g=ctx.createLinearGradient(0,-46,0,0); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,col);
+      ctx.globalAlpha=0.6; ctx.fillStyle=g;
+      ctx.beginPath(); ctx.moveTo(-R*0.5,0);
+      for(let dx=-R*0.5;dx<=R*0.5;dx+=6){ const h=Math.max(0,(1-Math.abs(dx)/(R*0.5)))*38*(0.7+0.3*Math.sin(game.frame*0.4+dx)); ctx.lineTo(dx,-h); }
+      ctx.lineTo(R*0.5,0); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha=0.9; ctx.strokeStyle=shade(col,0.4); ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(-R*0.4,-2); ctx.lineTo(0,-30); ctx.lineTo(R*0.4,-2); ctx.stroke();
+      ctx.restore(); continue;
+    }
     ctx.save(); ctx.translate(pr.x,pr.y);
     ctx.rotate(pr.vx>0?0:Math.PI);
+    if(pr.vy){ ctx.rotate(Math.atan2(pr.vy, Math.abs(pr.vx))*(pr.vx>0?1:-1)); }
     const g=ctx.createRadialGradient(0,0,2,0,0,22);
     g.addColorStop(0,col); g.addColorStop(1,'rgba(0,0,0,0)');
     ctx.globalAlpha=0.55; ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,22,0,7); ctx.fill(); ctx.globalAlpha=1;
@@ -1365,6 +1391,21 @@ const ATK = { // cost = aura spent UP FRONT on every swing; solving math is the 
   airkick:{cost:8,  wind:4, act:9,  rec:8,  dmg:7,  reach:62, hy:-44, heavy:false},
   special:{cost:60, wind:10,act:12, rec:20, dmg:26, reach:88, hy:-84, heavy:true, dash:12},
 };
+// SPECIAL KITS — fighters differ ONLY by their 3-special kit. TIER = power (identical dmg+cost for every fighter); CHARACTER = flavor (look/feel).
+// Pressing SPECIAL fires the highest tier your AURA can afford. Per-special tunings shape the act window; `kind`+flags drive the visual primitive.
+const SPEC_TIERS=[ {dmg:14, cost:25}, {dmg:24, cost:50}, {dmg:40, cost:90} ];   // T1 opener / T2 converter / T3 verdict — same numbers on all five fighters
+const SP_KITS={
+  initiate:[ {name:'FIRST STEP',  kind:'dash'},                  {name:'STRAIGHTEDGE',  kind:'spear', reach:150, fast:true},{name:'QUOD ERAT',             kind:'beam'} ],
+  mauler:  [ {name:'THE FACTOR',  kind:'slam',  guard:true},     {name:'THE DOUBLING',  kind:'wave'},                       {name:'THE BOUNDLESS PRODUCT', kind:'slam', launch:true, big:true} ],
+  ember:   [ {name:'CARRY THE ONE',kind:'dash', rise:true},      {name:'RUNNING TOTAL', kind:'slam', launch:true},          {name:'THE SUM COMES DUE',     kind:'wave', big:true} ],
+  frost:   [ {name:'GLACIAL LANCE',kind:'spear', reach:165},     {name:'THE REMAINDER', kind:'spear', freeze:true, slow:true},{name:'ABSOLUTE ZERO',        kind:'wave', freeze:true, big:true} ],
+  oracle:  [ {name:'REMAINDER',   kind:'spear', fast:true},      {name:'LONG DIVISION', kind:'fan'},                        {name:'QUOD ERAT DEMONSTRANDUM',kind:'drop'} ],
+};
+function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
+function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
+  for(let t=2;t>=0;t--) if(f.aura>=SPEC_TIERS[t].cost) return t;
+  return -1;
+}
 function ik(ox,oy,tx,ty,l1,l2,bend){
   let dx=tx-ox, dy=ty-oy, d0=Math.hypot(dx,dy)||0.001;
   const d = clamp(d0, Math.abs(l1-l2)+0.5, l1+l2-0.5);
@@ -1434,7 +1475,7 @@ class Fighter {
     this.cols={gi:c.gi, giD:shade(c.gi,-0.42), trim:c.trim, trimD:shade(c.trim,-0.3), out:'#0a0814'};
     this.accent=c.trim; this.glow=c.gi;
   }
-  spReady(){ return this.aura>=Math.round(ATK.special.cost*this.char.costMul); }
+  spReady(){ return this.aura>=SPEC_TIERS[0].cost; }   // can afford at least the tier-1 special
   reset(x,facing){
     this.x=x; this.y=GROUND; this.vx=0; this.vy=0; this.grounded=true;
     this.hp=this.char.hp; this.hpShown=this.hp; this.chipDelay=0;
@@ -1503,46 +1544,44 @@ class Fighter {
     return true;
   }
   cpuAttack(type, telFrames){
-    let def, kind;
+    let def, kind, sp=null;
     if(type==='special'){
-      if(!this.spend(ATK.special.cost,true)) return;
-      spendFx(this, Math.round(ATK.special.cost*this.char.costMul));
-      kind=this.char.spKind||'dash';
-      const tunings={dash:{wind:10,act:12,rec:20}, slam:{wind:14,act:6,rec:22},
-                     spear:{wind:12,act:3,rec:16}, sigil:{wind:16,act:3,rec:20}};
-      def=Object.assign({}, ATK.special, tunings[kind]);
+      const tier=bestSpecialTier(this); if(tier<0) return;
+      sp=spKitFor(this.char)[tier];
+      const cost=SPEC_TIERS[tier].cost; this.aura-=cost; this.auraChipT=18; spendFx(this,cost);
+      kind=sp.kind;
+      const tunings={dash:{wind:10,act:12,rec:20}, slam:{wind:14,act:6,rec:22}, spear:{wind:11,act:3,rec:16},
+                     wave:{wind:14,act:4,rec:24}, fan:{wind:12,act:3,rec:18}, beam:{wind:16,act:6,rec:22}, drop:{wind:8,act:4,rec:26}};
+      def=Object.assign({}, ATK.special, tunings[kind]||tunings.dash, {dmg:SPEC_TIERS[tier].dmg});
+      if(sp.reach) def.reach=sp.reach;
     } else {
       const ov=this.char.atk&&this.char.atk[type];
       def = ov? Object.assign({},ATK[type],ov) : ATK[type];
       if(!this.spend(ATK[type].cost,true)) return; // CPU pays up front too; its innate regen keeps it swinging
     }
     this.attack={type, kind, ph:'tel', t:telFrames, def, tel:telFrames, fuse:telFrames+def.wind, pop:8};
+    if(sp){ Object.assign(this.attack, {spName:sp.name, guard:sp.guard, launch:sp.launch, big:sp.big, freeze:sp.freeze, rise:sp.rise, slow:sp.slow, fast:sp.fast, spCol:(this.char.gi||this.accent)}); }
     this.hitThisSwing=false;
   }
   trySpecial(){
     if(!this.grounded) return false;
     const cancelling = this.attack && this.canCancelInto('special');   // cancel a confirmed normal into the special
     if(this.attack? !cancelling : !this.canAct()) return false;
-    if(!game.galaxy && !this.spend(ATK.special.cost * (this===game.player?pFn('specialCost'):1))) return false; // GALAXY: free; STANDARD: spends aura
-    if(!game.galaxy) spendFx(this, Math.round(ATK.special.cost*this.char.costMul));
-    // CHOOSE the strike: a held direction picks from your armed bank (← − poke · → × launcher · ↑ ÷ ranged · ↓ + guard-break); else the last-armed
-    let op=null;
-    if(this===game.player && this.bank){
-      const dirOp = (keys[KEYS.left]||keys['arrowleft'])? '−' : (keys[KEYS.right]||keys['arrowright'])? '×'
-                  : (keys[KEYS.jump]||keys['arrowup'])? '÷' : (keys[KEYS.block]||keys['arrowdown'])? '+' : null;
-      if(dirOp && this.bank[dirOp]>game.frame) op=dirOp;
-    }
-    if(!op && this.fnCharge && (!this.bank || (this.bank[this.fnCharge]||0)>game.frame)) op=this.fnCharge;
-    const fs = op && FN_STRIKE[op];   // math-armed Function Strike overrides the default special
-    const kind = fs? fs.kind : (this.char.spKind||'dash');
-    const fnFlag = fs? fs.flag : null;
-    if(fs){ if(this.bank) delete this.bank[op]; if(this.fnCharge===op){ this.fnCharge=null; this.fnChargeT=0; } announce(fs.name, fs.col); }
-    const tunings={dash:{wind:10,act:12,rec:20}, slam:{wind:14,act:6,rec:22},
-                   spear:{wind:12,act:3,rec:16}, sigil:{wind:16,act:3,rec:20}};
-    const def=Object.assign({}, ATK.special, tunings[kind]);
-    if(fnFlag==='poke'){ def.reach=128; def.wind=6; def.act=6; def.rec=13; def.dmg=14; def.heavy=false; } // MINUS: fast long jab
-    this.attack={type:'special', kind, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, fnFlag, fnCol: fs?fs.col:null};
-    this.hitThisSwing=false; SFX.special(); this.flashT=6; return true;
+    // SPECIAL fires the highest tier the current AURA can afford (1→2→3). GALAXY = free, always tier 3.
+    const tier = game.galaxy? 2 : bestSpecialTier(this);
+    if(tier<0){ this.auraFlash=14; if(this===game.player){ floatText(this.x,this.y-170,'NEED AURA','#7ae8ff',16); SFX.fizzle(); } return false; }
+    const sp = spKitFor(this.char)[tier];
+    if(!game.galaxy){ const cost=SPEC_TIERS[tier].cost; this.aura-=cost; this.auraChipT=18; spendFx(this, cost); }   // flat per-tier cost — uniform across fighters
+    const tunings={dash:{wind:10,act:12,rec:20}, slam:{wind:14,act:6,rec:22}, spear:{wind:11,act:3,rec:16},
+                   wave:{wind:14,act:4,rec:24}, fan:{wind:12,act:3,rec:18}, beam:{wind:16,act:6,rec:22}, drop:{wind:8,act:4,rec:26}};
+    const def=Object.assign({}, ATK.special, tunings[sp.kind]||tunings.dash, {dmg:SPEC_TIERS[tier].dmg});
+    if(sp.reach) def.reach=sp.reach;
+    this.attack={type:'special', kind:sp.kind, tier, spName:sp.name, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind,
+      guard:sp.guard, launch:sp.launch, big:sp.big, freeze:sp.freeze, rise:sp.rise, slow:sp.slow, fast:sp.fast,
+      spCol:(this.char.gi||this.accent)};
+    this.hitThisSwing=false; SFX.special(); this.flashT=6;
+    if(tier>=1) announce(sp.name, this.char.gi||'#ffd34d');   // name the converter/verdict; the cheap opener stays quiet
+    return true;
   }
   addAura(n){ this.aura=clamp(this.aura+n,0,this.char.auraMax); if(this.auraShown<this.aura) this.auraShown=this.aura; }
   spend(cost,silent){
@@ -2446,18 +2485,7 @@ function applySolve(f, result, st, op){
     if(game.chRule.tag==='subtract' && perfect){ game.enemy.hp=Math.max(0,game.enemy.hp-9); floatText(game.enemy.x,game.enemy.y-172,'− cleanly','#7ae8ff',14); }  // LESSING VIII: a clean solve cuts the false part away
     else if(game.chRule.tag==='read' && op){ if(op===game.lastSolveOp){ game.enemy.addAura(14); floatText(game.enemy.x,game.enemy.y-150,'read.','#b48cff',13); } game.lastSolveOp=op; }  // KRISHNA: repeating an operator feeds the Schism
   }
-  // FUNCTION STRIKE: solving BANKS that operator's strike; you CHOOSE which to fire (hold a direction + special), so it's a read, not RNG
-  if(op && FN_STRIKE[op] && !f.ko){
-    f.bank=f.bank||{}; f.bank[op]=game.frame+300;   // each armed ~5s; you can hold several at once
-    f.fnCharge=op; f.fnChargeT=300;                 // the "last-armed" is the default if you press special with no direction
-    const fs=FN_STRIKE[op];
-    floatText(f.x,f.y-(perfect?236:216), op+' STRIKE ARMED', fs.col, 15);
-    if(f===game.player){
-      const banked=Object.keys(f.bank).filter(k=>f.bank[k]>game.frame).length;
-      if(banked>=2) tip('fnpick','Multiple strikes armed! HOLD a direction + '+keyLabel(KEYS.special)+' to pick one:  ← '+FN_STRIKE['−'].blurb+'  → launcher  ↑ ranged  ↓ guard-break.');
-      else tip('fnstrike','Your SPECIAL is now a '+op+' strike ('+fs.blurb+') — press '+keyLabel(KEYS.special)+' to unleash it.');
-    }
-  }
+  // (retired) operator-armed Function Strikes — specials are now the per-fighter 3-tier KIT (D fires the best you can afford)
   // every solve builds account-wide four-function mastery (any mode, not just story)
   if(f===game.player && op){
     const fk={'+':'plus','−':'minus','×':'mul','÷':'div'}[op];
@@ -3532,48 +3560,33 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
     ctx.fillStyle = wins>i? (side===1?'#ffd34d':'#ff7a4d') : 'rgba(255,255,255,0.14)';
     ctx.fillRect(-4,-4,8,8); ctx.restore();
   }
-  if(f===game.player && !game.galaxy){ // attack cost chips — lit when affordable (STANDARD only; GALAXY attacks are free)
-    let cxp=40;
-    ctx.font=font(MONO,10); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-    for(const [key,label,cost] of [[keyLabel(KEYS.punch),'PUNCH',ATK.punch.cost],[keyLabel(KEYS.kick),'KICK',ATK.kick.cost],[keyLabel(KEYS.special),'SPECIAL',ATK.special.cost]]){
-      const c2=Math.round(cost*f.char.costMul);
-      const ok=f.aura>=c2;
-      const isSp=cost===ATK.special.cost;
-      const fs=isSp && f.fnCharge && FN_STRIKE[f.fnCharge];   // armed Function Strike rides the SPECIAL chip
-      const gold=ok&&isSp&&!fs;
-      const pulse=Math.sin(game.frame*0.2)>0;
-      const labelTxt=fs? (f.fnCharge+' '+fs.name.split('· ')[1]) : label;  // e.g. "÷ ZONE SHOT"
-      const s=key+' '+labelTxt+' '+c2, tw=ctx.measureText(s).width;
-      rr(cxp,82,tw+14,17,5);
-      ctx.fillStyle = fs? 'rgba(36,22,54,0.92)' : ok? 'rgba(18,46,66,0.9)':'rgba(15,12,28,0.85)'; ctx.fill();
-      ctx.lineWidth=fs?1.8:1.5;
-      ctx.strokeStyle = fs? (pulse?fs.col:shade(fs.col,-0.35)) : gold? (pulse?'#ffd34d':'#a8801a') : ok? '#2e9adf':'#3a3354';
-      ctx.stroke();
-      ctx.fillStyle = fs? fs.col : ok? (gold?'#ffd34d':'#9fdcff') : 'rgba(150,140,180,0.45)';
-      ctx.fillText(s, cxp+7, 94);
-      cxp += tw+21;
-    }
-    // STRIKE BANK — armed Function Strikes + the direction to fire each (hold dir + SPECIAL)
-    if(f.bank){
-      const slots=[['←','−'],['→','×'],['↑','÷'],['↓','+']];
-      if(slots.some(([,o])=>(f.bank[o]||0)>game.frame)){
-        ctx.font=font(MONO,9.5); let bx=40;
-        ctx.fillStyle='rgba(150,140,180,0.6)'; ctx.fillText('STRIKE BANK', bx, 116); bx+=80;
-        for(const [arrow,o] of slots){
-          const armed=(f.bank[o]||0)>game.frame, fc=FN_STRIKE[o].col;
-          const s=arrow+' '+o, tw=ctx.measureText(s).width;
-          rr(bx,105,tw+10,15,4);
-          ctx.fillStyle= armed? 'rgba(34,22,50,0.92)':'rgba(15,12,28,0.55)'; ctx.fill();
-          ctx.strokeStyle= armed? fc : '#2a2640'; ctx.lineWidth=1.2; ctx.stroke();
-          ctx.fillStyle= armed? fc : 'rgba(120,114,150,0.4)';
-          ctx.fillText(s, bx+5, 116);
-          bx += tw+13;
-        }
-        // OP FOCUS indicator — F cycles which operation the math stream favours
-        ctx.font=font(MONO,9.5);
-        if(game.focusOp){ ctx.fillStyle=FN_STRIKE[game.focusOp].col; ctx.fillText('· F:focus '+game.focusOp, bx+4, 116); }
-        else { ctx.fillStyle='rgba(120,114,150,0.45)'; ctx.fillText('· F: focus an op', bx+4, 116); }
-      }
+  if(f===game.player && !game.galaxy){ // CONTROL COLUMN (top-left): the non-obvious keys + your 3-special ladder, lit only by what your AURA can pay for
+    const kit=spKitFor(f.char), bt=bestSpecialTier(f);
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    let cy=98;
+    const row=(key,label,cost,lit,keyCol)=>{
+      ctx.font=font(MONO,11); ctx.globalAlpha=lit?1:0.4;
+      ctx.fillStyle=keyCol||(lit?'#9fdcff':'#7a83a8'); ctx.fillText(key,40,cy);
+      ctx.fillStyle=lit?'#e8ecff':'rgba(150,140,180,0.5)'; ctx.fillText(label,62,cy);
+      if(cost!=null){ ctx.fillStyle=lit?'#7ae8ff':'rgba(120,114,150,0.4)'; ctx.fillText(cost+'',150,cy); }
+      ctx.globalAlpha=1; cy+=15;
+    };
+    row(keyLabel(KEYS.punch),  'PUNCH',  ATK.punch.cost, f.aura>=ATK.punch.cost);
+    row(keyLabel(KEYS.kick),   'KICK',   ATK.kick.cost,  f.aura>=ATK.kick.cost);
+    row(keyLabel(KEYS.special),'SPECIAL',null,           bt>=0, '#ffd34d');
+    row(keyLabel(KEYS.block),  'BLOCK',  null,           true,  '#cabbe0');
+    cy+=6;
+    ctx.font=font(MONO,8.5); ctx.fillStyle='rgba(150,140,180,0.55)';
+    ctx.fillText(keyLabel(KEYS.special)+' FIRES THE TOP LIT SPECIAL', 40, cy); cy+=14;
+    for(let t=0;t<3;t++){   // the ladder — ◆ affordable · dim too-costly · ▶ the one SPECIAL fires right now
+      const sp=kit[t], cost=SPEC_TIERS[t].cost, lit=f.aura>=cost, fires=(t===bt);
+      ctx.globalAlpha=lit?1:0.4;
+      ctx.font=font(MONO,11);
+      ctx.fillStyle = fires?'#ffd34d' : lit?(f.char.gi||'#9fdcff') : 'rgba(150,140,180,0.5)';
+      ctx.fillText(fires?'▶':lit?'◆':'·', 40, cy);
+      ctx.fillStyle = lit?'#e8ecff':'rgba(150,140,180,0.5)';
+      ctx.font=font(MONO,9.5); ctx.fillText((t+1)+'  '+sp.name, 56, cy);
+      ctx.globalAlpha=1; cy+=15;
     }
   }
   if(f===game.enemy && game.state==='fight' && game.playerHidden){
@@ -5466,6 +5479,9 @@ const ROSTER=[
   atk:{punch:{dmg:4,wind:3,act:3,rec:7}},   // fast, frail rekka jab
   blurb:'Frail, and fastest of all. The answer is power; power is the only proof.'},
 ];
+// UNIFORM MATH ECONOMY — fighters no longer vary by "degree of math": solving pays the same and moves cost the same for everyone.
+// What differs is the SPECIAL KIT (and light body archetype: hp / reach / pace). The kit's tier damage is identical across fighters.
+[...ROSTER, PROTAG, BASE_CHAR].forEach(c=>{ c.costMul=1; c.gainMul=1; c.auraMax=100; c.regen=0; c.streakMul=1; });
 const MENU=[
   ['PLAY','1v1. Choose your form on the next screen — Standard, or the Rite of Silence.'],
   ['MODES','the boss ladder, the endless gauntlet, the campaign, the training hall'],
