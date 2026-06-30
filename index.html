@@ -4394,8 +4394,13 @@ function drawLobby(){
     const c=ROSTER[i], x=x0+i*(cw+gap), y=pickY, sel=i===game.charIdx;
     rr(x,y,cw,40,8); ctx.fillStyle=sel?'rgba(60,40,96,0.95)':'rgba(16,14,30,0.9)'; ctx.fill();
     ctx.lineWidth=sel?2.5:1.2; ctx.strokeStyle=sel?'#ffd34d':c.gi; ctx.stroke();
-    txtO(c.name, x+cw/2, y+18, 12, sel?'#ffd34d':c.gi,{sw:0});
-    txtO('math '+c.mathNeed+'/5', x+cw/2, y+32, 9, '#9aa3c8',{mono:true,sw:0});
+    txtO(c.name, x+cw/2, y+16, 12, sel?'#ffd34d':c.gi,{sw:0});
+    // fighters differ by their SPECIALS now (math is uniform) — show the signature tier-3 move, not a math rating
+    const sig=((spKitFor(c)[2]||{}).name)||c.tagline||'';
+    ctx.textAlign='center'; ctx.fillStyle=sel?'#ffe7a6':'#9aa3c8';
+    let lf=8.5; ctx.font=font(MONO,lf);
+    while(ctx.measureText(sig).width>cw-12 && lf>6){ lf-=0.5; ctx.font=font(MONO,lf); }
+    ctx.fillText(sig, x+cw/2, y+31);
     R.chars.push({x,y,w:cw,h:40});
   }
   const ctlY=pickY+62;
