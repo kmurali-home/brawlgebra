@@ -4270,8 +4270,8 @@ function drawTutorBanner(){
   rr(W/2-345, 106, 690, 48, 10);
   ctx.fillStyle='rgba(10,14,28,0.95)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2; ctx.globalAlpha=0.8+Math.sin(game.frame*0.12)*0.2; ctx.stroke(); ctx.globalAlpha=1;
-  txtO('▸ TUTORIAL  ·  '+(game.tutorStep+1)+' / '+TUTOR_STEPS.length, W/2-250, 121, 10, '#ffd34d',{mono:true,sw:0});
-  txtO('Esc — skip', W/2+285, 121, 9, 'rgba(180,170,210,0.7)',{mono:true,sw:0});
+  txtO('THE TRIAL   '+'●'.repeat(game.tutorStep+1)+'○'.repeat(Math.max(0,TUTOR_STEPS.length-game.tutorStep-1)), W/2-250, 121, 10, '#ffd34d',{mono:true,sw:0});
+  txtO('Esc — leave', W/2+285, 121, 9, 'rgba(180,170,210,0.7)',{mono:true,sw:0});
   ctx.font=font(MONO,11); ctx.fillStyle='#e8ecff'; ctx.textAlign='center';
   wrapText(txt, W/2, 137, 650, 13);
 }
@@ -5680,11 +5680,11 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
 const TUTOR_STEPS=[
-  'STEP 1 — Your AURA bar is EMPTY, so you can\'t punch yet. SOLVE the problem below (type the answer, press ⏎) to fill it.',
-  'STEP 2 — Press '+keyLabel(KEYS.punch)+' to PUNCH. Every strike spends AURA, so keep solving to keep fighting.',
-  'STEP 3 — CANCEL: land a '+keyLabel(KEYS.punch)+' punch, then quickly press '+keyLabel(KEYS.kick)+' to chain into a kick before the window closes.',
-  'STEP 4 — BURST: the dummy is comboing you. Press '+keyLabel(KEYS.special)+' while stunned to BURST out — combos are an exchange, not a free juggle.',
-  'STEP 5 — The dummy attacks (red ! ). Your answer CLEARS when it commits — re-solve in the gold ⚡NOW window to PERFECT-DODGE and stagger it.',
+  'Your aura is empty — you cannot strike. Answer the problem below (type it, press ⏎) to fill the bar.',
+  'Now strike. '+keyLabel(KEYS.punch)+' punches. Every blow spends aura, so keep answering to keep swinging.',
+  'Land a punch, then '+keyLabel(KEYS.kick)+' before the window closes — a cancel. Chains only flow from a confirmed hit.',
+  'You are being combo\'d. Press '+keyLabel(KEYS.special)+' while stunned to break free — a combo is an exchange, not a gift.',
+  'A red ! means he commits, and your answer clears. Re-answer in the gold ⚡NOW window to slip the blow and stagger him.',
   'You’ve got it: solve to power up, chain & burst, and time the ⚡NOW solve to dodge. In the fight, '+keyLabel(KEYS.special)+' fires the strongest of your three SPECIALS you can afford. Your first real fight begins…',
 ];
 function startTutorial(){
@@ -5726,13 +5726,13 @@ function tutorTick(){
       tip('burst','Being combo’d? Press '+keyLabel(KEYS.special)+' to BURST out (costs aura).');
     }
     if((game.burstDone||0)>=1){ game.tutorStep=4; game.tutorT=0; announce('BURST!','#ffd34d'); }
-    else if(game.tutorT>960){ game.tutorStep=4; game.tutorT=0; announce('keep it in mind!','#9fdcff'); }
+    else if(game.tutorT>960){ game.tutorStep=4; game.tutorT=0; announce('remember it.','#9fdcff'); }
   } else if(game.tutorStep===4){                        // PERFECT DODGE — timed; the answer relocks on his commit
     if(dist>168){ E.x += (P.x>E.x?1:-1)*1.3; }          // keep the dummy inside dodge range
     game.tutorT++;
     if(!E.attack && E.grounded && game.tutorT%96===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 92); SFX.charge(); } // a slow, readable telegraph
     if((game.stats.perfects||0)>=1){ game.tutorStep=5; game.tutorT=0; announce('PERFECT DODGE!','#ffd34d'); }
-    else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; announce('keep practising it!','#9fdcff'); }   // SOFT-LOCK GUARD
+    else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; announce('again, later.','#9fdcff'); }   // SOFT-LOCK GUARD
   } else if(game.tutorStep===5){                        // wrap-up (OP FOCUS step retired with the operator-strike system)
     game.tutorT++;
     if(game.tutorT>150) endTutorial();
