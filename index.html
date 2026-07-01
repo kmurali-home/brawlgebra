@@ -629,6 +629,26 @@ addEventListener("keydown", e => {
   }
 });
 addEventListener("keyup", e => { keys[e.key.toLowerCase()]=false; });
+// ---- GAMEPAD: a connected controller is translated into the SAME synthetic key events, so movement / dash / jump / attacks / menus all work unchanged ----
+const _padPrev={};
+function pollGamepad(){
+  if(!navigator.getGamepads) return;
+  let gp=null; const pads=navigator.getGamepads(); if(pads) for(const p of pads){ if(p){ gp=p; break; } }
+  if(!gp) return;
+  const b=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed), ax=gp.axes[0]||0, ay=gp.axes[1]||0, K=KEYS;
+  const map={};
+  map[K.left]=b(14)||ax<-0.45;  map[K.right]=b(15)||ax>0.45;                 // d-pad / left-stick X
+  map[K.jump]=b(0)||b(12)||ay<-0.55;                                        // A / d-pad up / stick up
+  map[K.block]=b(13)||b(4)||b(6)||ay>0.55;                                  // d-pad down / LB / LT / stick down
+  map[K.punch]=b(2); map[K.kick]=b(3); map[K.special]=b(1)||b(5);           // X punch · Y kick · B/RB special
+  map['Enter']=b(9)||b(7);                                                  // Start / RT → confirm / submit
+  for(const key in map){
+    const now=map[key], was=!!_padPrev[key];
+    if(now&&!was){ try{ dispatchEvent(new KeyboardEvent('keydown',{key:key})); }catch(e){} }        // press edge → keydown (dash double-tap, buffering, menus all handled by the existing listener)
+    else if(!now&&was){ try{ dispatchEvent(new KeyboardEvent('keyup',{key:key})); }catch(e){} }      // release edge → keyup
+    _padPrev[key]=now;
+  }
+}
 addEventListener("blur", ()=>{
   for(const k in keys) keys[k]=false; // no stuck movement after refocus
   if(game.state==='fight' && !game.online) game.paused=true;   // never pause an online match — it would freeze the opponent and trip their disconnect watchdog
@@ -6821,6 +6841,7 @@ let last=performance.now(), acc=0;
 const STEP=1000/60;
 function loop(now){
   try{
+    pollGamepad();   // controller → synthetic key events, before this frame's input is read
     const target = (now<slowUntil? slowScale : 1) * (game.cinemaSlow?0.45:1);   // SHOWCASE slow-mo stacks a sustained 0.45× for cinematic capture
     timeScale += (target-timeScale)*0.25;
     acc += Math.min(64, now-last)*timeScale; last=now;
