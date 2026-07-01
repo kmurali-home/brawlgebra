@@ -5539,7 +5539,7 @@ const ROSTER=[
 ];
 // UNIFORM MATH ECONOMY — fighters no longer vary by "degree of math": solving pays the same and moves cost the same for everyone.
 // What differs is the SPECIAL KIT (and light body archetype: hp / reach / pace). The kit's tier damage is identical across fighters.
-[...ROSTER, PROTAG, BASE_CHAR].forEach(c=>{ c.costMul=1; c.gainMul=1; c.auraMax=100; c.regen=0; c.streakMul=1; });
+[...ROSTER, PROTAG, BASE_CHAR].forEach(c=>{ c.regen=0; });   // keep CPU honesty (no passive aura drip) but RESTORE per-fighter economy identity — costMul/gainMul/auraMax/streakMul now take effect, so Maximilian tanks, Krishna glass-cannons, etc. Math difficulty + special damage/cost stay uniform (specials use flat SPEC_TIERS, not costMul).
 const MENU=[
   ['PLAY','1v1. Choose your form on the next screen — Standard, or the Rite of Silence.'],
   ['MODES','the boss ladder, the endless gauntlet, the campaign, the training hall'],
