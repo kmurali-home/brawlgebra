@@ -1404,8 +1404,8 @@ function drawPillars(){
 //----------------------------------------------------------------------
 const ATK = { // cost = aura spent UP FRONT on every swing; solving math is the only way to refill it
   punch:  {cost:5,  wind:5, act:4,  rec:10, dmg:5,  reach:64, hy:-92, heavy:false},
-  kick:   {cost:10, wind:8, act:5,  rec:16, dmg:11, reach:82, hy:-58, heavy:true},
-  airkick:{cost:8,  wind:4, act:9,  rec:8,  dmg:7,  reach:62, hy:-44, heavy:false},
+  kick:   {cost:10, wind:8, act:5,  rec:16, dmg:11, reach:82, hy:-58, heavy:true, guardLevel:'low'},   // a LOW — must be blocked crouching (↓)
+  airkick:{cost:8,  wind:4, act:9,  rec:8,  dmg:7,  reach:62, hy:-44, heavy:false, guardLevel:'high'},  // a jump-in OVERHEAD — must be blocked standing (hold back)
   special:{cost:60, wind:10,act:12, rec:20, dmg:26, reach:88, hy:-84, heavy:true, dash:12},
 };
 // SPECIAL KITS — fighters differ ONLY by their 3-special kit. TIER = power (identical dmg+cost for every fighter); CHARACTER = flavor (look/feel).
@@ -1654,10 +1654,12 @@ class Fighter {
     if(this===game.player) game.burstDone=(game.burstDone||0)+1;
     return true;
   }
-  takeHit(dmg, dir, heavy, unblock){
-    if(this.iframes>0||this.ko) return 'dodge';
+  takeHit(dmg, dir, heavy, unblock, lvl){
+    if(this.iframes>0||this.ko) return 'dodge';   // a ⚡NOW-window solve grants iframes → slips EITHER mix-up (the math out)
     if(this.thinkT>0){ this.thinkT=0; floatText(this.x,this.y-150,'MISCOUNT!','#ff8a8a',13); }   // a landed hit breaks a solve-in-progress — the foe earns no aura for it
-    if(this.blocking && !this.ko && !unblock){
+    lvl = lvl||'mid';
+    const stanceOK = lvl==='mid' || (lvl==='low' && (this.guardStance||'low')==='low') || (lvl==='high' && this.guardStance==='high');   // right guard for the height? wrong guess = the block whiffs
+    if(this.blocking && stanceOK && !this.ko && !unblock){
       this.guard = Math.max(0, (this.guard||0) - (heavy?34:18));   // every blocked hit chips your guard
       if(this.guard<=0){   // GUARD CRUSH — the turtle cracks: this hit lands clean + you can't re-block for a beat
         this.guardCrush=64; this.blocking=false;
@@ -1703,7 +1705,7 @@ class Fighter {
     const reach=d.reach*(0.5*this.char.scale+0.5);   // tall builds genuinely out-range; lean builds trade reach for a smaller hurtbox (body() already scales)
     const x1=Math.min(fx, fx+this.facing*reach);
     return {x:x1, y:this.y+d.hy-30, w:reach+18, h:this.attack.type==='special'?86:54,
-            dmg:(this.attack.type==='special'? d.dmg : d.dmg*this.dmgMul), heavy:d.heavy, type:this.attack.type};   // specials uniform; normal attacks keep per-fighter power
+            dmg:(this.attack.type==='special'? d.dmg : d.dmg*this.dmgMul), heavy:d.heavy, type:this.attack.type, guardLevel:d.guardLevel||'mid'};   // specials uniform; normal attacks keep per-fighter power; guardLevel drives the high/low
   }
   body(){ const s=this.char.scale; return {x:this.x-20*s, y:this.y-142*s, w:40*s, h:142*s}; }
 
@@ -2148,6 +2150,11 @@ function drawFighter(f){
     ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 28, 72, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
     if(f===game.enemy && !game.mode2p) txtO('▸ OPEN', f.x, f.y-180, 11, '#ffd34d', {mono:true,sw:0});
   }
+  // block-stance readout — the high/low is unreadable without knowing your own guard height
+  if(f===game.player && f.blocking && !game.mode2p){
+    const hi=f.guardStance==='high';
+    txtO(hi?'HIGH GUARD':'LOW GUARD', f.x, f.y-168, 9.5, hi?'#8fd8f8':'#ffd34d', {mono:true,sw:0});
+  }
   // ground glow + shadow (cast onto whatever surface is underfoot)
   const fy = f.floorY||GROUND;
   const hgt = clamp((fy-f.y)/260,0,1);
@@ -2226,7 +2233,10 @@ function controlPlayer(p){
   const arrows = !game.mode2p; // in 2P the arrows belong to P2
   if(keys[KEYS.left] ||(arrows&&keys['arrowleft']))  p.moveX -= 1;
   if(keys[KEYS.right]||(arrows&&keys['arrowright'])) p.moveX += 1;
-  p.wantBlock = !!(keys[KEYS.block]||(arrows&&keys['arrowdown']));
+  const _down = keys[KEYS.block]||(arrows&&keys['arrowdown']);
+  const _back = p.facing>0 ? (keys[KEYS.left]||(arrows&&keys['arrowleft'])) : (keys[KEYS.right]||(arrows&&keys['arrowright']));
+  p.wantBlock = !!(_down || _back);
+  if(_down) p.guardStance='low'; else if(_back) p.guardStance='high';   // ↓ = LOW guard (blocks low+mid); hold BACK = HIGH guard (blocks high+mid). Guess wrong and the hit lands — or out-solve it in the ⚡NOW window.
 }
 function controlP2(f){
   f.moveX = 0;
@@ -2395,7 +2405,7 @@ function resolveHits(att,def){
     let punish=false;
     if(def.attack && def.attack.ph==='rec' && hb.type!=='special'){ punish=true; dmg *= 1.3; }   // WHIFF-PUNISH: catch a foe in the recovery of their own swing — reward the read
     dmg = Math.round(dmg);
-    const res=def.takeHit(dmg,dir,hb.heavy);
+    const res=def.takeHit(dmg,dir,hb.heavy,false,hb.guardLevel);
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
     const cx=def.x-dir*6, cy=def.y-90;
     if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3); return; }
