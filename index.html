@@ -2281,6 +2281,17 @@ function controlP2(f){
   if(keys['arrowright']) f.moveX += 1;
   f.wantBlock = !!keys['arrowdown'];
 }
+// PER-ARCHETYPE CPU PILOTS — each fighter's AI plays its OWN game-plan, so glass-cannon-vs-tank is a real matchup, not a mirror
+const CPU_PROFILE = {
+  //          preferred [min,max] range | advance | retreat | special-use | retreat-below hp% | throw-when-you-block | jump-in chance
+  mauler:   { rng:[52,112],  adv:1.2,  ret:0.5,  sp:0.5,  retHp:0,  thr:0.11, jmp:0.015 },  // TANK: walks you down, blocks, throws heavies, eats chip to close
+  ember:    { rng:[56,120],  adv:1.3,  ret:0.65, sp:0.4,  retHp:0,  thr:0.06, jmp:0.055 },  // RUSHDOWN: fast relentless pressure + jump-ins
+  frost:    { rng:[230,540], adv:0.55, ret:1.35, sp:0.9,  retHp:0,  thr:0.02, jmp:0.01 },   // ZONER: runs to fullscreen, fishes spears
+  oracle:   { rng:[150,300], adv:0.9,  ret:1.05, sp:0.6,  retHp:38, thr:0.04, jmp:0.05 },   // GLASS DART: keeps mid, darts on your recovery, bails when low
+  initiate: { rng:[78,140],  adv:1.0,  ret:1.0,  sp:0.4,  retHp:0,  thr:0.05, jmp:0.03 },   // balanced all-rounder
+  james:    { rng:[66,130],  adv:1.1,  ret:0.75, sp:0.55, retHp:0,  thr:0.06, jmp:0.04 }    // SOLOMON: relentless finisher
+};
+function cpuProfile(c){ return CPU_PROFILE[(c&&c.char&&c.char.id)] || CPU_PROFILE.initiate; }
 function controlCPU(c){
   const p = c.opp, cfg = DIFF.cpu();
   if(!p){ c.moveX=0; return; }
@@ -2338,11 +2349,26 @@ function controlCPU(c){
     return;
   }
   if(hidden){ c.moveX = dir*0.10*cfg.speed; hopCover(c); return; }  // lost sight — stalk slowly toward you (aura is earned by solving, not by hiding)
-  // spacing
-  if(dist>125) c.moveX = dir*0.22*cfg.speed;
-  else if(dist<68) c.moveX = -dir*0.16*cfg.speed;
-  else if(Math.random()<0.01) c.moveX = -dir*0.2*cfg.speed;
+  // spacing — each archetype fights its OWN preferred range + advance/retreat tempo (the game-plan that makes the matchup FELT)
+  const P = cpuProfile(c);
+  let rMin=P.rng[0], rMax=P.rng[1];
+  const lowHp = P.retHp>0 && c.hp < c.char.hp*(P.retHp/100);      // a glass-cannon bails when hurt
+  if(lowHp){ rMin+=140; rMax+=220; }
+  const clockLow = (game.timer!=null && game.timer<20);          // anti-timeout: even a runaway zoner must engage late
+  if(clockLow && dist>100)      c.moveX = dir*0.24*cfg.speed;     // force the approach when the clock's low
+  else if(dist > rMax)          c.moveX = dir*0.22*cfg.speed*P.adv;  // too far → approach at this fighter's tempo
+  else if(dist < rMin)          c.moveX = -dir*0.16*cfg.speed*P.ret; // too close → back off at this fighter's tempo
+  else if(Math.random()<0.01)   c.moveX = -dir*0.2*cfg.speed;
   hopCover(c);
+  // THROW the turtle — when point-blank and you're guarding, this fighter occasionally grabs (you must throw-tech: A+S)
+  if(dist<50 && c.grounded && p.wantBlock && c.aiThink<=0 && Math.random()<P.thr && c.aura>=6){
+    if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0]+10,cfg.cool[1]+20); return; }
+  }
+  // JUMP-IN overhead — occasionally hop in so your new HIGH/LOW cuts both ways (a jump-in must be stand-blocked)
+  if(c.grounded && dist>80 && dist<210 && c.aiThink<=0 && Math.random()<P.jmp){
+    c.vy=-12.4; c.grounded=false; c.moveX=dir*0.5*cfg.speed; c._jumpInAt=game.frame; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]);
+  }
+  if(!c.grounded && c.vy>1.2 && (game.frame-(c._jumpInAt||-99))<40 && dist<95 && !c.attack && canAfford('kick')){ c.cpuAttack('kick', 6); c._jumpInAt=-99; }  // airkick on the way down = the overhead
   // player took the high ground — climb after them, tier by tier
   if(p.y < c.y-60 && c.grounded){
     let stepPf=null;
@@ -2374,8 +2400,7 @@ function controlCPU(c){
       if(game.frame-(c._readLineAt||0)>300){ c._readLineAt=game.frame; floatText(c.x,c.y-184,'reading you…','#cdb8ff',12); }
       return;
     }
-    const rngd = c.char.spKind==='spear'||c.char.spKind==='sigil';
-    let spChance = rngd?0.62 : c.char.spKind==='slam'?0.5 : 0.38;
+    let spChance = P.sp;   // per-archetype special-use (zoner fishes specials a lot; rushdown/tank rely on normals)
     let kickChance = (c.char.dmg||1)>=1.08?0.58:0.4;
     if(dom==='block'){ spChance=Math.min(0.92, spChance+0.42);   // you turtle → it cracks the guard with specials (chip + guard-crush). Stop blocking, start dodging.
       if(game.frame-(c._readLineAt||0)>300){ c._readLineAt=game.frame; floatText(c.x,c.y-184,'cracking your guard','#ff9f6a',12); } }
