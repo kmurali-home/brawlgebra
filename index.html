@@ -6467,6 +6467,7 @@ function trainSubmit(){
 const net = { ws:null, role:null, seat:-1, room:'', roster:[], status:'offline', err:'', gm:'rumble',
   inEdges:[], pendingSolve:null, guestState:{}, snap:null, snapAt:0, sendAcc:0, bcAcc:0, setW:[0,0],
   name:load('name','PLAYER'), field:'name', input:'', camX:WORLD_W/2, camTz:0.7, lobby:false };
+const PROTO=2;   // netplay protocol version — bump when the snapshot/message shape changes; the server rejects a join whose version != the host's (catches one player on a stale cached build)
 function netURL(){
   if(location.protocol==='file:'||!location.host) return 'ws://localhost:8080';
   return (location.protocol==='https:'?'wss://':'ws://')+location.host;
@@ -6534,9 +6535,9 @@ function netHandle(m){
   }
 }
 // ---- lobby actions ----
-function lobbyCreate(){ store('name',net.name); netConnect(()=>netSend({t:'create',name:net.name,charIdx:game.charIdx})); }
+function lobbyCreate(){ store('name',net.name); netConnect(()=>netSend({t:'create',name:net.name,charIdx:game.charIdx,v:PROTO})); }
 function lobbyJoin(){ if(net.input.length<4){ net.err='enter a 4-letter code'; return; } store('name',net.name);
-  netConnect(()=>netSend({t:'join',room:net.input,name:net.name,charIdx:game.charIdx})); }
+  netConnect(()=>netSend({t:'join',room:net.input,name:net.name,charIdx:game.charIdx,v:PROTO})); }
 function lobbyStart(){
   if(net.role!=='host') return;
   if(net.gm==='duel'){

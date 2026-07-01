@@ -108,7 +108,7 @@ function handleMessage(client, raw){
     case "create": {
       leaveRoom(client);
       const code = makeCode();
-      const room = { code, clients: new Set(), started: false };
+      const room = { code, clients: new Set(), started: false, proto: m.v||0 };   // the room's protocol = the host's build version
       rooms.set(code, room);
       client.room = room; client.seat = 0; client.host = true;
       client.name = (m.name||"P1").slice(0,12); client.charIdx = m.charIdx||0; client.ready = true;
@@ -121,6 +121,7 @@ function handleMessage(client, raw){
       const room = rooms.get((m.room||"").toUpperCase());
       if (!room) { sendFrame(client.sock, JSON.stringify({ t:"error", msg:"No room "+(m.room||"") })); break; }
       if (room.started) { sendFrame(client.sock, JSON.stringify({ t:"error", msg:"Match already started" })); break; }
+      if ((m.v||0) !== room.proto) { sendFrame(client.sock, JSON.stringify({ t:"error", msg:"Version mismatch — you both need the same version. Refresh both browsers." })); break; }
       const seat = freeSeat(room);
       if (seat < 0) { sendFrame(client.sock, JSON.stringify({ t:"error", msg:"Room full" })); break; }
       leaveRoom(client);
