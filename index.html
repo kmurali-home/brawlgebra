@@ -617,6 +617,10 @@ addEventListener("keydown", e => {
     if(game.practice && lk==='f'){ game.pracFight=!game.pracFight; SFX.ui(); if(game.pracFight) game.enemy.aura=Math.max(game.enemy.aura,30); return; }   // PRACTICE: toggle the dummy fighting back (drill defense against a live foe)
     if(lk==='r' && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.online && !game.galaxy && !p.ko && p.stun<=0){ enterRush(); return; }  // FOCUS full → SOLVE RUSH (standard mode only)
     // INPUT BUFFER — if an action can't fire this instant, remember the INTENT for ~6f and replay it the moment it's legal
+    if((lk===KEYS.punch||lk===KEYS.kick) && keys[KEYS.punch] && keys[KEYS.kick] && game.state==='fight' && !game.mode2p){   // A+S together = THROW (beats block); cancel a just-started normal into it
+      if(p.attack && (p.attack.type==='punch'||p.attack.type==='kick') && p.attack.ph==='wind' && (p.attack.fuse-p.attack.t)<=2) p.attack=null;
+      if(p.tryThrow()) return;
+    }
     if(lk===KEYS.punch){ if(!p.tryAttack('punch')) p.bufferedInput={action:'punch',frame:game.frame}; }
     else if(lk===KEYS.kick){ if(!p.tryAttack('kick')) p.bufferedInput={action:'kick',frame:game.frame}; }
     else if(lk===KEYS.special){ if((p.stun>0||p.hurtT>0) && (p.comboedHits||0)>=2) p.burst(); else if(!p.trySpecial()) p.bufferedInput={action:'special',frame:game.frame}; }  // SPECIAL doubles as combo-breaker while being chained (burst never buffers)
@@ -1242,6 +1246,29 @@ function drawPickups(){
 //----------------------------------------------------------------------
 const projs=[];   // FROST's glacial lances
 const hazards=[]; // ORACLE's theorem sigils
+function resolveThrow(f,a){   // grab check on the throw's active frame — beats block, whiffs on air/backdash, teched by a recent throw press
+  const o=f.opp; if(!o){ a.def.rec=34; return; }
+  const dx=Math.abs(o.x-f.x);
+  if(dx < (a.def.reach||52) && o.grounded && o.iframes<=0 && !o.ko){
+    if(game.frame - (o.throwTechAt||-99) <= 8){          // TECH — the foe pressed throw in time: break, both pushed back, no damage
+      f.vx=-f.facing*4; o.vx=(o.x<f.x?-1:1)*4;
+      floatText((f.x+o.x)/2, f.y-158, 'TECH!', '#9fdcff', 20); sparks((f.x+o.x)/2, f.y-90, 10, '#9fdcff', 5); SFX.block(); hitstop=Math.max(hitstop,4);
+      if((game.throwTechShown||0)<3 && o===game.player){ game.throwTechShown=(game.throwTechShown||0)+1; tip('tech','THROW TECH — press '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' the instant you\'re grabbed'); }
+    } else {                                             // GRAB connects — unblockable, soft knockdown
+      const dmg=a.def.dmg||14;
+      o.hp=Math.max(0, o.hp-dmg); o.chipDelay=0;
+      o.stun=Math.max(o.stun||0, 32); o.hurtT=Math.max(o.hurtT||0, 22); o.attack=null;
+      o.vy=-6.5; o.grounded=false; o.vx=(o.x<f.x?-1:1)*3.2; o.streak=0; o.combo=0;
+      floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.32); SFX.heavy(); hitstop=Math.max(hitstop,5);
+      if(f===game.player) game.stats.dmg+=dmg;
+      if(o.hp<=0 && typeof lethal==='function') lethal(o, true);
+    }
+    a.t=4;   // quick recovery after a resolved grab
+  } else {
+    a.def.rec=34;   // WHIFF — long, punishable recovery (jump/backdash beats the throw)
+    floatText(f.x, f.y-150, 'whiff', '#8a93b8', 12);
+  }
+}
 function fireSpecial(f,a){
   const kind=a.kind||'dash';
   if(kind==='dash') return;   // a dash is a melee lunge resolved by normal hit-resolution — no projectile/hazard (else it double-dips damage + drops a stray glyph)
@@ -1562,6 +1589,15 @@ class Fighter {
     if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
     return true;
   }
+  tryThrow(){   // A+S = a short-range GRAB that BEATS block (the turtle-cracker); whiffs on air/backdash; teched by pressing throw within ~8f
+    if(this.ko||this.stun>0||this.hurtT>0) return false;
+    this.throwTechAt=game.frame;   // pressing throw ALWAYS counts as a tech attempt (teching is free), even with no aura
+    if(this.attack||!this.grounded) return false;
+    if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No aura to throw — but you can still TECH one (A+S when grabbed).'); return false; }
+    this.attack={type:'throw', kind:'throw', ph:'wind', t:7, def:{wind:7, act:2, rec:22, dmg:14, reach:52}, tel:0, fuse:7};
+    this.hitThisSwing=false; SFX.whoosh();
+    return true;
+  }
   cpuAttack(type, telFrames){
     let def, kind, sp=null;
     if(type==='special'){
@@ -1756,6 +1792,7 @@ class Fighter {
         if(a.ph==='tel'){ a.ph='wind'; a.t=a.def.wind; SFX.whoosh(); }
         else if(a.ph==='wind'){ a.ph='act'; a.t=a.def.act;
           if(a.type==='special') fireSpecial(this,a);
+          if(a.type==='throw') resolveThrow(this,a);
           if(a.rise){ this.vy=-13.5; this.grounded=false; ring(this.x,this.y-6,a.spCol||this.accent,84,5); for(let i=0;i<11;i++) ember(this.x+frnd(-16,16), this.y-frnd(0,44), a.spCol||this.accent); }   // CARRY THE ONE = a rising uppercut, not a flat lunge
         }
         else if(a.ph==='act'){ a.ph='rec'; a.t=a.def.rec;
