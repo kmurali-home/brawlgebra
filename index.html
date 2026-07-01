@@ -6726,8 +6726,17 @@ function guestTick(){
   net.sendAcc++; if(net.sendAcc>=2){ net.sendAcc=0; sendMyInput(); }
   // watchdog: a half-open/crashed host never sends 'hostleft', so free a guest stuck on a frozen frame
   if(net.snapAt>0 && (game.state==='intro'||game.state==='fight') && performance.now()-net.snapAt>12000){ netToTitle('host connection lost'); return; }
+  const me=game.player;
   if(game.fighters) for(const f of game.fighters){
-    f.x += (f.netX-f.x)*0.4; f.y += (f.netY-f.y)*0.4;
+    if(f===me && f.grounded && !f.attack && f.stun<=0 && (f.hurtT||0)<=0 && (f.frozenT||0)<=0 && (f.dizzy||0)<=0){
+      // CLIENT-SIDE PREDICTION (experimental): move MY OWN fighter to my input this instant, then reconcile softly to the host's authoritative x — so the guest doesn't play a full round-trip behind. Any hit/attack/air drops back to host authority below.
+      const mv=((keys[KEYS.right]||keys['arrowright'])?1:0)-((keys[KEYS.left]||keys['arrowleft'])?1:0);
+      f.x += mv*(f.char.speed||1)*2.3;         // predicted walk step (approx; reconcile corrects the rest)
+      f.x += (f.netX-f.x)*0.10;                // gentle pull toward host truth
+    } else {
+      f.x += (f.netX-f.x)*0.5;                 // attacking / hit / airborne / frozen → host is authoritative, snap in
+    }
+    f.y += (f.netY-f.y)*0.4;
     f.animT++; f.updatePose();
     if(f.iframe>0)f.iframe--; if(f.flashT>0)f.flashT--; if(f.dodgeT>0)f.dodgeT--;
     if(f.chipDelay>0) f.chipDelay--; else f.hpShown += (f.hp-f.hpShown)*0.07;   // ghost health-bar drain (mirrors Fighter.update)
