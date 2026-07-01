@@ -2372,7 +2372,9 @@ function resolveHits(att,def){
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6); }  // landing hits charges FOCUS
     def.streak=0; def.combo=0; def.chargedHit=false; // getting tagged breaks focus AND your combo
     att.combo=(att.combo||0)+1; att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
-    if(att.attack && hb.type!=='special') att.attack.cancelOK=22;   // a confirmed normal opens a cancel window (~0.37s — forgiving enough to feel)
+    if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22;   // a confirmed normal opens a cancel window (~0.37s — forgiving enough to feel)
+      if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13); }   // surface the invisible cancel window so the combo layer is discoverable
+    }
     if(chain){ announce('CHAIN!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212,'CHAIN FINISHER','#ff9f2a',20); }
     else if(att.combo>=2) floatText(att.x,att.y-202,'COMBO ×'+att.combo,'#ffd34d',15+Math.min(9,att.combo));
     if(overclocked){ ring(cx,cy,'#ffd34d',46,4); floatText(cx,cy-30,'◆',('#ffd34d'),20); }
@@ -5379,14 +5381,23 @@ function render(){
     drawBanners();
   }
   if(game.paused){
-    ctx.fillStyle='rgba(3,2,10,0.68)'; ctx.fillRect(0,0,W,H);
-    txtO('PAUSED', W/2, 168, 44, '#efe9ff',{sw:7});
-    ['A / D  move   ·   double-tap = dash (backdash = i-frames)',
-     'W  jump   ·   S+W  drop through ledge   ·   S  block',
-     'J punch · K kick · L special — every swing spends aura up front',
-     'type digits + ⏎  — solve to dodge & gain aura',
-     'M  music   ·   P  resume'
-    ].forEach((s,i)=> txtO(s, W/2, 218+i*30, 13, '#b8c0da',{mono:true,sw:0}));
+    ctx.fillStyle='rgba(3,2,10,0.72)'; ctx.fillRect(0,0,W,H);
+    txtO('PAUSED', W/2, 96, 38, '#efe9ff',{sw:7});
+    const kp=keyLabel(KEYS.punch), kk=keyLabel(KEYS.kick), ks=keyLabel(KEYS.special);
+    ['← → move   ·   double-tap = dash (backdash = i-frames)',
+     '↑ jump   ·   ↓ block   ·   type digits + ⏎ to answer',
+     kp+' punch · '+kk+' kick · '+ks+' special — every swing spends aura up front'
+    ].forEach((s,i)=> txtO(s, W/2, 150+i*26, 12, '#b8c0da',{mono:true,sw:0}));
+    // THINGS TO TRY — the execution layer most players never find
+    txtO('THINGS TO TRY', W/2, 262, 14, '#ffd34d',{sw:0});
+    [['CANCEL', 'land a hit, then '+kk+' / '+ks+' in the CHAIN ▸ flash — a combo'],
+     ['BURST', 'being combo’d? '+ks+' while stunned breaks you free'],
+     ['PERFECT DODGE', 'red ! incoming — re-answer in the gold ⚡NOW window to slip + stagger'],
+     ['CHAIN FINISHER', 'answer MID-combo to charge a ×1.7 blow']
+    ].forEach((r,i)=>{ const y=294+i*30;
+      txtO(r[0], W/2, y, 13, '#7ae8ff',{mono:true,sw:0});
+      txtO(r[1], W/2, y+15, 10.5, '#aab4d0',{mono:true,sw:0}); });
+    txtO('P  resume   ·   M  music', W/2, 428, 12, '#8a93b8',{mono:true,sw:0});
   }
   if(game.online && net.role==='guest') drawNetHealth();   // tell the guest when it's the network, not them
   if(game.trailerMode) drawTrailerOverlay();   // trailer letterbox + scene cross-fades over everything
