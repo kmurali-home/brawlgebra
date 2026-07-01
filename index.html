@@ -4348,7 +4348,14 @@ function drawLobby(){
       txtO(net.field==='name'?'type your name, then ENTER':'choose:', W/2, 224, 12, '#9aa3c8',{mono:true,sw:0});
       R.create=btn('CREATE ROOM', W/2-220, 250, 200, 50, net.field==='choose');
       R.join  =btn('JOIN WITH CODE', W/2+20, 250, 200, 50, false);
-      txtO(net.status==='connecting'?'connecting…':'', W/2, 330, 12, '#ffd34d',{mono:true,sw:0});
+      if(net.status==='connecting'){
+        const el=(performance.now()-(net.connectStart||performance.now()))/1000;
+        const dots='.'.repeat(1+(Math.floor(game.frame/20)%3));
+        if(el>2.5){   // taking a while = the free relay is waking; tell the player instead of a dead 'connecting…'
+          txtO('waking the arena'+dots, W/2, 324, 14, '#ffd34d',{mono:true,sw:0});
+          txtO('free server — first connect can take ~30–60s'+(net.retries?'   ·   '+el.toFixed(0)+'s':''), W/2, 344, 10, '#8a93b8',{mono:true,sw:0});
+        } else txtO('connecting'+dots, W/2, 330, 12, '#ffd34d',{mono:true,sw:0});
+      }
       txtO('host runs the match · share your room code with friends', W/2, 372, 11, '#8a93b8',{mono:true,sw:0});
     }
     txtO('T — back to title', W/2, H-30, 11, '#8a93b8',{mono:true,sw:0});
@@ -5517,7 +5524,7 @@ function menuActivateLabel(label){
   if(label==='PLAY'){ game.mode='cpu'; style(); game.pickPhase=0; game.state='select'; }              // 1v1; the style is picked on the select screen
   else if(label==='MODES'){ game.modeIdx=0; game.state='modes'; }
   else if(label==='DAILY FIGHT') startDailyChallenge();
-  else if(label==='MULTIPLAYER'){ game.mpIdx=0; game.state='rumbleChoose'; }                            // pick 1v1 online / rumble online / local rumble
+  else if(label==='MULTIPLAYER'){ game.mpIdx=0; game.state='rumbleChoose'; netPrewarm(); }               // pick 1v1 online / rumble online / local rumble — pre-wake the relay so it's up by the time they create/join
   else if(label==='THE TOWER'){ game.mode='tower'; game.pickPhase=0; game.state='select'; }
   else if(label==='GAUNTLET'){ game.mode='gauntlet'; game.gWins=0; game.gMut=null; game.pickPhase=0; game.state='select'; }
   else if(label==='STORY MODE') enterStory();
@@ -6419,9 +6426,15 @@ function netURL(){
   if(location.protocol==='file:'||!location.host) return 'ws://localhost:8080';
   return (location.protocol==='https:'?'wss://':'ws://')+location.host;
 }
+function healthURL(){
+  if(location.protocol==='file:'||!location.host) return 'http://localhost:8080/health';
+  return (location.protocol==='https:'?'https://':'http://')+location.host+'/health';
+}
+function netPrewarm(){ try{ fetch(healthURL(),{mode:'no-cors',cache:'no-store'}).catch(()=>{}); }catch(e){} }   // wake the free-tier relay early so it's up before a friend joins
 function netSend(o){ try{ if(net.ws && net.ws.readyState===1) net.ws.send(JSON.stringify(o)); }catch(e){} }
-function netConnect(then){
+function netConnect(then, _retry){
   net.err=''; net.status='connecting'; let opened=false;
+  if(!_retry){ net.connectStart=performance.now(); net.retries=0; netPrewarm(); }   // first attempt: stamp the clock + wake the relay
   // why a connection might fail — point the player at the fix instead of a blank screen
   const onPages = location.host && /github\.io|githubusercontent/.test(location.host);
   const failMsg = onPages
@@ -6429,14 +6442,22 @@ function netConnect(then){
     : 'couldn’t reach the relay server — is it running? (see PLAY-ONLINE)';
   let ws; try{ ws=new WebSocket(netURL()); }catch(e){ net.err=failMsg; net.status='offline'; return; }
   net.ws=ws;
-  ws.onopen=()=>{ opened=true; net.status='online'; if(then) then();
+  ws.onopen=()=>{ opened=true; net.status='online'; net.connectStart=0; if(then) then();
     clearInterval(net.ka); net.ka=setInterval(()=>netSend({t:'ping'}), 8000); }; // keepalive (survives bg throttle)
-  ws.onclose=()=>{ net.status='offline'; clearInterval(net.ka);
-    if(game.online) netToTitle('disconnected'); else if(!opened) net.err=failMsg; };
-  ws.onerror=()=>{ if(!opened) net.err=failMsg; };
+  ws.onclose=()=>{ clearInterval(net.ka);
+    if(game.online){ net.status='offline'; netToTitle('disconnected'); return; }
+    if(opened) return;
+    // free-tier relays spin down when idle; the FIRST ws usually fails while it wakes — auto-retry within a cold-start window (never on Pages, which can't host WS)
+    const elapsed = performance.now()-(net.connectStart||0);
+    if(!onPages && elapsed < 75000 && (net.retries||0) < 30){
+      net.retries=(net.retries||0)+1; netPrewarm();
+      clearTimeout(net.retryT); net.retryT=setTimeout(()=>{ if(net.status==='connecting') netConnect(then, true); }, 2200);
+    } else { net.status='offline'; net.err=failMsg; }
+  };
+  ws.onerror=()=>{};   // failure handled by onclose (with retry)
   ws.onmessage=(e)=>{ let m; try{m=JSON.parse(e.data);}catch(_){return;} netHandle(m); };
 }
-function netToTitle(msg){ game.online=false; net.role=null; net.lobby=false; if(msg) net.err=msg; game.state='title'; }
+function netToTitle(msg){ game.online=false; net.role=null; net.lobby=false; clearTimeout(net.retryT); clearInterval(net.ka); net.status='offline'; if(msg) net.err=msg; game.state='title'; }
 function netHandle(m){
   switch(m.t){
     case 'joined': net.role=m.host?'host':'guest'; net.seat=m.seat; net.room=m.room; net.lobby=true; net.field='room'; net.err=''; SFX.ui(); break;
