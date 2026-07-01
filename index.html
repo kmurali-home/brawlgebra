@@ -5103,7 +5103,7 @@ function drawUnlockBanner(){            // celebratory line at the very bottom w
 }
 function drawDuelEnd(){   // 1v1 online result + rematch
   const won=game.playerWon, me=game.player, foe=game.enemy;
-  letterBanner(won?'YOU WIN':'YOU LOSE', 132, 64, won?'#ffd34d':'#ff6a8a', 1);
+  letterBanner(won?'VICTORY':'DEFEAT', 132, 64, won?'#ffd34d':'#ff6a8a', 1);   // cold register, matches the solo result banner (no chirpy 'YOU WIN/YOU LOSE' seam)
   const meIdx=clamp(net.seat,0,1), myS=net.setW[meIdx]|0, foeS=net.setW[1-meIdx]|0;
   if(myS+foeS>0) txtO('SETS  '+myS+' — '+foeS, W/2, 178, 15, '#ffd34d',{mono:true,sw:0});   // running series across rematches
   txtO((me?me.name:'YOU')+'   this match '+(game.pWins|0)+' — '+(game.eWins|0)+'   '+(foe?foe.name:'RIVAL'),
@@ -6508,7 +6508,7 @@ function netHandle(m){
       if(game.online && game.onlineDuel && game.state!=='matchend' && game.fighters){   // host bailed a live duel → the guest wins, not a silent bounce
         const foe=game.fighters.find(f=>f.seat!==net.seat);
         if(foe){ foe.hp=0; foe.hpShown=0; foe.eliminated=true; }
-        game.playerWon=true; game.grade=null; announce('OPPONENT LEFT — YOU WIN','#ffd34d'); game.state='matchend'; SFX.ko();
+        game.playerWon=true; game.grade=null; announce('OPPONENT WITHDREW — VICTORY','#ffd34d'); game.state='matchend'; SFX.ko();
       } else if(game.online) netToTitle('host left — back to title');   // mid-match (rumble/non-duel): bail. In the LOBBY, do nothing — the 'roster' message promotes the survivor in place.
       break;
   }
@@ -6548,7 +6548,7 @@ function onPeerLeft(seat){   // server told us a non-host seat dropped
   } else if(game.online && game.onlineDuel && net.role==='host' && game.state!=='matchend'){
     const foe=game.fighters && game.fighters.find(f=>f.seat===seat);   // opponent rage-quit a duel → award the bout, don't punch a dummy
     if(foe){ foe.hp=0; foe.hpShown=0; foe.eliminated=true; game.playerWon=true; game.grade=null;
-      announce('OPPONENT LEFT — YOU WIN','#ffd34d'); game.state='matchend'; SFX.ko(); }
+      announce('OPPONENT WITHDREW — VICTORY','#ffd34d'); game.state='matchend'; SFX.ko(); }
   } else if(game.online && !game.onlineDuel && net.role==='host' && game.state!=='matchend'){
     const f=game.fighters && game.fighters.find(x=>x.seat===seat);   // rumble: hand the dropped seat to the AI so it fights & dies normally (no immortal statue)
     if(f && !f.ko){ f.human=false; delete net.guestState[seat]; announce('P'+(seat+1)+' LEFT — AI TAKES OVER','#ffd34d'); }
