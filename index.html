@@ -1398,6 +1398,7 @@ const SP_KITS={
   oracle:  [ {name:'REMAINDER',   kind:'spear', fast:true},      {name:'LONG DIVISION', kind:'fan'},                        {name:'QUOD ERAT DEMONSTRANDUM',kind:'drop'} ],
   james:   [ {name:'REDUCE',      kind:'spear', fast:true},      {name:'CANCEL',        kind:'slam', guard:true},          {name:'RESOLUTION',            kind:'sigil', big:true} ],   // SOLOMON (the Equals): distinct '='-themed kit so the marquee unlock is not a starter reskin
 };
+const STYLE_BY_ID={ initiate:'ALL-ROUNDER', mauler:'BRAWLER', ember:'RUSHDOWN', frost:'ZONER', oracle:'GLASS CANNON', james:'THE APEX' };   // one-word play-style read for the select card — the real differences are stats + specials now, not math
 function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
 function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
   for(let t=2;t>=0;t--) if(f.aura>=SPEC_TIERS[t].cost) return t;
@@ -4875,6 +4876,9 @@ function drawSelect(){
         ctx.fillStyle = t===2? (c.gi||'#ffd34d') : '#cdd6ee';
         ctx.fillText(nm, x+cw/2, y+250+t*16);
       } }
+    { const st=STYLE_BY_ID[c.id]; if(st){   // play-style chip — the mechanical read a picker needs at a glance
+        rr(x+26, y+300, cw-52, 20, 6); ctx.fillStyle=sel?'rgba(255,211,77,0.16)':'rgba(120,160,220,0.12)'; ctx.fill();
+        txtO(st, x+cw/2, y+314, 10, (c.gi||'#8fd8f8'),{mono:true,sw:0}); } }
     // (blurb dropped from the card — the tagline + SPECIALS kit carry identity now, and the 5-card layout is too narrow for it)
     if(!game.mode2p){ // best grade at this difficulty (versus or tower, whichever ranks higher)
       const b1=bests[c.id+'_'+DIFF.level], b2=bests['tower_'+c.id+'_'+DIFF.level];
