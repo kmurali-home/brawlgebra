@@ -1578,6 +1578,7 @@ class Fighter {
       spCol:(this.char.gi||this.accent)};
     this.hitThisSwing=false; SFX.special(); this.flashT=6;
     if(tier>=1) announce(sp.name, this.char.gi||'#ffd34d');   // name the converter/verdict; the cheap opener stays quiet
+    if(game.tutorial && this===game.player) game.fSpecialDone=(game.fSpecialDone||0)+1;   // THE TRIAL: count the player's special fires for the ladder step
     return true;
   }
   addAura(n){ this.aura=clamp(this.aura+n,0,this.char.auraMax); if(this.auraShown<this.aura) this.auraShown=this.aura; }
@@ -5694,7 +5695,8 @@ const TUTOR_STEPS=[
   'Land a punch, then '+keyLabel(KEYS.kick)+' before the window closes — a cancel. Chains only flow from a confirmed hit.',
   'You are being combo\'d. Press '+keyLabel(KEYS.special)+' while stunned to break free — a combo is an exchange, not a gift.',
   'A red ! means he commits, and your answer clears. Re-answer in the gold ⚡NOW window to slip the blow and stagger him.',
-  'You’ve got it: solve to power up, chain & burst, and time the ⚡NOW solve to dodge. In the fight, '+keyLabel(KEYS.special)+' fires the strongest of your three SPECIALS you can afford. Your first real fight begins…',
+  'SPECIALS are your identity — each fighter has three. You have aura for one: press '+keyLabel(KEYS.special)+'. It always fires the strongest tier you can afford.',
+  'You’ve got it: solve to power up, chain & burst, time the ⚡NOW solve to dodge, and spend a full bar on your strongest SPECIAL. Your first real fight begins…',
 ];
 function startTutorial(){
   // capture a SAFE fight to land on after the lesson (the boot enemy may be unset → default to a real ROSTER foe)
@@ -5704,7 +5706,7 @@ function startTutorial(){
   game.galaxy=false;   // the tutorial teaches STANDARD — the post-lesson first fight matches it
   game.daily=false; _mrng=null;                  // the lesson uses normal math, not the seeded Daily stream
   game.tutorial=true; game.tutorStep=0; game.tutorT=0;
-  game.cancelDone=0; game.burstDone=0; game.fDone=0; game.relockAtk=null;  // fresh lesson gates
+  game.cancelDone=0; game.burstDone=0; game.fDone=0; game.fSpecialDone=0; game._tierTip=0; game.relockAtk=null;  // fresh lesson gates
   game.mode='cpu';
   if(!(game.player.char&&game.player.char.id)) game.player.setCharacter(PROTAG);
   game.enemy.setCharacter(DUMMY_CHAR);
@@ -5742,7 +5744,15 @@ function tutorTick(){
     if(!E.attack && E.grounded && game.tutorT%96===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 92); SFX.charge(); } // a slow, readable telegraph
     if((game.stats.perfects||0)>=1){ game.tutorStep=5; game.tutorT=0; announce('PERFECT DODGE!','#ffd34d'); }
     else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; announce('again, later.','#9fdcff'); }   // SOFT-LOCK GUARD
-  } else if(game.tutorStep===5){                        // wrap-up (OP FOCUS step retired with the operator-strike system)
+  } else if(game.tutorStep===5){                        // SPECIAL — the headline mechanic: fire a tier-1, then feel the jump on a full bar
+    if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }          // keep the dummy reachable for melee/dash specials
+    game.tutorT++;
+    if((game.fSpecialDone||0)===0){ P.aura=Math.max(P.aura,25); }                    // exactly a tier-1
+    else if((game.fSpecialDone||0)===1){ P.aura=Math.max(P.aura,90);                 // a full bar → the strongest tier
+      if(!game._tierTip){ game._tierTip=1; announce('FULL BAR — '+keyLabel(KEYS.special)+' FIRES YOUR STRONGEST','#ffd34d'); } }
+    if((game.fSpecialDone||0)>=2){ game.tutorStep=6; game.tutorT=0; announce('SPECIAL!','#ffd34d'); }
+    else if(game.tutorT>1000){ game.tutorStep=6; game.tutorT=0; }                    // soft-lock guard
+  } else if(game.tutorStep===6){                        // wrap-up
     game.tutorT++;
     if(game.tutorT>150) endTutorial();
   }
