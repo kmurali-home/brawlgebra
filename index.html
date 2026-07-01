@@ -1236,7 +1236,7 @@ function fireSpecial(f,a){
     SFX.heavy();
     for(const o of targets){
       if(!o.ko && Math.abs(o.x-f.x)<(big?178:160) && o.y>GROUND-170){
-        const res=o.takeHit(Math.round(dmg*f.dmgMul), o.x<f.x?-1:1, true, guard);
+        const res=o.takeHit(dmg, o.x<f.x?-1:1, true, guard);   // specials deal the FLAT tier damage — identical across fighters (dmgMul is for normal attacks only)
         if(res==='hit' && launch){ o.vy=-15; o.grounded=false; o.stun=Math.max(o.stun,34); o.dizzy=Math.max(o.dizzy,88); floatText(o.x,o.y-204,'LAUNCHED',col,16); }
         if(res==='hit' && o.hp<=0) lethal(o,true);
       }
@@ -1275,7 +1275,7 @@ function updateProjs(){
                           : (pr.x>bd.x && pr.x<bd.x+bd.w && pr.y>bd.y && pr.y<bd.y+bd.h);
       if(hit){
         dead=true;
-        const res=t.takeHit(Math.round((pr.dmg||18)*pr.owner.dmgMul), pr.vx>0?1:-1, true);
+        const res=t.takeHit((pr.dmg||18), pr.vx>0?1:-1, true);   // special projectiles: flat tier damage, identical across fighters
         if(res==='hit' && pr.freeze){ t.frozenT=64; t.stun=Math.max(t.stun,64); floatText(t.x,t.y-176,'FROZEN!','#bfe8ff',20); }
         if(res!=='dodge'){ ring(pr.x, pr.wave?GROUND-20:pr.y, pcol, pr.wave?(pr.r||90):42, pr.wave?6:4); if(pr.wave) addTrauma(0.35); }
         if(t.hp<=0) lethal(t,true);
@@ -1326,7 +1326,7 @@ function updateHazards(){
       const r=h.r||78, vr=h.vr||150, dmg=h.dmg||30;
       for(const t of tgts){
         if(t && !t.ko && Math.abs(t.x-h.x)<r && Math.abs(t.y-hy)<vr){
-          const res=t.takeHit(Math.round(dmg*(h.stage?1:h.owner.dmgMul)), t.x<h.x?-1:1, true);
+          const res=t.takeHit(dmg, t.x<h.x?-1:1, true);   // special/stage hazards: flat damage, no per-fighter scaling (specials are uniform)
           if(res==='hit' && t.hp<=0) lethal(t,true);
         }
       }
@@ -1396,6 +1396,7 @@ const SP_KITS={
   ember:   [ {name:'CARRY THE ONE',kind:'dash', rise:true},      {name:'RUNNING TOTAL', kind:'slam', launch:true},          {name:'THE SUM COMES DUE',     kind:'wave', big:true} ],
   frost:   [ {name:'GLACIAL LANCE',kind:'spear', reach:165},     {name:'THE REMAINDER', kind:'spear', freeze:true, slow:true},{name:'ABSOLUTE ZERO',        kind:'wave', freeze:true, big:true} ],
   oracle:  [ {name:'REMAINDER',   kind:'spear', fast:true},      {name:'LONG DIVISION', kind:'fan'},                        {name:'QUOD ERAT DEMONSTRANDUM',kind:'drop'} ],
+  james:   [ {name:'REDUCE',      kind:'spear', fast:true},      {name:'CANCEL',        kind:'slam', guard:true},          {name:'RESOLUTION',            kind:'sigil', big:true} ],   // SOLOMON (the Equals): distinct '='-themed kit so the marquee unlock is not a starter reskin
 };
 function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
 function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
@@ -1678,7 +1679,7 @@ class Fighter {
     const reach=d.reach*(0.5*this.char.scale+0.5);   // tall builds genuinely out-range; lean builds trade reach for a smaller hurtbox (body() already scales)
     const x1=Math.min(fx, fx+this.facing*reach);
     return {x:x1, y:this.y+d.hy-30, w:reach+18, h:this.attack.type==='special'?86:54,
-            dmg:d.dmg*this.dmgMul, heavy:d.heavy, type:this.attack.type};
+            dmg:(this.attack.type==='special'? d.dmg : d.dmg*this.dmgMul), heavy:d.heavy, type:this.attack.type};   // specials uniform; normal attacks keep per-fighter power
   }
   body(){ const s=this.char.scale; return {x:this.x-20*s, y:this.y-142*s, w:40*s, h:142*s}; }
 
@@ -5017,7 +5018,7 @@ function drawInterlude(){
     const nx=game.ladder[game.towerIdx];
     txtO('NEXT CHALLENGER', W/2, 244, 14, '#8fd8f8',{mono:true,sw:0});
     txtO(nx.name, W/2, 300, 44, nx.gi, {sw:7});
-    txtO(nx.tagline+'  ·  ★ '+nx.spName, W/2, 326, 13, '#cabbe0',{mono:true,sw:0});
+    txtO(nx.tagline+'  ·  ★ '+((spKitFor(nx)[2]||{}).name||nx.spName), W/2, 326, 13, '#cabbe0',{mono:true,sw:0});   // show the fighter's signature (tier-3) special, not the retired elemental label
     txtO('“'+nx.quip+'”', W/2, 356, 13, '#9aa3c8',{mono:true,sw:0});
   } else {
     letterBanner('VICTORY '+game.gWins, 140, 44, '#ffd34d', 1);
