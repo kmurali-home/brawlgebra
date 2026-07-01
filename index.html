@@ -2140,6 +2140,13 @@ function drawFighter(f){
     ctx.restore(); ctx.globalAlpha=1;
     return;
   }
+  // WHIFF-PUNISH readability: a foe in the recovery of their own swing is OPEN — a pulsing amber tell teaches the player to punish (and that their own recovery is punishable)
+  if(f.attack && f.attack.ph==='rec' && !f.ko && f.grounded){
+    const p=0.5+0.5*Math.sin(game.frame*0.45);
+    ctx.save(); ctx.globalAlpha=0.28+0.34*p; ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 28, 72, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
+    if(f===game.enemy && !game.mode2p) txtO('▸ OPEN', f.x, f.y-180, 11, '#ffd34d', {mono:true,sw:0});
+  }
   // ground glow + shadow (cast onto whatever surface is underfoot)
   const fy = f.floorY||GROUND;
   const hgt = clamp((fy-f.y)/260,0,1);
@@ -2384,12 +2391,16 @@ function resolveHits(att,def){
     if((att.overclock||0)>game.frame){ dmg *= 1.25; overclocked=true; att.overclock=0; }  // OVERCLOCK — fast-solve bonus cashed on the swing
     let gcombo=0;
     if(att.attack && att.attack.galaxyComboMul){ gcombo=att.attack.galaxyComboMul; dmg *= gcombo; }  // GALAXY combo finisher — the unlocked string pays off big (×2..×5)
+    let punish=false;
+    if(def.attack && def.attack.ph==='rec' && hb.type!=='special'){ punish=true; dmg *= 1.3; }   // WHIFF-PUNISH: catch a foe in the recovery of their own swing — reward the read
     dmg = Math.round(dmg);
     const res=def.takeHit(dmg,dir,hb.heavy);
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
     const cx=def.x-dir*6, cy=def.y-90;
     if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3); return; }
     // clean hit
+    if(punish){ att.addAura(14); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window: fence to earn aura, don't turtle to bank it
+      floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6); }  // landing hits charges FOCUS
     def.streak=0; def.combo=0; def.chargedHit=false; // getting tagged breaks focus AND your combo
