@@ -4915,8 +4915,8 @@ function drawSelect(){
       ctx.strokeRect(x+cw/2-11, y+150, 22, 17);
       ctx.beginPath(); ctx.arc(x+cw/2, y+150, 8, Math.PI, 0); ctx.stroke(); ctx.restore();
       txtO('SEALED', x+cw/2, y+196, 16, '#cabbe0',{sw:3});
-      txtO('win the campaign', x+cw/2, y+218, 9.5, '#8a93b8',{mono:true,sw:0});
-      txtO('to earn this Order', x+cw/2, y+232, 9.5, '#8a93b8',{mono:true,sw:0});
+      txtO((game.storyProg||0)+' / '+(ORDER_UNLOCK[c.id]||STORY.length)+' chapters won', x+cw/2, y+218, 9.5, '#8a93b8',{mono:true,sw:0});
+      txtO('keep going to unlock', x+cw/2, y+232, 9.5, '#8a93b8',{mono:true,sw:0});
     }
   }
   if(game.gateMsg && game.frame-game.gateMsg<150){   // tried to pick a sealed Order
@@ -5851,7 +5851,9 @@ function playableRoster(){   // the Initiate is always yours; the four Orders ar
   const base=[PROTAG, ...ROSTER];
   return (game.unlocks&&game.unlocks.solomon)? [...base, SOLOMON_CHAR] : base;
 }
-function charLocked(c){ return ROSTER.includes(c) && (game.storyProg||0) < STORY.length; }   // an Order, before the saga is won
+// ARCADE-LADDER unlock: each Order opens as you clear campaign chapters (front-loaded so a fresh player has fighters fast), instead of all-at-once at the very end
+const ORDER_UNLOCK={ ember:1, frost:3, oracle:5, mauler:8 };   // storyProg (chapters won) needed to unlock each Order — Addison first, Maximilian the warlord last
+function charLocked(c){ return ROSTER.includes(c) && (game.storyProg||0) < (ORDER_UNLOCK[c.id]||STORY.length); }   // an Order, before you've won enough of the campaign to earn it
 // the achievement checklist shown on the RECORDS screen — the "what's left to chase" list
 function achievements(){
   const p=game.profile||load('profile',freshProfile());
