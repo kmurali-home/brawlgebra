@@ -614,6 +614,7 @@ addEventListener("keydown", e => {
     }
     if(game.practice && k==='Escape'){ game.practice=false; setMusic('default'); game.state='title'; SFX.ui(); return; }   // leave practice
     if(game.practice && game.galaxy && lk==='b'){ enterGalaxyBurst(1); return; }   // PRACTICE: re-roll a burst on demand
+    if(game.practice && lk==='f'){ game.pracFight=!game.pracFight; SFX.ui(); if(game.pracFight) game.enemy.aura=Math.max(game.enemy.aura,30); return; }   // PRACTICE: toggle the dummy fighting back (drill defense against a live foe)
     if(lk==='r' && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.online && !game.galaxy && !p.ko && p.stun<=0){ enterRush(); return; }  // FOCUS full → SOLVE RUSH (standard mode only)
     // INPUT BUFFER — if an action can't fire this instant, remember the INTENT for ~6f and replay it the moment it's legal
     if(lk===KEYS.punch){ if(!p.tryAttack('punch')) p.bufferedInput={action:'punch',frame:game.frame}; }
@@ -3006,7 +3007,7 @@ function step(){
     if(game.practice){   // free training vs a still dummy that can't die; you can't lose; clock frozen
       if(e.hp<=e.char.hp*0.15){ e.hp=e.char.hp; e.hpShown=e.hp; floatText(e.x,e.y-182,'RESET','#9fb0c8',13); }
       p.hp=p.char.hp; game.timer=99;
-      tip('prac','PRACTICE — the dummy won\'t fight back · ESC to quit'+(game.galaxy?' · B to re-roll a burst':''));
+      tip('prac','PRACTICE · '+(game.pracFight?'dummy FIGHTS BACK (F: idle)':'F: make the dummy fight back')+' · P: move list · ESC quit'+(game.galaxy?' · B: re-roll burst':''));
     }
     forgeTick();                       // MULTIPLY stage: oscillate the central forge platform
     stageHazardTick();                 // ambient stage hazards (gated on settings.hazards)
@@ -3016,7 +3017,7 @@ function step(){
     else controlPlayer(p);
     if(game.mode2p) controlP2(e);
     else if(game.online){ const gs=net.guestState[e.seat]||{}; e.moveX=gs.mv||0; e.wantBlock=!!gs.bl; }   // ONLINE DUEL: the foe is your friend — drive from streamed input, not AI
-    else if(!game.tutorial && !game.practice){ controlCPU(e); cpuTelegraphDrift(e); }   // tutorial dummy is script-controlled; PRACTICE dummy just stands there
+    else if(!game.tutorial && (!game.practice || game.pracFight)){ controlCPU(e); cpuTelegraphDrift(e); }   // PRACTICE: dummy idle by default; F makes it fight back so you can drill block / dodge / burst
     p.update(true); e.update(true);
     if(game.ally){ allyControl(game.ally); game.ally.update(true); }   // LESSING fights at your side in the finale
     // body push
