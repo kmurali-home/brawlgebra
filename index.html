@@ -1498,7 +1498,7 @@ class Fighter {
   reset(x,facing){
     this.x=x; this.y=GROUND; this.vx=0; this.vy=0; this.grounded=true;
     this.hp=this.char.hp; this.hpShown=this.hp; this.chipDelay=0;
-    this.aura=30; this.auraShown=30; this.auraChipT=0; this.auraFlash=0;
+    this.aura=22; this.auraShown=22; this.auraChipT=0; this.auraFlash=0;   // #2 scarcity: lower start so the economy bites early
     this.facing=facing||this.facing||1;
     this.attack=null; this.hitThisSwing=false;
     this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0;
@@ -1735,6 +1735,7 @@ class Fighter {
     if(this.chipDelay>0) this.chipDelay--;
     else this.hpShown += (this.hp-this.hpShown)*0.07;
     if(this.hpShown<this.hp) this.hpShown=this.hp;
+    if(game.state==='fight' && this.aura>0 && !this.ko) this.aura -= this.aura*0.0016;   // #2 anti-hoard leak: a banked bar slowly bleeds (proportional — a full/special-ready bank leaks fastest, a broke player barely) so "bank to full then commit" fails; you must fence/solve to stay funded
     if(this.auraFlash>0) this.auraFlash--;
     if(this.auraChipT>0) this.auraChipT--;
     else this.auraShown += (this.aura-this.auraShown)*0.12;
@@ -5521,7 +5522,7 @@ const SOLOMON_CHAR=Object.assign({},BASE_CHAR,{
 const ROSTER=[
  {id:'mauler',name:'MAXIMILIAN',tagline:'THE BOUNDLESS PRODUCT',gi:'#ff5a6a',trim:'#ffcf6a',sigil:'×',
   quip:'Everything that can grow, must. I am only the proof.',
-  hp:125,speed:0.8,scale:1.13,costMul:0.55,gainMul:0.6,dmg:1.2,auraMax:70,regen:0.05,
+  hp:125,speed:0.8,scale:1.13,costMul:0.7,gainMul:0.6,dmg:1.2,auraMax:70,regen:0.05,
   streakMul:0,blockMul:1,perfectStun:46,mathNeed:1,upside:2,
   spKind:'slam',spName:'QUAKE SLAM', build:{torso:28,head:'horns'},
   atk:{kick:{dmg:15,reach:96,wind:12,act:6,rec:22,heavy:true,hy:-66}},   // slow, armored crusher kick
