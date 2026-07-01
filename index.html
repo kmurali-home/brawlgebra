@@ -5462,7 +5462,7 @@ function speakerToChar(w){
   return null;                              // NARRATOR — hold on the empty hall
 }
 function sceneFor(theme){ return {plus:'monastery',minus:'difference',div:'schism',mul:'overflow',james:'equals'}[theme]||'monastery'; }
-const BOSS_CHAR=Object.assign({},BASE_CHAR,{hp:130,dmg:1.2,regen:0.05,scale:1.06,
+const BOSS_CHAR=Object.assign({},BASE_CHAR,{hp:130,dmg:1.2,regen:0,scale:1.06,
   quip:'Everything reduces. Even you.'});
 // Playable SOLOMON — unlocked by clearing the Tower or finishing the saga. Balanced (not the buffed boss).
 const SOLOMON_CHAR=Object.assign({},BASE_CHAR,{

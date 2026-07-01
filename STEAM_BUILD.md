@@ -1,4 +1,4 @@
-# Shipping Brawlgebra on Steam
+# Shipping Modulus on Steam
 
 This is the practical path from the single-file game to a paid Steam build.
 The desktop wrapper is **[Tauri v2](https://tauri.app)** — it packages `index.html`
@@ -43,8 +43,8 @@ npm run desktop:build  # produces the installer
 
 Output lands in `src-tauri/target/release/bundle/`:
 
-- **macOS:** `dmg/Brawlgebra_1.0.0_aarch64.dmg` and `macos/Brawlgebra.app`
-- **Windows** (when built on Windows): `nsis/Brawlgebra_1.0.0_x64-setup.exe` + `msi/…msi`
+- **macOS:** `dmg/Modulus_1.0.0_aarch64.dmg` and `macos/Modulus.app`
+- **Windows** (when built on Windows): `nsis/Modulus_1.0.0_x64-setup.exe` + `msi/…msi`
 - **Linux** (when built on Linux): `deb/`, `rpm/`, `appimage/`
 
 > You can only build a given OS's binary **on that OS** (you can't make the
@@ -63,7 +63,7 @@ attaches the installers to a draft GitHub Release.
 
 ```bash
 # from the repo root (the mental-kombat folder)
-git init && git add . && git commit -m "Brawlgebra desktop build"
+git init && git add . && git commit -m "Modulus desktop build"
 git remote add origin git@github.com:<you>/brawlgebra.git
 git push -u origin main
 
@@ -87,7 +87,7 @@ you feed to Steam.
    ContentBuilder tool.
 3. Make one **depot per OS** (Windows depot, macOS depot, Linux depot) and point
    each at the matching build output from step 1/2.
-4. Set the launch options per depot (the executable name, e.g. `Brawlgebra.exe`).
+4. Set the launch options per depot (the executable name, e.g. `Modulus.exe`).
 5. Upload a build, set it live on a branch, then publish the store page.
 
 Steam's own docs: *Steamworks → SteamPipe → Uploading Builds*.

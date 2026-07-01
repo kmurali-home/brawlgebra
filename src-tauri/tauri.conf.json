@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Brawlgebra",
+  "productName": "Modulus",
   "version": "1.0.0",
-  "identifier": "com.kmuralistudio.brawlgebra",
+  "identifier": "com.kmuralistudio.modulus",
   "build": {
     "frontendDist": "../dist",
     "beforeDevCommand": "npm run prep",
@@ -12,7 +12,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Brawlgebra",
+        "title": "Modulus",
         "width": 1280,
         "height": 720,
         "minWidth": 960,
@@ -34,7 +34,7 @@
     "publisher": "KMurali Studio",
     "category": "Game",
     "shortDescription": "A math-powered fighting game.",
-    "longDescription": "Brawlgebra is a 2D fighter where mental math is the entire economy: every correct answer fuels the aura you spend on punches, kicks, and specials. Includes The Tower, Versus, local 2P, Gauntlet, a 5-way Rumble, and the Brotherhood of the Four Functions story mode.",
+    "longDescription": "Modulus is a 2D fighter where mental math is the entire economy: every correct answer fuels the aura you spend on punches, kicks, and specials. Includes The Tower, Versus, local 2P, Gauntlet, a 5-way Rumble, and the Brotherhood of the Four Functions story mode.",
     "copyright": "© 2026 KMurali Studio",
     "icon": [
       "icons/32x32.png",

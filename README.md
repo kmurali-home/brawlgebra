@@ -1,4 +1,4 @@
-# BRAWLGEBRA
+# MODULUS
 
 A math-powered fighting game. Solving arithmetic is your only source of **aura**;
 every attack spends it. Five characters, a story Tower, Gauntlet survival, local 2-player,

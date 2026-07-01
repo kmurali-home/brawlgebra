@@ -1,4 +1,4 @@
-# BRAWLGEBRA — art assets
+# MODULUS — art assets
 
 Drop PNG files in **this folder** (next to `index.html` → `assets/`). The game loads them
 automatically on launch. **If a file is missing, the game uses its built-in procedural look —
@@ -44,7 +44,7 @@ One painted background per stage. Filenames are exact:
 
 | File | Use |
 |------|-----|
-| `title.png` | a transparent-background BRAWLGEBRA wordmark/logo for the title screen |
+| `title.png` | a transparent-background MODULUS wordmark/logo for the title screen |
 
 - Transparent PNG, ~1200×400, centered artwork. (Wiring it onto the title screen is a 2-line
   follow-up once you have it — ask me.)

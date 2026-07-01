@@ -71,7 +71,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Brawlgebra ${{ github.ref_name }}"
+          releaseName: "Modulus ${{ github.ref_name }}"
           releaseBody: "Desktop builds. Download the installer for your OS. (Steam depots are built from these — see STEAM_BUILD.md.)"
           releaseDraft: true
           prerelease: false

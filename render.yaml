@@ -1,4 +1,4 @@
-# Render Blueprint — hosts the BRAWLGEBRA online relay.
+# Render Blueprint — hosts the MODULUS online relay.
 # It serves the game over HTTP *and* relays netplay over WebSocket on one URL,
 # so you + friends just open the Render URL and enter a room code.
 #
