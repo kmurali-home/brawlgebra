@@ -1290,7 +1290,7 @@ function fireSpecial(f,a){
       }
     }
   } else if(kind==='spear'){   // a long instant poke / travelling bolt
-    projs.push({x:f.x+f.facing*32, y:f.y-92, vx:f.facing*(a.slow?4.2:a.fast?12:9.5), owner:f, life:160, col, dmg, freeze:!!a.freeze, slim:!!a.fast});
+    projs.push({x:f.x+f.facing*32, y:f.y-92, vx:f.facing*(a.slow?4.2:a.fast?12:9.5), owner:f, life:160, col, dmg, freeze:!!a.freeze, slim:!!a.fast, lessSpear:(f.char.id==='frost')});
     SFX.whoosh();
   } else if(kind==='wave'){   // a slow ground-hugging front that crawls toward the foe
     projs.push({x:f.x+f.facing*40, y:GROUND-24, vx:f.facing*(a.big?3.4:4.4), owner:f, life:260, col, dmg, freeze:!!a.freeze, wave:true, r:(a.big?120:90)});
@@ -1324,6 +1324,7 @@ function updateProjs(){
       if(hit){
         dead=true;
         const res=t.takeHit((pr.dmg||18), pr.vx>0?1:-1, true);   // special projectiles: flat tier damage, identical across fighters
+        if(res==='block' && pr.lessSpear){ pr.owner.addAura(9); if(pr.owner===game.player) floatText(pr.owner.x,pr.owner.y-178,'+TEMPO','#7ae8ff',14); }   // SIGNATURE · LESSING — a BLOCKED Glacial Lance still builds his meter: the keepaway win con (out-resource the turtle)
         if(res==='hit' && pr.freeze){ t.frozenT=64; t.stun=Math.max(t.stun,64); floatText(t.x,t.y-176,'FROZEN!','#bfe8ff',20); }
         if(res!=='dodge'){ ring(pr.x, pr.wave?GROUND-20:pr.y, pcol, pr.wave?(pr.r||90):42, pr.wave?6:4); if(pr.wave) addTrauma(0.35); }
         if(t.hp<=0) lethal(t,true);
@@ -1447,6 +1448,7 @@ const SP_KITS={
   james:   [ {name:'REDUCE',      kind:'spear', fast:true},      {name:'CANCEL',        kind:'slam', guard:true},          {name:'RESOLUTION',            kind:'sigil', big:true} ],   // SOLOMON (the Equals): distinct '='-themed kit so the marquee unlock is not a starter reskin
 };
 const STYLE_BY_ID={ initiate:'ALL-ROUNDER', mauler:'BRAWLER', ember:'RUSHDOWN', frost:'ZONER', oracle:'GLASS CANNON', james:'THE APEX' };   // one-word play-style read for the select card — the real differences are stats + specials now, not math
+const SIG_BY_ID={ mauler:'HEAVY-KICK ARMOR', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN' };   // the signature VERB each fighter must learn — the mastery hook, surfaced so a picker knows what to master
 function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
 function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
   for(let t=2;t>=0;t--) if(f.aura>=SPEC_TIERS[t].cost) return t;
@@ -1570,7 +1572,7 @@ class Fighter {
     if(!(a.cancelOK>0)) return false;
     if(type==='special') return a.type==='punch' || a.type==='kick';   // damage/knockdown ender
     if(type==='kick')    return a.type==='punch';                       // P>K (and up+K = the launcher route)
-    if(type==='punch')   return a.type==='punch' && (this.combo||0)<2;  // one P>P extension (blocks infinite P>P>P)
+    if(type==='punch'){ const cap=(this.char.id==='oracle' && this.streak>=5)?3:2; return a.type==='punch' && (this.combo||0)<cap; }  // one P>P extension; SIGNATURE · KRISHNA ascended (streak>=5) unlocks a 2nd P>P — only he extends long chains
     return false;
   }
   tryAttack(type){
@@ -1699,6 +1701,13 @@ class Fighter {
   }
   takeHit(dmg, dir, heavy, unblock, lvl){
     if(this.iframes>0||this.ko) return 'dodge';   // a ⚡NOW-window solve grants iframes → slips EITHER mix-up (the math out)
+    // SIGNATURE · MAXIMILIAN — 1-hit SUPER-ARMOR on his heavy-kick STARTUP: eat one poke to land the crusher (throws are unblockable → still beat it)
+    if(this.char.id==='mauler' && this.attack && this.attack.type==='kick' && this.attack.ph==='wind' && !this.attack.armorSpent && !unblock){
+      this.attack.armorSpent=true;
+      const chip=Math.max(1,Math.round(dmg*0.5)); this.hp=Math.max(1,this.hp-chip); this.chipDelay=24; this.flashT=6;
+      floatText(this.x,this.y-188,'ARMOR','#ffcf6a',18); sparks(this.x,this.y-88,10,'#ffcf6a',5); SFX.block();
+      return 'armor';
+    }
     if(this.thinkT>0){ this.thinkT=0; floatText(this.x,this.y-150,'MISCOUNT!','#ff8a8a',13); }   // a landed hit breaks a solve-in-progress — the foe earns no aura for it
     lvl = lvl||'mid';
     const stanceOK = lvl==='mid' || (lvl==='low' && (this.guardStance||'low')==='low') || (lvl==='high' && this.guardStance==='high');   // right guard for the height? wrong guess = the block whiffs
@@ -2485,6 +2494,7 @@ function resolveHits(att,def){
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
     const cx=def.x-dir*6, cy=def.y-90;
     if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3); return; }
+    if(res==='armor'){ hitstop=Math.max(hitstop,4); ring(cx,cy,'#ffcf6a',30,3); return; }   // MAXIMILIAN plowed through the startup — no combo/punish/launcher credit for the attacker
     // clean hit
     if(punish){ att.addAura(14); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window: fence to earn aura, don't turtle to bank it
       floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
@@ -2583,6 +2593,7 @@ function applySolve(f, result, st, op){
   if(f===game.player && f.streak>0 && f.streak%5===0) reactBanter('onStreak');   // a long solve streak gets a reaction
   if(f.char.id==='oracle' && f.streak===5){
     floatText(f.x,f.y-212,'ASCENDED','#ffd34d',26); flash(0.12,'#ffd34d'); ring(f.x,f.y-90,'#ffd34d',80,5);
+    if(f===game.player) floatText(f.x,f.y-182,'CHAINS EXTEND','#ffe9a0',14);   // SIGNATURE payoff, named: Krishna can now P>P>P
   }
   if(f.dizzy>0||f.stun>0){ f.dizzy=0; f.stun=0; floatText(f.x,f.y-170,'FOCUSED!','#9fdcff',20); }
   const perfect = result==='perfect';
@@ -5000,6 +5011,7 @@ function drawSelect(){
     { const st=STYLE_BY_ID[c.id]; if(st){   // play-style chip — the mechanical read a picker needs at a glance
         rr(x+26, y+300, cw-52, 20, 6); ctx.fillStyle=sel?'rgba(255,211,77,0.16)':'rgba(120,160,220,0.12)'; ctx.fill();
         txtO(st, x+cw/2, y+314, 10, (c.gi||'#8fd8f8'),{mono:true,sw:0}); } }
+    { const sg=SIG_BY_ID[c.id]; if(sg) txtO('◆ '+sg, x+cw/2, y+332, 8, sel?(c.gi||'#ffd34d'):'#9aa6c8',{mono:true,sw:0}); }   // signature-verb read — what to learn on this fighter
     // (blurb dropped from the card — the tagline + SPECIALS kit carry identity now, and the 5-card layout is too narrow for it)
     if(!game.mode2p){ // best grade at this difficulty (versus or tower, whichever ranks higher)
       const b1=bests[c.id+'_'+DIFF.level], b2=bests['tower_'+c.id+'_'+DIFF.level];
