@@ -1275,6 +1275,7 @@ const projs=[];   // FROST's glacial lances
 const hazards=[]; // ORACLE's theorem sigils
 function resolveThrow(f,a){   // grab check on the throw's active frame — beats block, whiffs on air/backdash, teched by a recent throw press
   const o=f.opp; if(!o){ a.def.rec=34; return; }
+  if(f===game.player && o.isCPU){ const r=o.read||(o.read={block:0,punish:0,dodge:0}); r.thr=(r.thr||0)+1; }   // v6 #10 the CPU logs your throw attempts
   const dx=Math.abs(o.x-f.x);
   if(dx < (a.def.reach||52) && o.grounded && o.iframes<=0 && !o.ko && (o.downed||0)<=0){   // v3 #2 NO OTG — a downed fighter cannot be re-grabbed (kills the throw->walk->regrab infinite); the throw whiffs into its long recovery instead
     if(game.frame - (o.throwTechAt||-99) <= 8){          // TECH — the foe pressed throw in time: break, both pushed back, no damage
@@ -2483,7 +2484,8 @@ function controlCPU(c){
   {
     const pThrow = p.attack && p.attack.type==='throw' && (p.attack.ph==='wind'||p.attack.ph==='act') && Math.abs(p.x-c.x)<84;
     if(pThrow && !c._sawThrow){ c._sawThrow=true;
-      const techP = c._justTeched? 0 : Math.min(0.7, 0.2+0.25*(DIFF.level||0));   // just-teched one? this one lands — throw twice is a real read
+      let techP = c._justTeched? 0 : Math.min(0.7, 0.2+0.25*(DIFF.level||0));   // just-teched one? this one lands — throw twice is a real read
+      const rr=c.read||{}; if(DIFF.level>=1 && !c._justTeched && (rr.thr||0)>2.5) techP=Math.min(0.85, techP+0.08*((rr.thr)-2.5));   // v6 #10 CONDITIONING — a throw-happy player gets TECHED (hard 15% floor: throws never die)
       if(Math.random()<techP){ c.throwTechAt=game.frame; c._justTeched=true; } else c._justTeched=false;
     } else if(!pThrow) c._sawThrow=false;
   }
@@ -2508,7 +2510,9 @@ function controlCPU(c){
   if(!c.attack) c._pressed=0;
   // (d) WAKEUP VARIANCE — the CPU's knockdown is a read for YOU too: sometimes a delayed rise (beats your timed meaty), sometimes a paid reversal (beats it outright — bait it)
   if((c.downed||0)>0){
-    if(!c._wakePlan){ const r=Math.random(); c._wakePlan = r<0.2? 'delay' : (r < 0.2+0.15*(DIFF.level||0)? 'rev' : 'norm');
+    if(!c._wakePlan){ const r=Math.random(); const rr=c.read||{};
+      const delayP = 0.2 + ((DIFF.level>=1 && (rr.thr||0)>3)? 0.12:0);   // v6 #10 a throw-heavy oki habit teaches it to DELAY the rise (scrambles your timed grab)
+      c._wakePlan = r<delayP? 'delay' : (r < delayP+0.15*(DIFF.level||0)? 'rev' : 'norm');
       if(c._wakePlan==='delay') c.downed+=12; }
     if(c._wakePlan==='rev' && c.downed<=2 && c.aura>=18){ c.tryReversal(); c._wakePlan=null; return; }
   } else c._wakePlan=null;
@@ -2549,6 +2553,7 @@ function controlCPU(c){
   // READS — the foe builds a picture of YOUR defensive habit and decays it (recency). Its offense then adapts (below), so the attacker becomes readable + counter-conditionable.
   const rd = c.read || (c.read={block:0,punish:0,dodge:0});
   rd.block*=0.992; rd.punish*=0.994; rd.dodge*=0.994;
+  rd.hi=(rd.hi||0)*0.994; rd.lo=(rd.lo||0)*0.994; rd.thr=(rd.thr||0)*0.994;   // v6 #10 opener-history — the CPU remembers HOW you open (overheads / lows / throws), with recency decay
   if(p.wantBlock && Math.abs(p.x-c.x)<150) rd.block+=0.06;   // you've been turtling
   const canAfford = t => Math.round(ATK[t].cost*c.char.costMul)<=c.aura;
   const pRec  = p.attack && p.attack.ph==='rec';
@@ -2567,7 +2572,10 @@ function controlCPU(c){
     const k=c.reactKind; c.reactKind=null;
     if(k==='block'){ c.blockHold=rnd(16,28); c.wantBlock=true;
       const inc=(p.attack&&p.attack.def&&p.attack.def.guardLevel)||'mid';
-      c.guardStance = (inc==='high' && Math.random()<0.55)? 'high' : 'low';   // v3 #7 reads the HEIGHT ~half the time — the dash-overhead is a mixup vs the CPU, not a cheat
+      let hiP=0.55;   // v3 #7 baseline: reads the HEIGHT ~half the time
+      if(DIFF.level>=1 && (rd.hi||0)>2.5){ hiP=Math.min(0.8, 0.55+0.06*((rd.hi)-2.5));   // v6 #10 CONDITIONING — keep opening with overheads and it LEARNS to stand up (hard 20% noise floor: never a lockout)
+        if(hiP>0.65 && game.frame-(c._readLineAt||0)>300){ c._readLineAt=game.frame; floatText(c.x,c.y-184,'reading you…','#cdb8ff',12); } }
+      c.guardStance = (inc==='high' && Math.random()<hiP)? 'high' : 'low';
       return; }                     // reliably guards once it reads your startup — frame-trap it or stagger your timing
     if(k==='antiair' && canAfford('kick')){ c.cpuAttack('kick',Math.round(28*Math.max(0.55,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
     if(k==='punish'){
@@ -2710,6 +2718,7 @@ function resolveHits(att,def){
   }
   const bd=def.body();
   if(hb.x<bd.x+bd.w && hb.x+hb.w>bd.x && hb.y<bd.y+bd.h && hb.y+hb.h>bd.y){
+    if(def.isCPU && att===game.player && hb.guardLevel && hb.guardLevel!=='mid'){ const r=def.read||(def.read={block:0,punish:0,dodge:0}); if(hb.guardLevel==='high') r.hi=(r.hi||0)+1; else r.lo=(r.lo||0)+1; }   // v6 #10 the CPU logs your opener HEIGHTS (hit or blocked — it saw the attempt)
     if((def.downed||0)>0 && def.iframes<=0){   // v4 #2 KNOCKDOWN INTEGRITY — strikes pass THROUGH a downed body (no OTG pickup): the oki guess is the ONLY way in. A true meaty stays live and connects the moment they rise.
       if(att.attack && !att.attack._otgCued){ att.attack._otgCued=true; if(att===game.player) floatText(def.x,def.y-146,'DOWN — meet the rise','#8a93b8',11); }
       return;
