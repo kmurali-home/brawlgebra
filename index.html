@@ -1530,7 +1530,7 @@ class Fighter {
     this.aura=22; this.auraShown=22; this.auraChipT=0; this.auraFlash=0;   // #2 scarcity: lower start so the economy bites early
     this.facing=facing||this.facing||1;
     this.attack=null; this.hitThisSwing=false;
-    this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0;
+    this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0; this.slipActive=false; this.slipGuard='low';
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
@@ -1561,7 +1561,7 @@ class Fighter {
     if(this.dashCd>0 || !this.grounded || this.blocking || this.ko || this.stun>0) return;
     this.dashCd=22; this.vx=dir*11.5;
     this.dodgeT=Math.max(this.dodgeT,8);
-    if((dir>0)!==(this.facing>0)) this.iframes=Math.max(this.iframes,9); // backdash: skill i-frames
+    if((dir>0)!==(this.facing>0)){ this.iframes=Math.max(this.iframes,9); this.slipActive=false; } // backdash: FULL i-frames (not a committal solve-slip)
     dust(this.x,this.y,5,2.5); SFX.whoosh();
   }
   canCancelInto(type){   // a HIT-CONFIRMED normal can chain into a stronger move within its cancel window
@@ -1660,10 +1660,12 @@ class Fighter {
     if(!perfect){
       // an UNTIMED solve no longer grants invulnerability — to avoid the hit you must TIME the ⚡NOW window or BLOCK.
       // (it still gives the aura/charge, handled in applySolve, plus a small repositioning hop)
+      this.slipActive=false;
       this.vx = -this.facing*3.4; this.dodgeT=8; this.dodgeCd=30;   // tag a brief post-solve window the CPU can pressure
       if(this===game.player){ const o=computeDanger(this); if(o && framesToHit(o)<=70) floatText(this.x,this.y-150,'too early — wait for the NOW window, or BLOCK','#9aa3c8',12); }
       return;
     }
+    this.slipActive=true; this.slipGuard=this.guardStance||'low';   // #1 a reactive slip is COMMITTAL to the height you're guarding this instant
     if(parry){ // PARRY — held toward the foe: stay in the pocket to cash the counter-stagger, but commit to a SHORTER window
       this.iframes = 17 + (this===game.player? Math.round(pFn('dodge')/2):0);
       this.dodgeT = 10; this.vx = -this.facing*1.6;   // barely budge — you stay in range
@@ -1690,7 +1692,7 @@ class Fighter {
     if(free){ slowmo(240,0.4); flash(0.22,'#ffd34d'); addTrauma(0.55); floatText(this.x,this.y-210,'BURST — UNBOUND','#ffd34d',20); }
     game.burstChallenge=null;
     this.auraChipT=18; this.comboedHits=0; this.bufferedInput=null;
-    this.stun=0; this.hurtT=0; this.dizzy=0; this.frozenT=0; this.missWobble=0; this.iframes=24; this.attack=null;
+    this.stun=0; this.hurtT=0; this.dizzy=0; this.frozenT=0; this.missWobble=0; this.iframes=24; this.slipActive=false; this.attack=null;   // BURST i-frames are FULL invuln (a reversal escape), not a committal solve-slip
     if(this.grounded){ this.vy=-4.2; this.grounded=false; }
     const o=this.opp;
     if(o){ o.combo=0; o.chargedHit=false; o.vx=(this.x>o.x?1:-1)*8; if(o.stun<10)o.stun=10; }
@@ -1700,7 +1702,14 @@ class Fighter {
     return true;
   }
   takeHit(dmg, dir, heavy, unblock, lvl){
-    if(this.iframes>0||this.ko) return 'dodge';   // a ⚡NOW-window solve grants iframes → slips EITHER mix-up (the math out)
+    if(this.ko) return 'dodge';
+    lvl = lvl||'mid';
+    if(this.iframes>0){   // #1 the SOLVE-dodge is HEIGHT-COMMITTAL — it slips only the height you GUARDED (mid always; low/high per stance) and a THROW blows through it; backdash/burst/wakeup i-frames stay FULL invuln
+      if(this.slipActive){ const g=this.slipGuard||'low';
+        if(!unblock && (lvl==='mid' || (lvl==='low'&&g==='low') || (lvl==='high'&&g==='high'))) return 'dodge';
+        // wrong guard height (or a throw): the slip does NOT cover this — fall through and eat it
+      } else return 'dodge';
+    }
     // SIGNATURE · MAXIMILIAN — 1-hit SUPER-ARMOR on his heavy-kick STARTUP: eat one poke to land the crusher (throws are unblockable → still beat it)
     if(this.char.id==='mauler' && this.attack && this.attack.type==='kick' && this.attack.ph==='wind' && !this.attack.armorSpent && !unblock){
       this.attack.armorSpent=true;
@@ -1780,7 +1789,7 @@ class Fighter {
     if(this.flashT>0)this.flashT--; if(this.dodgeT>0)this.dodgeT--;
     if(this.landT>0)this.landT--; if(this.blockHold>0)this.blockHold--;
     if(this.downed>0){ this.downed--; this.moveX=0; this.wantBlock=false; this.vx*=0.82;   // DOWNED: inert on the ground, then a safe getup-invuln rise, then a brief vulnerable wakeup (okizeme)
-      if(this.downed===9){ this.iframes=Math.max(this.iframes,10); if(this===game.player && (game.getupTaught||0)<3){ game.getupTaught=(game.getupTaught||0)+1; floatText(this.x,this.y-150,'GET UP','#ffd34d',13); } } }
+      if(this.downed===9){ this.iframes=Math.max(this.iframes,10); this.slipActive=false; if(this===game.player && (game.getupTaught||0)<3){ game.getupTaught=(game.getupTaught||0)+1; floatText(this.x,this.y-150,'GET UP','#ffd34d',13); } } }   // getup-invuln is FULL (safe rise), not a committal solve-slip
     if(this.dashCd>0)this.dashCd--; if(this.dropT>0)this.dropT--;
     if(this.frozenT>0)this.frozenT--;
     if(this.missWobble>0)this.missWobble--;
@@ -2597,26 +2606,43 @@ function applySolve(f, result, st, op){
   }
   if(f.dizzy>0||f.stun>0){ f.dizzy=0; f.stun=0; floatText(f.x,f.y-170,'FOCUSED!','#9fdcff',20); }
   const perfect = result==='perfect';
-  let gain = Math.round(((perfect?32:16)+Math.min(8,f.streak))*f.char.gainMul);
+  // #1 COMMITTAL SLIP — a reactive (NOW-window) solve slips only the height you're GUARDING (mid always; low/high per stance, mirroring the block) and a THROW blows straight through it. Read it right = slip + counter-stagger; read it wrong = you still BANK aura, but the blow lands. This un-collapses "always solve on their commit" so the high/low block + throw finally matter.
+  let slipOK = true;
+  if(perfect){
+    const foe = perfectFoe(f) || computeDanger(f);
+    const ia = foe && foe.attack;
+    const throwInc = !!(ia && (ia.type==='throw' || ia.kind==='throw'));
+    const inc = (ia && ia.def && ia.def.guardLevel) || 'mid';   // specials/projectiles default MID → a timed solve still slips the telegraphed special (keystone preserved)
+    const grd = f.guardStance || 'low';
+    slipOK = !throwInc && (inc==='mid' || (inc==='low' && grd==='low') || (inc==='high' && grd==='high'));
+  }
+  let gain = Math.round((18+Math.min(8,f.streak))*f.char.gainMul);   // a SAFE (untimed) solve BANKS the full amount — the economy lane
+  if(perfect) gain = Math.round(gain*0.5);   // a REACTIVE solve banks LESS: the slip + counter IS the payoff — math is now slip-vs-bank, not a free super
   // stage quirks (math-fused, only in story/versus on the relevant stage)
   let qtag='', qcol='#7ae8ff';
   if(onPitLip(f)){ gain+=6; qtag='+6 EDGE'; qcol='#ffd34d'; }              // CHASM: brave the lip, earn more
   else if(schismLit(f)){ gain*=2; qtag='×2 RATIO'; qcol='#b48cff'; }       // SCHISM: solve atop a lit rune = double
   let gambit=false;
   if(f===game.player && game.problem && game.problem.gambit){ gain=Math.round(gain*2); gambit=true; }  // GAMBIT pays double
-  // SOLVE-TO-PARRY: on a PERFECT, holding TOWARD the foe stays in the pocket to punish (committed: smaller window) vs holding back = full evasive dodge
-  const parry = perfect && f===game.player && !game.mode2p && !game.online &&
+  // SOLVE-TO-PARRY: on a COVERED perfect, holding TOWARD the foe stays in the pocket to punish (committed: smaller window) vs holding back = full evasive dodge
+  const parry = perfect && slipOK && f===game.player && !game.mode2p && !game.online &&
     ((f.facing>0)? (keys[KEYS.right]||keys['arrowright']) : (keys[KEYS.left]||keys['arrowleft']));
-  f.doDodge(perfect, parry); f.addAura(gain); st.auraEarned=(st.auraEarned||0)+gain;
+  if(perfect && slipOK) f.doDodge(true, parry);
+  else if(perfect){ f.iframes=0; f.slipActive=false; f.vx=-f.facing*2.6; f.dodgeT=6; f.dodgeCd=30; }   // wrong guard height (or a throw): NO slip — the blow lands, but you still banked the aura below
+  else f.doDodge(false, false);
+  f.addAura(gain); st.auraEarned=(st.auraEarned||0)+gain;
   floatText(f.x,f.y-(perfect?190:170),'+'+gain+' AURA','#7ae8ff',17);
   if(qtag) floatText(f.x,f.y-(perfect?214:194), qtag, qcol, 15);
   if(gambit){ f.chargedHit=true; f.comboT=Math.max(f.comboT,80); floatText(f.x,f.y-(perfect?240:220),'GAMBIT — DOUBLED','#ff7ac0',16); flash(0.1,'#ff7ac0'); }
-  if(perfect){
+  if(perfect && slipOK){
     const o=perfectFoe(f)||computeDanger(f); if(o) o.staggered(f.char.perfectStun, f.char.id==='frost');
     st.perfects=(st.perfects||0)+1; slowmo(380,0.45); flash(0.22,'#fff1c0'); addTrauma(0.2);
     if(f===game.player) game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+12);   // a clutch perfect-dodge charges FOCUS fast
     if(f===game.player && game.enemy){ const r=game.enemy.read||(game.enemy.read={block:0,punish:0,dodge:0}); r.dodge+=1; }   // you keep dodging → it learns to fast-pressure
     ring(f.x,f.y-90,'#ffd34d',70,5); announce('PERFECT DODGE','#ffd34d'); SFX.perfect();
+  } else if(perfect){   // reactive solve, WRONG height read (or you tried to slip a throw)
+    if(f===game.player) floatText(f.x,f.y-196,'WRONG GUARD — HIT','#ff8a8a',15);
+    SFX.correct();
   } else SFX.correct();
   if(f===game.player && op) sfxSolveOp(op);   // hear which function you just used
   if(f===game.player && game.chRule && game.enemy && !game.enemy.ko){   // per-foe rule: how you solve shapes the fight
@@ -3063,7 +3089,7 @@ function rumbleStep(){
   updatePickups(); updateProjs(); updateHazards();
   game.playerHidden=false; game.hiddenRecent=0;
   if(!game.player.ko){
-    if(dangerInfo()>0) tip('teln','A strike is drawn — answer NOW to slip it.');
+    if(dangerInfo()>0) tip('teln','A strike is drawn — GUARD its height (↓ low / back high), then answer in the NOW window to slip it.');
     if(game.player.spReady()) tip('spn','SPECIAL ready — press '+keyLabel(KEYS.special));
   }
   for(const a of fs) if(!a.ko) for(const b of fs) if(b!==a && !b.ko) resolveHits(a,b);
@@ -3145,7 +3171,7 @@ function step(){
     game.playerHidden = !game.mode2p && isConcealed(p,e);
     game.hiddenRecent = game.playerHidden? 20 : Math.max(0,(game.hiddenRecent||0)-1);
     if(game.playerHidden) tip('hide','Hidden! But your rival banks aura while you rest…');
-    if(dangerInfo()>0) tip('tel','He commits — answer in the NOW window to slip it clean.');
+    if(dangerInfo()>0) tip('tel','He commits — match his height (↓ low / back high) and answer in the NOW window to slip clean. A THROW you must TECH.');
     // ANSWER RELOCK — when a strike crosses into its tight perfect window, your typed answer is WIPED.
     // A perfect dodge now demands SOLVING inside the ⚡NOW window (or BLOCK) — no holding a pre-typed answer from neutral.
     if(!game.mode2p && !game.online && !game.galaxy){   // GALAXY has no solve-dodge — math lives only in the bursts
@@ -3926,7 +3952,7 @@ function drawCard(){
   }
   ctx.font=font(DISP,11); ctx.textAlign='center';
   ctx.fillStyle = pw? '#ffe14d' : danger>0? '#ff8a8a': gam? '#ff7ac0':'#8fd8f8';
-  ctx.fillText(pw? 'NOW — ANSWER, AND SLIP THE BLOW' : danger>0?'INCOMING — ANSWER TO SLIP IT': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL':'ANSWER — SLIP & DRAW AURA', cx, top+19);
+  ctx.fillText(pw? 'NOW — MATCH THE HEIGHT + ANSWER' : danger>0?'INCOMING — GUARD ITS HEIGHT, ANSWER TO SLIP': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL':'ANSWER — BANK AURA', cx, top+19);
   // (retired) the "arms <op>" hint — specials are the per-fighter KIT now (D fires the best you can afford), not operator-armed
   if(game.reveal && game.reveal.t>0){ // show what the answer was — AND how to get it (teach, don't just test)
     ctx.globalAlpha=Math.min(1,game.reveal.t/40);
@@ -5842,7 +5868,7 @@ const TUTOR_STEPS=[
   'Now strike. '+keyLabel(KEYS.punch)+' punches. Every blow spends aura, so keep answering to keep swinging.',
   'Land a punch, then '+keyLabel(KEYS.kick)+' before the window closes — a cancel. Chains only flow from a confirmed hit.',
   'You are being combo\'d. Press '+keyLabel(KEYS.special)+' while stunned to break free — a combo is an exchange, not a gift.',
-  'A red ! means he commits, and your answer clears. Re-answer in the gold ⚡NOW window to slip the blow and stagger him.',
+  'A red ! means he commits, and your answer clears. Guard the right height (↓ low / hold back = high) and re-answer in the gold ⚡NOW window to slip + stagger him — but a THROW blows through a slip, so TECH it.',
   'SPECIALS are your identity — each fighter has three. You have aura for one: press '+keyLabel(KEYS.special)+'. It always fires the strongest tier you can afford.',
   'You’ve got it: solve to power up, chain & burst, time the ⚡NOW solve to dodge, and spend a full bar on your strongest SPECIAL. Your first real fight begins…',
 ];
