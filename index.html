@@ -524,7 +524,8 @@ addEventListener("keydown", e => {
     return;
   }
   if(game.state==='howto'){
-    if(lk==='t'){ SFX.ui(); startTutorial(); game.pendingFight=null; return; }   // replay the training fight → ends back at title (pendingFight nulled)
+    if(lk==='t'){ SFX.ui(); startTutorial(); game.pendingFight=null; return; }   // replay THE TRIAL → ends back at title (pendingFight nulled)
+    if(k==='ArrowLeft'||k==='ArrowRight'||lk===KEYS.left||lk===KEYS.right){ game.howPage=1-(game.howPage||0); SFX.ui(); return; }   // v8 two pages: THE FIGHT / THE EDGE
     if(k==='Enter'||k===' '){ SFX.ui();
       if(game.howReturn==='fight') startMatch(); else if(game.howReturn==='story') game.state='story'; else game.state='title'; }
     return;
@@ -4740,14 +4741,15 @@ function miniBar(label,frac,x,y,w){
   ctx.fillStyle='rgba(255,255,255,0.10)'; ctx.fillRect(x+34,y-7,w-34,7);
   ctx.fillStyle='#8a9adf'; ctx.fillRect(x+34,y-7,(w-34)*clamp(frac,0,1),7);
 }
-function wrapText(s,x,y,maxW,lh){
-  const words=s.split(' '); let line='', yy=y;
+function wrapText(s,x,y,maxW,lh,dry){
+  const words=s.split(' '); let line='', yy=y, n=1;
   for(const w of words){
     const t=line? line+' '+w : w;
-    if(ctx.measureText(t).width>maxW){ ctx.fillText(line,x,yy); line=w; yy+=lh; }
+    if(ctx.measureText(t).width>maxW){ if(!dry) ctx.fillText(line,x,yy); line=w; yy+=lh; n++; }
     else line=t;
   }
-  ctx.fillText(line,x,yy);
+  if(!dry) ctx.fillText(line,x,yy);
+  return n;   // v8 line count — callers can dry-measure, then space rows by real height
 }
 function drawTutorBanner(){
   const txt=TUTOR_STEPS[game.tutorStep]||'';
@@ -4759,38 +4761,63 @@ function drawTutorBanner(){
   ctx.font=font(MONO,11); ctx.fillStyle='#e8ecff'; ctx.textAlign='center';
   wrapText(txt, W/2, 137, 650, 13);
 }
-function drawHowTo(){
+function drawHowTo(){   // v8 PRISTINE REBUILD — two pages, every line verified against the code, parseable by a fighting-game-newbie 12yo on first read
   ctx.fillStyle='rgba(2,3,8,0.82)'; ctx.fillRect(0,0,W,H);
-  txtO('HOW TO FIGHT', W/2, 58, 32, '#efe9ff',{sw:6});
-  rr(W/2-385,80,770,392,14);
+  const kp=keyLabel(KEYS.punch), kk=keyLabel(KEYS.kick), ks=keyLabel(KEYS.special);
+  const pg = game.howPage||0;
+  txtO('HOW TO FIGHT', W/2, 46, 30, '#efe9ff',{sw:6});
+  txtO(pg===0?'PAGE 1 — THE FIGHT':'PAGE 2 — THE EDGE', W/2, 66, 12, '#8a93b8',{sw:0,mono:true});
+  const PAGES=[[
+   ['#7ae8ff','THE DEAL',
+    'Every attack spends AURA up front. Answering the math card refills it. At zero you cannot swing. That is the whole economy: spend, answer, spend.'],
+   ['#ffd34d','THE BUTTONS',
+    kp+' punch (5) · '+kk+' kick (10) · '+kp+'+'+kk+' throw (6) · '+ks+' special. ←/→ walk, double-tap to dash, ↑ jump. Type digits + ⏎ to answer — any time.'],
+   ['#ffd34d','SPECIALS ('+ks.toUpperCase()+')',
+    'Tap '+ks+': fires the strongest tier your AURA affords (25 · 50 · 90). HOLD '+ks+': steps up the T1·T2·T3 ladder — release to fire the tier you chose.'],
+   ['#46e08a','GUARD',
+    'Hold ↓ = LOW guard. Hold back while a strike comes = HIGH guard. Kicks hit LOW (↓ only) · dash and jump attacks hit HIGH (back only) · punches hit MID — either guard works.'],
+   ['#ff6a6a','READ THE !',
+    'Before a strike lands, a ! appears over the foe. Blue ▼: it comes in LOW — hold ↓. Orange ▲: HIGH — hold back. Red: MID — either guard stops it.'],
+   ['#ff9f6a','THROW & TECH',
+    kp+'+'+kk+' grabs. A grab beats guard — the answer to a foe who never stops blocking. If YOU are grabbed, press '+kp+'+'+kk+' immediately to TECH out. A throw cannot be guarded or slipped.'],
+   ['#7ae8ff','WIN',
+    'First to 2 rounds. On your winning blow a final problem appears — answer it before the fuse dies to ERASE them. Miss it and the win still counts. End the match with a SPECIAL and the arena delivers its own finish instead.'],
+  ],[
+   ['#7ae8ff','BANKING',
+    'A correct answer takes a short beat to bank — you stand open while it lands, so answer from safety. A hit during the beat costs you the whole answer. A wrong answer staggers you, then the card shows the answer and the method.'],
+   ['#ffd34d','THE NOW WINDOW',
+    'When a strike is about to land, your typed answer wipes and one quick 1-digit problem takes its place. Hold the RIGHT guard and answer in time: you SLIP the blow and stagger them — but you bank only half. The banner calls a SLIP a PERFECT DODGE.'],
+   ['#ff9f2a','COMBOS',
+    'Land a hit and a cyan CHAIN ▸ flash appears — press the next button before it fades and the moves chain. Routes: punch▸punch, punch▸kick, any hit▸special. ↑+kick launches them for a juggle.'],
+   ['#ff9f2a','JUST CANCEL',
+    'Chain at the last moment of the flash — a gold shimmer marks it — for bonus damage and a chain they cannot slip out of.'],
+   ['#ffd34d','BURST',
+    'Caught in a combo (2+ hits)? A red 1-digit problem appears over your head. Answer it for a FREE escape — once per round. Or press '+ks+' to pay 40 AURA and break out on the spot.'],
+   ['#46e08a','KNOCKED DOWN',
+    'On the floor you cannot be hit. Early '+ks+' = QUICK RISE (4 AURA, no protection). '+ks+' as you rise = REVERSAL (18 AURA, an invincible rising strike — wide open if guarded).'],
+   ['#8a93b8','ALSO',
+    'G wagers a marked problem: double AURA, or your bank wipes · blocked hits drain their GUARD bar — empty = CRUSHED, wide open · at 0 AURA you are BROKE; your first answer back pays ×1.5 · pickups in the arena grant AURA or HP.'],
+  ]];
+  // v8 dry-measure the page, size the panel to fit, then draw — rows never collide and never spill
+  ctx.font=font(MONO,10.5);
+  let contentH=0; const lineCounts=PAGES[pg].map(r=>{ const n=wrapText(r[2],0,0,668,13,true); contentH+=22+n*13; return n; });
+  const top=78, panelH=contentH+26;
+  rr(W/2-385, top, 770, panelH, 14);
   ctx.fillStyle='rgba(12,15,26,0.95)'; ctx.fill();
   ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
-  const rows=[
-   ['#7ae8ff','SOLVE MATH',
-    'Type the answer + ⏎ anytime. Correct = +AURA. Wrong = scrambled — we show you the answer and the method, so you learn it.'],
-   ['#ffd34d','SPEND AURA',
-    'Every attack — punch (A), kick (S), special (D) — spends AURA up front. No aura, no swing. Solving math is your only refuel, so keep solving.'],
-   ['#ff9f2a','COMBO & CANCEL',
-    'Land a punch, then quickly press kick (or special) to CANCEL into it — a hit-confirm chain. Solve MID-combo to charge a CHAIN FINISHER (×1.7).'],
-   ['#ffd34d','BURST OUT',
-    'Being combo\'d (2+ hits)? Press SPECIAL while stunned to BURST free — it spends aura and knocks them back. Combos are an exchange, not a free juggle.'],
-   ['#ff6a6a','PERFECT DODGE',
-    'A red ! means he\'s committing — and your typed answer CLEARS. Re-solve inside the gold ⚡NOW window to dodge + counter-stagger, or BLOCK (↓) the fast ones.'],
-   ['#46e08a','MOVE & BLOCK',
-    'Arrows: ←/→ move, ↑ jump, ↓ block, double-tap ←/→ to dash (backdash = i-frames). Hide behind pillars to bank aura — striking from cover is an AMBUSH.'],
-   ['#7ae8ff','WIN',
-    'Best of 3 rounds. Land the final blow with your SPECIAL — each fighter has their own — to send them over the edge.'],
-  ];
-  rows.forEach((r,i)=>{
-    const y=112+i*52;
+  let y=top+28;
+  PAGES[pg].forEach((r,i)=>{
     ctx.fillStyle=r[0]; ctx.beginPath(); ctx.arc(W/2-348,y-5,5,0,7); ctx.fill();
-    txtO(r[1], W/2-332, y, 15, r[0], {align:'left',sw:0});
-    ctx.font=font(MONO,11); ctx.fillStyle='#b8c0da'; ctx.textAlign='left';
-    wrapText(r[2], W/2-332, y+16, 668, 14);
+    txtO(r[1], W/2-332, y, 14, r[0], {align:'left',sw:0});
+    ctx.font=font(MONO,10.5); ctx.fillStyle='#b8c0da'; ctx.textAlign='left';
+    wrapText(r[2], W/2-332, y+15, 668, 13);
+    y += 22 + lineCounts[i]*13;
   });
+  const fy=Math.min(H-14, top+panelH+22);
+  for(let i=0;i<2;i++){ ctx.beginPath(); ctx.arc(W/2-10+i*20, fy-16, 4, 0, 7); ctx.fillStyle = i===pg? '#ffd34d':'#3a4258'; ctx.fill(); }
   const pulse=0.6+Math.sin(game.frame*0.08)*0.4;
   ctx.globalAlpha=pulse;
-  txtO((game.howReturn==='fight'? '⏎  FIGHT':'⏎  BACK')+'      T  REPLAY THE TRAINING FIGHT', W/2, 488, 14, '#ffd34d',{sw:0,mono:true});
+  txtO('←/→  PAGE      '+(game.howReturn==='fight'? '⏎  FIGHT':'⏎  BACK')+'      T  REPLAY THE TRIAL', W/2, fy, 13, '#ffd34d',{sw:0,mono:true});
   ctx.globalAlpha=1;
 }
 function btn(label, x, y, w, h, hot){
@@ -6001,19 +6028,19 @@ const ROSTER=[
 // UNIFORM MATH ECONOMY — fighters no longer vary by "degree of math": solving pays the same and moves cost the same for everyone.
 // What differs is the SPECIAL KIT (and light body archetype: hp / reach / pace). The kit's tier damage is identical across fighters.
 [...ROSTER, PROTAG, BASE_CHAR, SOLOMON_CHAR, BOSS_CHAR].forEach(c=>{ c.regen=0; });   // keep CPU honesty (no passive aura drip) but RESTORE per-fighter economy identity — costMul/gainMul/auraMax/streakMul now take effect. v6 FIX: SOLOMON_CHAR/BOSS_CHAR are copies made BEFORE this pass and had leaked a free 0.04/f regen onto the marquee unlock — the one sacred economy rule now has zero exceptions.
-const MENU=[
-  ['PLAY','1v1. Choose your form on the next screen — Standard, or the Rite of Silence.'],
-  ['MODES','the boss ladder, the endless gauntlet, the campaign, the training hall'],
-  ['DAILY FIGHT','one trial the whole world is set today — win it, and the streak holds'],
-  ['MULTIPLAYER','face other initiates online — a 1v1 duel, or a five-way rumble (the lost are filled by AI)'],
-  ['HOW TO PLAY',''],
+const MENU=[   // v8 pristine pass — one label per mode, every description parseable on first read
+  ['PLAY','1v1 against the machine. Pick your fighter and combat style — STANDARD or RITE OF SILENCE — on the next screen.'],
+  ['MODES','THE TOWER · GAUNTLET · STORY · SPARRING'],
+  ['DAILY FIGHT','the same fight for everyone today — one scored try, and your streak rides on it'],
+  ['MULTIPLAYER','face other players online — a 1v1 duel, or a five-fighter rumble (AI fills any empty seats)'],
+  ['HOW TO FIGHT',''],
   ['SETTINGS',''],
 ];
 const MODES_SUB=[
-  ['THE TOWER','beat 4 rivals then the final boss — retry a rival if you lose'],
+  ['THE TOWER','climb every rival, then the final boss — lose, and you retry that rung'],
   ['GAUNTLET','fight forever — every win gets tougher'],
-  ['STORY MODE','play the campaign, one rival at a time'],
-  ['PRACTICE','free training vs a dummy that won’t fight back'],
+  ['STORY','the campaign — win chapters to unseal the four Orders'],
+  ['SPARRING','free training against a dummy that will not fight back'],
 ];
 function menuActivate(i){ game.menuIdx=i; menuActivateLabel((MENU[i]||[])[0]||''); }
 function menuActivateLabel(label){
@@ -6025,9 +6052,9 @@ function menuActivateLabel(label){
   else if(label==='MULTIPLAYER'){ game.mpIdx=0; game.state='rumbleChoose'; netPrewarm(); }               // pick 1v1 online / rumble online / local rumble — pre-wake the relay so it's up by the time they create/join
   else if(label==='THE TOWER'){ game.mode='tower'; game.pickPhase=0; game.state='select'; }
   else if(label==='GAUNTLET'){ game.mode='gauntlet'; game.gWins=0; game.gMut=null; game.pickPhase=0; game.state='select'; }
-  else if(label==='STORY MODE') enterStory();
-  else if(label==='PRACTICE'){ game.practice=true; game.mode='cpu'; style(); game.pickPhase=0; game.state='select'; }
-  else if(label==='HOW TO PLAY'){ game.howReturn='title'; game.state='howto'; }
+  else if(label==='STORY') enterStory();
+  else if(label==='SPARRING'){ game.practice=true; game.mode='cpu'; style(); game.pickPhase=0; game.state='select'; }
+  else if(label==='HOW TO FIGHT'){ game.howReturn='title'; game.howPage=0; game.state='howto'; }
   else game.state='settings';
 }
 function enterOnlineLobby(gm){   // gm: 'duel' (1v1) or 'rumble' (5-player)
@@ -6091,7 +6118,7 @@ function confirmPick(){
   if(mode==='story'){ // choosing your champion for the saga
     game.storyChar=game.charIdx; store('storyChar',game.storyChar);
     game.player.setCharacter(ROSTER[game.charIdx]);
-    if(!game.seenHow){ game.seenHow=true; store('how',true); game.howReturn='story'; game.state='howto'; SFX.ui(); return; }
+    if(!game.seenHow){ game.seenHow=true; store('how',true); game.howReturn='story'; game.howPage=0; game.state='howto'; SFX.ui(); return; }
     game.state='story'; SFX.ui(); return;
   }
   if(mode!=='2p'){
