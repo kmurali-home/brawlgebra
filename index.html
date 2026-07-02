@@ -2555,7 +2555,10 @@ function controlCPU(c){
     return;
   } else if((p.downed||0)<=0) c.okiPlan=null;
   // MATH-ECONOMY MIRROR — the foe's power comes from SOLVING, not a passive drip. When it can't afford a special and it's safe, it stops to solve — a real opening you can rush and interrupt.
-  if(c.aura<58 && dist>140 && !(p.attack&&p.attack.ph!=='rec') && c.grounded && c.aiThink>8 && Math.random()<0.07){ c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }
+  if(c.aura < Math.round(ATK.punch.cost*c.char.costMul) && c.thinkT<=0 && dist<=140 && c.grounded && !c.attack){   // v7 FIX: BROKE and in your face with nothing to swing — it BACKS OUT to count (was: stood there doing literally nothing). The starvation story now reads on screen: break him, chase him.
+    c.moveX = -dir*0.30*cfg.speed; hopCover(c); return;
+  }
+  if(c.aura<58 && dist>140 && !(p.attack&&p.attack.ph!=='rec') && c.grounded && c.aiThink>8 && Math.random()<(c.aura<6?0.25:0.07)){ c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }   // v7: a BROKE foe starts counting fast (0.25/f) instead of pacing
   c.aiThink--;
   // READS — the foe builds a picture of YOUR defensive habit and decays it (recency). Its offense then adapts (below), so the attacker becomes readable + counter-conditionable.
   const rd = c.read || (c.read={block:0,punish:0,dodge:0});
@@ -2622,7 +2625,8 @@ function controlCPU(c){
   if(c.aiThink<=0 && Math.random()<0.25) c._lastDash=false;   // never two dash-ins in a row — a gap always follows
   if(DIFF.level>=1 && c.grounded && c.dashCd<=0 && dist<84 && c.guard<70 && (c.guardRestT||0)>0 && Math.random()<0.05){ c.tryDash(-dir); return; }   // pressured turtle EXITS with the same (paid) backdash you have
   if(clockLow && dist>100)      c.moveX = dir*0.24*cfg.speed;     // force the approach when the clock's low
-  else if(dist > rMax)          c.moveX = dir*(c._mvS==='in'?0.55 : c._mvS==='hold'?0.06 : -0.14)*cfg.speed*P.adv;  // BURST-APPROACH / HOLD-BAND / STEP-OUT — walking has texture, so range knowledge matters
+  else if(dist > rMax+120)      c.moveX = dir*0.30*cfg.speed*Math.max(0.8,P.adv);  // v7 FIX: genuinely OUT of the fight = always march back in (the hold/step-out cadence at fullscreen read as 'the AI froze')
+  else if(dist > rMax)          c.moveX = dir*(c._mvS==='in'?0.55 : c._mvS==='hold'?0.14 : -0.10)*cfg.speed*P.adv;  // BURST-APPROACH / HOLD-BAND / STEP-OUT — the texture lives only at the EDGE of the band, where it reads as footsies, not freezing
   else if(dist < rMin)          c.moveX = inCorner(c)? 0 : -dir*0.16*cfg.speed*P.ret; // too close → back off at this fighter's tempo — but never retreat INTO the wall (v5 #7: a cornered zoner must fight or leap, not shrink)
   else if(Math.random()<0.01)   c.moveX = -dir*0.2*cfg.speed;
   hopCover(c);
