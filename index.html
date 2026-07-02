@@ -1622,9 +1622,15 @@ class Fighter {
     this.hitThisSwing=false; SFX.whoosh();
     return true;
   }
-  tryReversal(){   // #5 WAKEUP REVERSAL — D while rising: an invuln-startup rising strike that BEATS a meaty, but with a LONG whiff-punishable recovery (loses to a bait/block). The okizeme RPS's third option.
+  tryReversal(){   // #5 WAKEUP REVERSAL — D while RISING: an invuln-startup rising strike that BEATS a meaty, but with a LONG whiff-punishable recovery (loses to a bait/block). The okizeme RPS's third option.
     if(this.ko || (this.downed||0)<=0 || this.attack) return false;
-    if(!game.galaxy && !this.spend(18)) return false;   // costed — a read, not a panic button
+    if(this.downed>10){   // v4 #2 EARLY D = QUICK RISE — pay 4 to cut the wait (NO invuln): scrambles the foe's meaty timing, but you rise into whatever is waiting
+      if(!game.galaxy && !this.spend(4)) return false;
+      this.downed=Math.max(2,this.downed-10);
+      if(this===game.player) floatText(this.x,this.y-150,'QUICK RISE','#9fdcff',12);
+      return true;
+    }
+    if(!game.galaxy && !this.spend(18)) return false;   // rise-window only (v4 #2): a priced read, no longer a whole-knockdown skip button
     this.downed=0; this.knockingDown=false;
     this.iframes=Math.max(this.iframes,14); this.slipActive=false;   // FULL invuln through the rise + startup (a reversal, not a committal slip)
     this.attack={type:'kick', ph:'wind', t:6, def:Object.assign({},ATK.kick,{reach:96,wind:6,act:4,rec:34,dmg:12,heavy:true,guardLevel:'mid',hy:-80}), tel:0, fuse:6, reversal:true};
@@ -1733,6 +1739,7 @@ class Fighter {
   }
   takeHit(dmg, dir, heavy, unblock, lvl){
     if(this.ko) return 'dodge';
+    if((this.downed||0)>0 && this.iframes<=0) return 'dodge';   // v4 #2 KNOCKDOWN INTEGRITY backstop — specials/projectiles/hazards can't OTG a downed body either
     lvl = lvl||'mid';
     if(this.iframes>0){   // #1 the SOLVE-dodge is HEIGHT-COMMITTAL — it slips only the height you GUARDED (mid always; low/high per stance) and a THROW blows through it; backdash/burst/wakeup i-frames stay FULL invuln
       if(this.slipActive){ const g=this.slipGuard||'low';
@@ -2593,9 +2600,13 @@ function resolveHits(att,def){
   }
   const bd=def.body();
   if(hb.x<bd.x+bd.w && hb.x+hb.w>bd.x && hb.y<bd.y+bd.h && hb.y+hb.h>bd.y){
+    if((def.downed||0)>0 && def.iframes<=0){   // v4 #2 KNOCKDOWN INTEGRITY — strikes pass THROUGH a downed body (no OTG pickup): the oki guess is the ONLY way in. A true meaty stays live and connects the moment they rise.
+      if(att.attack && !att.attack._otgCued){ att.attack._otgCued=true; if(att===game.player) floatText(def.x,def.y-146,'DOWN — meet the rise','#8a93b8',11); }
+      return;
+    }
     att.hitThisSwing=true;
     const dir = def.x<att.x?-1:1;
-    const wasVuln = def.stun>0 || !def.grounded || (def.downed||0)>0 || !!def.knockingDown;   // v3 #6 captured BEFORE the hit lands — was the foe still reeling (a TRUE string) or had they recovered (a reset)?
+    const wasVuln = def.stun>0 || !def.grounded || !!def.knockingDown;   // v3 #6 captured BEFORE the hit lands — was the foe still reeling (a TRUE string) or had they recovered (a reset)? (downed removed: floor hits no longer exist)
     let dmg=hb.dmg, ambush=false;
     // math streak sharpens strikes (any human fighter)
     dmg += Math.min(3,Math.floor(att.streak/3))*(hb.type==='special'?2:1)*att.char.streakMul;
