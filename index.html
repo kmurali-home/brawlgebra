@@ -625,7 +625,9 @@ addEventListener("keydown", e => {
     }
     if(lk===KEYS.punch){ if(!p.tryAttack('punch')) p.bufferedInput={action:'punch',frame:game.frame}; }
     else if(lk===KEYS.kick){ if(!p.tryAttack('kick')) p.bufferedInput={action:'kick',frame:game.frame}; }
-    else if(lk===KEYS.special){ if((p.downed||0)>0) p.tryReversal(); else if((p.stun>0||p.hurtT>0) && (p.comboedHits||0)>=2) p.burst(); else if(!p.trySpecial()) p.bufferedInput={action:'special',frame:game.frame}; }  // D while downed = WAKEUP REVERSAL; SPECIAL doubles as combo-breaker while being chained (burst never buffers)
+    else if(lk===KEYS.special){ if((p.downed||0)>0) p.tryReversal(); else if((p.stun>0||p.hurtT>0) && (p.comboedHits||0)>=2) p.burst();
+      else if(game.galaxy || game.online || bestSpecialTier(p)<=0){ if(!p.trySpecial()) p.bufferedInput={action:'special',frame:game.frame}; }   // no tier CHOICE to make (or netcode) — fire instantly, exactly as before
+      else p._dHoldAt=game.frame; }  // v5 #3 HOLD D — pick your tier (tap=auto-best · short hold=T1 · longer=T2 · full=T3); release fires it. D while downed = WAKEUP REVERSAL; SPECIAL doubles as combo-breaker while being chained
     else if(lk===KEYS.jump || (!game.mode2p && k==='ArrowUp')){ if(!p.tryJump()) p.bufferedInput={action:'jump',frame:game.frame}; }
     if(game.mode2p){
       if(k===',') q.tryAttack('punch');
@@ -635,7 +637,16 @@ addEventListener("keydown", e => {
     }
   }
 });
-addEventListener("keyup", e => { keys[e.key.toLowerCase()]=false; });
+addEventListener("keyup", e => { const lk=e.key.toLowerCase(); keys[lk]=false;
+  // v5 #3 TIER SELECT — release D to fire the tier you charged: tap = auto-best (unchanged), holds walk T1 -> T2 -> T3. The charge glyph is readable by the foe: a held D is an interruptible INTENT.
+  if(lk===KEYS.special && game.player && (game.player._dHoldAt||0)>0){
+    const p=game.player, held=game.frame-p._dHoldAt; p._dHoldAt=0;
+    if(game.state==='fight' && !game.online){
+      const pick = held<12? null : held<26? 0 : held<40? 1 : 2;
+      if(!p.trySpecial(pick)) p.bufferedInput={action:'special',frame:game.frame};
+    }
+  }
+});
 // ---- GAMEPAD: a connected controller is translated into the SAME synthetic key events, so movement / dash / jump / attacks / menus all work unchanged ----
 const _padPrev={};
 function pollGamepad(){
@@ -1538,7 +1549,7 @@ class Fighter {
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
-    this.overflowT=0; this._carry=0; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false;   // v3 #8 signature-verb state + v4 CPU-parity state
+    this.overflowT=0; this._carry=0; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false; this._dHoldAt=0;   // v3 #8 signature-verb state + v4 CPU-parity state + v5 #3 tier-charge
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
     this.guardMax=100; this.guard=100; this.guardCrush=0;  // drainable guard — sustained pressure cracks a turtle
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
@@ -1660,14 +1671,14 @@ class Fighter {
     if(sp){ Object.assign(this.attack, {spName:sp.name, guard:sp.guard, launch:sp.launch, big:sp.big, freeze:sp.freeze, rise:sp.rise, slow:sp.slow, fast:sp.fast, spCol:(this.char.gi||this.accent)}); }
     this.hitThisSwing=false;
   }
-  trySpecial(){
+  trySpecial(tierPick){
     if(!this.grounded) return false;
     const cancelling = this.attack && this.canCancelInto('special');   // cancel a confirmed normal into the special
     const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=justWin(this);   // #8 JUST-frame on the special ender (last ~6f of the window; Initiate 8f)
     if(cancelling && this.attack && this.char.id==='ember' && !this.attack.blockCancel && (this._carry||0)<2){ this._carry=(this._carry||0)+1; this.addAura(3); if(this===game.player) floatText(this.x,this.y-148,'+3 CARRY','#46e08a',12); }   // ADDISON: the special ender is a chain link too
     if(this.attack? !cancelling : !this.canAct()) return false;
-    // SPECIAL fires the highest tier the current AURA can afford (1→2→3). GALAXY = free, always tier 3.
-    const tier = game.galaxy? 2 : bestSpecialTier(this);
+    // SPECIAL: tap fires the highest tier the AURA affords; v5 #3 a HOLD picks the tier deliberately (save the bank vs cash the verdict). GALAXY = free, always tier 3.
+    const tier = game.galaxy? 2 : (tierPick==null? bestSpecialTier(this) : Math.min(tierPick, bestSpecialTier(this)));
     if(tier<0){ this.auraFlash=14; if(this===game.player){ floatText(this.x,this.y-170,'NEED AURA','#7ae8ff',16); SFX.fizzle(); } return false; }
     const sp = spKitFor(this.char)[tier];
     if(!game.galaxy){ const cost=SPEC_TIERS[tier].cost; this.aura-=cost; this.auraChipT=18; spendFx(this, cost); }   // flat per-tier cost — uniform across fighters
@@ -2257,6 +2268,17 @@ function drawFighter(f){
     ctx.save(); ctx.globalAlpha=0.28+0.34*p; ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2;
     ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 28, 72, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
     if(f===game.enemy && !game.mode2p) txtO('▸ OPEN', f.x, f.y-180, 11, '#ffd34d', {mono:true,sw:0});
+  }
+  // v5 #3 tier-charge glyph — a held D walks the pips T1 -> T2 -> T3; readable by BOTH sides (a charge is an interruptible intent)
+  if(f===game.player && (f._dHoldAt||0)>0 && !f.ko){
+    const held=game.frame-f._dHoldAt;
+    const stage = held<12? 0 : held<26? 1 : held<40? 2 : 3;
+    ctx.save();
+    for(let i=0;i<3;i++){ const on = stage>=i+1;
+      ctx.globalAlpha = on?0.95:0.28; ctx.fillStyle = on? (f.char.gi||'#ffd34d') : '#8a93b8';
+      ctx.beginPath(); ctx.arc(f.x-18+i*18, f.y-208, on?5:3.5, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore(); ctx.globalAlpha=1;
+    txtO(stage>0? 'T'+stage : 'AUTO', f.x, f.y-224, 11, stage>0?(f.char.gi||'#ffd34d'):'#8a93b8', {mono:true,sw:0});
   }
   // v3 #6 JUST-window tell — a gold shimmer on the attacker in the LAST ~6f of the cancel window: the drillable timing, visible instead of memorized
   if(f.attack && f.attack.cancelOK>0 && f.attack.cancelOK<=justWin(f) && !f.attack.blockCancel && !f.ko){
@@ -3912,7 +3934,7 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
     row(keyLabel(KEYS.block),  'BLOCK',  null,           true,  '#cabbe0');
     cy+=6;
     ctx.font=font(MONO,8.5); ctx.fillStyle='rgba(150,140,180,0.55)';
-    ctx.fillText(keyLabel(KEYS.special)+' FIRES THE TOP LIT SPECIAL', 40, cy); cy+=14;
+    ctx.fillText(keyLabel(KEYS.special)+' FIRES THE TOP LIT SPECIAL · HOLD = PICK TIER', 40, cy); cy+=14;
     for(let t=0;t<3;t++){   // the ladder — ◆ affordable · dim too-costly · ▶ the one SPECIAL fires right now
       const sp=kit[t], cost=SPEC_TIERS[t].cost, lit=f.aura>=cost, fires=(t===bt);
       ctx.globalAlpha=lit?1:0.4;
