@@ -577,9 +577,11 @@ addEventListener("keydown", e => {
     if(k==='-'||k==='−'){ ans1 = ans1.startsWith('-')? ans1.slice(1) : '-'+ans1; return; }  // toggle a negative answer
     if(k==='.'){ if(!ans1.includes('.')) ans1 = (ans1===''||ans1==='-')? ans1+'0.' : ans1+'.'; return; }  // decimal point
     if(isDigit){
+      if((game.digitLockT||0)>0){ SFX.fizzle(); return; }   // v3 #3 a busted burst locks digit input for a beat — guessing has a cost
       // MATH BURST — while being combo'd, digits answer the 1-digit escape challenge over your head (not the main card)
       if(game.burstChallenge && game.burstChallenge.t>0 && (game.player.comboedHits||0)>=2){
-        if(+k===game.burstChallenge.ans) game.player.burst(true); else SFX.fizzle();
+        if(+k===game.burstChallenge.ans){ if(game.player.burst(true)) game.freeBurstUsed=true; }
+        else { game.burstChallenge=null; game.digitLockT=20; SFX.fizzle(); floatText(game.player.x,game.player.y-196,'WRONG — LOCKED','#ff8a8a',13); }   // v3 #3 wrong digit = the challenge DIES + 20f lockout (no free mash-through)
         return;
       }
       if(ans1.replace(/[-.]/g,'').length<4) ans1+=k;
@@ -623,7 +625,7 @@ addEventListener("keydown", e => {
     }
     if(lk===KEYS.punch){ if(!p.tryAttack('punch')) p.bufferedInput={action:'punch',frame:game.frame}; }
     else if(lk===KEYS.kick){ if(!p.tryAttack('kick')) p.bufferedInput={action:'kick',frame:game.frame}; }
-    else if(lk===KEYS.special){ if((p.stun>0||p.hurtT>0) && (p.comboedHits||0)>=2) p.burst(); else if(!p.trySpecial()) p.bufferedInput={action:'special',frame:game.frame}; }  // SPECIAL doubles as combo-breaker while being chained (burst never buffers)
+    else if(lk===KEYS.special){ if((p.downed||0)>0) p.tryReversal(); else if((p.stun>0||p.hurtT>0) && (p.comboedHits||0)>=2) p.burst(); else if(!p.trySpecial()) p.bufferedInput={action:'special',frame:game.frame}; }  // D while downed = WAKEUP REVERSAL; SPECIAL doubles as combo-breaker while being chained (burst never buffers)
     else if(lk===KEYS.jump || (!game.mode2p && k==='ArrowUp')){ if(!p.tryJump()) p.bufferedInput={action:'jump',frame:game.frame}; }
     if(game.mode2p){
       if(k===',') q.tryAttack('punch');
@@ -1249,7 +1251,7 @@ const hazards=[]; // ORACLE's theorem sigils
 function resolveThrow(f,a){   // grab check on the throw's active frame — beats block, whiffs on air/backdash, teched by a recent throw press
   const o=f.opp; if(!o){ a.def.rec=34; return; }
   const dx=Math.abs(o.x-f.x);
-  if(dx < (a.def.reach||52) && o.grounded && o.iframes<=0 && !o.ko){
+  if(dx < (a.def.reach||52) && o.grounded && o.iframes<=0 && !o.ko && (o.downed||0)<=0){   // v3 #2 NO OTG — a downed fighter cannot be re-grabbed (kills the throw->walk->regrab infinite); the throw whiffs into its long recovery instead
     if(game.frame - (o.throwTechAt||-99) <= 8){          // TECH — the foe pressed throw in time: break, both pushed back, no damage
       f.vx=-f.facing*4; o.vx=(o.x<f.x?-1:1)*4;
       floatText((f.x+o.x)/2, f.y-158, 'TECH!', '#9fdcff', 20); sparks((f.x+o.x)/2, f.y-90, 10, '#9fdcff', 5); SFX.block(); hitstop=Math.max(hitstop,4);
@@ -1530,7 +1532,7 @@ class Fighter {
     this.aura=22; this.auraShown=22; this.auraChipT=0; this.auraFlash=0;   // #2 scarcity: lower start so the economy bites early
     this.facing=facing||this.facing||1;
     this.attack=null; this.hitThisSwing=false;
-    this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0; this.dashT=0; this.slipActive=false; this.slipGuard='low';
+    this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0; this.dashT=0; this.blockstunT=0; this.slipActive=false; this.slipGuard='low';
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
@@ -1548,7 +1550,7 @@ class Fighter {
     this.updatePose();
   }
   get ko(){ return this.hp<=0; }
-  canAct(){ return !this.ko && this.stun<=0 && !this.attack && this.landT<=2 && (this.downed||0)<=0 && (this.focusT||0)<=0; }   // #4 channelling a bank = committed (no swings), same as the CPU's think-beat
+  canAct(){ return !this.ko && this.stun<=0 && (this.blockstunT||0)<=0 && !this.attack && this.landT<=2 && (this.downed||0)<=0 && (this.focusT||0)<=0; }   // #4 channelling a bank = committed (no swings), same as the CPU's think-beat; v3 #1 blockstun locks actions but NOT the guard
 
   tryJump(){
     if(!this.grounded || !this.canAct()) return false;
@@ -1559,7 +1561,7 @@ class Fighter {
     this.vy=-12.4; this.grounded=false; SFX.jump(); dust(this.x,this.y,4,1.4); return true;
   }
   tryDash(dir){
-    if(this.dashCd>0 || !this.grounded || this.blocking || this.ko || this.stun>0 || (this.focusT||0)>0) return;
+    if(this.dashCd>0 || !this.grounded || this.blocking || this.ko || this.stun>0 || (this.blockstunT||0)>0 || (this.focusT||0)>0) return;
     this.dashCd=22; this.vx=dir*11.5;
     this.dodgeT=Math.max(this.dodgeT,8);
     if((dir>0)===(this.facing>0)) this.dashT=10;   // #2 a FORWARD dash opens a brief window: S = a lunging dash-attack poke (the neutral fencing tool)
@@ -1579,7 +1581,7 @@ class Fighter {
     return false;
   }
   tryAttack(type){
-    if(this.ko||this.stun>0||(this.focusT||0)>0) return false;   // #4 channelling a bank = committed, no swings (tryAttack has its own guard and skips canAct)
+    if(this.ko||this.stun>0||(this.blockstunT||0)>0||(this.focusT||0)>0) return false;   // #4 channelling a bank = committed, no swings; v3 #1 no mashing out of blockstun (that's what the frame trap catches — RELEASING guard)
     const cancelling = this.attack && this.grounded && this.canCancelInto(type);   // hit-confirm chain
     if(this.attack && !cancelling) return false;
     if(!this.grounded) type='airkick';
@@ -1603,12 +1605,25 @@ class Fighter {
     return true;
   }
   tryThrow(){   // A+S = a short-range GRAB that BEATS block (the turtle-cracker); whiffs on air/backdash; teched by pressing throw within ~8f
-    if(this.ko||this.stun>0||this.hurtT>0||(this.focusT||0)>0) return false;
-    this.throwTechAt=game.frame;   // pressing throw ALWAYS counts as a tech attempt (teching is free), even with no aura
+    if(this.ko) return false;
+    if(!this.attack && this.grounded && (this.downed||0)<=0) this.throwTechAt=game.frame;   // v3 #2 TECH stamp = DEFENSIVE contexts only (works in block/hitstun — tick throws are techable — but a mid-swing attacker gets no free tech option-select)
+    if(this.stun>0||this.hurtT>0||(this.blockstunT||0)>0||(this.focusT||0)>0||(this.downed||0)>0) return false;   // v3 #2 no grabbing from the floor / out of stun
     if(this.attack||!this.grounded) return false;
     if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No aura to throw — but you can still TECH one (A+S when grabbed).'); return false; }
     this.attack={type:'throw', kind:'throw', ph:'wind', t:7, def:{wind:7, act:2, rec:22, dmg:14, reach:52}, tel:0, fuse:7};
     this.hitThisSwing=false; SFX.whoosh();
+    return true;
+  }
+  tryReversal(){   // #5 WAKEUP REVERSAL — D while rising: an invuln-startup rising strike that BEATS a meaty, but with a LONG whiff-punishable recovery (loses to a bait/block). The okizeme RPS's third option.
+    if(this.ko || (this.downed||0)<=0 || this.attack) return false;
+    if(!game.galaxy && !this.spend(18)) return false;   // costed — a read, not a panic button
+    this.downed=0; this.knockingDown=false;
+    this.iframes=Math.max(this.iframes,14); this.slipActive=false;   // FULL invuln through the rise + startup (a reversal, not a committal slip)
+    this.attack={type:'kick', ph:'wind', t:6, def:Object.assign({},ATK.kick,{reach:96,wind:6,act:4,rec:34,dmg:12,heavy:true,guardLevel:'mid',hy:-80}), tel:0, fuse:6, reversal:true};
+    this.hitThisSwing=false;
+    this.vy=-6.2; this.grounded=false;   // rising arc
+    floatText(this.x,this.y-176,'REVERSAL!','#ffd34d',17); ring(this.x,this.y-80,'#ffd34d',52,4); SFX.special(); flash(0.08,'#ffe9b0');
+    if(this===game.player) game.reversalDone=(game.reversalDone||0)+1;
     return true;
   }
   cpuAttack(type, telFrames){
@@ -1736,7 +1751,7 @@ class Fighter {
       } else {
         const chip = Math.max(1, Math.round(dmg*0.15*this.char.blockMul));
         this.hp=Math.max(1,this.hp-chip); this.chipDelay=24;
-        this.stun=heavy?16:12; this.vx=dir*4.5;   // #3 blockstun raised so the attacker's short cancel window is a real frame trap (light: tight follow-up beats a mash; heavy stays punishable on its long recovery)
+        this.blockstunT=heavy?16:12; this.vx=dir*4.5;   // v3 #1 BLOCK INTEGRITY: blockstun is its OWN timer — guard HOLDS through it (stun would drop the guard, turning the #3 frame-trap window into a true unblockable). Movement/attacks stay locked via the blockstunT gates; a held block now actually beats the frame trap, and the tech input works during blockstun (tick throws are techable).
         sparks(this.x+dir*-22, this.y-86, 6, '#9fdcff', 4);
         SFX.block();
         return 'block';
@@ -1748,9 +1763,10 @@ class Fighter {
     this.bufferedInput=null; this.missWobble=0;   // a clean hit eats your queued input + ends the miss-wobble (no blocking through hitstun)
     if((this===game.enemy||this.isCPU) && this.attack){ const r=this.read||(this.read={block:0,punish:0,dodge:0}); r.punish+=1.2; }   // you whiff-punished its commitment → it learns to bait
     this.comboedHits = (this.stun>0? (this.comboedHits||0) : 0) + 1;   // chained-hit counter → enables a BURST escape
-    if(this===game.player && this.comboedHits>=2 && !game.burstChallenge){   // MATH BURST — a free escape if you solve the micro-problem under fire
-      game.burstChallenge={ans:rnd(1,9), t:100};
-      tip('burst','Combo’d? Press the BURST digit over your head for a FREE escape — or '+keyLabel(KEYS.special)+' to spend aura.');
+    if(this===game.player && this.comboedHits>=2 && !game.burstChallenge && !game.freeBurstUsed){   // MATH BURST — ONE free escape per round, and you must actually SOLVE the micro-problem under fire (v3 #3: the answer is no longer displayed)
+      const a=rnd(3,9), b=rnd(1,a-1);
+      game.burstChallenge={a, b, ans:a-b, t:100};
+      tip('burst','Combo’d? SOLVE the red micro-problem over your head for a FREE escape (one per round) — or '+keyLabel(KEYS.special)+' to spend aura.');
     }
     if(this===game.enemy && this.comboedHits===2 && typeof reactBanter==='function') reactBanter('onCombo');   // player landed a combo → foe reacts
     if(this.dizzy>0) dmg*=1.18;
@@ -1798,8 +1814,8 @@ class Fighter {
     if(this.focusT>0){ this.focusT--; this.moveX=0; this.wantBlock=false;   // #4 FOCUS channel — banking aura is a visible, vulnerable beat (the mirror of rushing the CPU's ∑ solve); a hit breaks it (takeHit), completion pays out
       if(this.focusT<=0 && this.pendingSolve) completeFocus(this); }
     if(this.downed>0){ this.downed--; this.moveX=0; this.wantBlock=false; this.vx*=0.82;   // DOWNED: inert on the ground, then a safe getup-invuln rise, then a brief vulnerable wakeup (okizeme)
-      if(this.downed===9){ this.iframes=Math.max(this.iframes,10); this.slipActive=false; if(this===game.player && (game.getupTaught||0)<3){ game.getupTaught=(game.getupTaught||0)+1; floatText(this.x,this.y-150,'GET UP','#ffd34d',13); } } }   // getup-invuln is FULL (safe rise), not a committal solve-slip
-    if(this.dashCd>0)this.dashCd--; if(this.dropT>0)this.dropT--; if(this.dashT>0)this.dashT--;
+      if(this.downed===9){ this.iframes=Math.max(this.iframes,10); this.slipActive=false; if(this===game.player && (game.getupTaught||0)<3){ game.getupTaught=(game.getupTaught||0)+1; floatText(this.x,this.y-150,'GET UP — D = REVERSAL · or BLOCK','#ffd34d',12); } } }   // getup-invuln is FULL (safe rise), not a committal solve-slip; #5 names the wakeup RPS
+    if(this.dashCd>0)this.dashCd--; if(this.dropT>0)this.dropT--; if(this.dashT>0)this.dashT--; if(this.blockstunT>0)this.blockstunT--;
     if(this.frozenT>0)this.frozenT--;
     if(this.missWobble>0)this.missWobble--;
     if(this.guardCrush>0)this.guardCrush--;
@@ -2351,6 +2367,14 @@ function controlCPU(c){
   } else c.burstT=0;
   // MATH-ECONOMY MIRROR — when disengaged + low on aura the CPU stops to "solve" (a visible, whiff-punishable refuel beat you can rush)
   if(c.thinkT>0){ c.thinkT--; c.moveX=0; if(c.thinkT<=0){ c.addAura(34); floatText(c.x,c.y-150,'+ SOLVED','#7ae8ff',14); } return; }   // aura is EARNED here (the visible, punishable refuel) — break it by hitting them mid-solve
+  // v3 #2 THROW TECH — the CPU learns to tech (difficulty-scaled, never twice in a row), so throws are a MIXUP, not a lock. Runs BEFORE the canAct gate: teching works from blockstun (the tick-throw read).
+  {
+    const pThrow = p.attack && p.attack.type==='throw' && (p.attack.ph==='wind'||p.attack.ph==='act') && Math.abs(p.x-c.x)<84;
+    if(pThrow && !c._sawThrow){ c._sawThrow=true;
+      const techP = c._justTeched? 0 : Math.min(0.7, 0.2+0.25*(DIFF.level||0));   // just-teched one? this one lands — throw twice is a real read
+      if(Math.random()<techP){ c.throwTechAt=game.frame; c._justTeched=true; } else c._justTeched=false;
+    } else if(!pThrow) c._sawThrow=false;
+  }
   if(!c.canAct()) return;
   const dist = Math.abs(p.x-c.x), dir = p.x>c.x?1:-1;
   // #4 PUNISH-THE-REFUEL — a player banking mid-fight (FOCUS channel) is an opening the foe HUNTS, exactly as you can rush its ∑ solve. Bank at range or behind cover; bank in its face and eat the counter.
@@ -2359,6 +2383,28 @@ function controlCPU(c){
       if(Math.round(ATK[t].cost*c.char.costMul)<=c.aura){ c.cpuAttack(t, Math.round(18*Math.max(0.5,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }
     else if(dist<560){ c.moveX=dir; return; }   // smells the open bank — closes in
   }
+  // #5 OKIZEME — a downed player is a SCHEDULED mix-up, not a breather: walk to point-blank, loom through the invuln (readable menace), then commit ONE read per knockdown — a wakeup-timed meaty STRIKE, a post-getup THROW (beats a wakeup block; v3: cannot OTG, so it must land after you rise), or just the loom. Your answers: block the strike, tech/jump the throw, or D = REVERSAL (which the bait beats).
+  if((p.downed||0)>0 && c.grounded && !c.attack && c.stun<=0){
+    if(!c.okiPlan){ const thr=cpuProfile(c).thr||0.2;
+      c.okiPlan = Math.random()<thr*1.6? 'throw' : (Math.random()<0.62? 'strike' : 'loom'); }   // one committed read per knockdown (loom keeps oki from being oppressive)
+    if(dist>96){ c.moveX=dir; return; }                       // close in while you're down
+    if(p.downed>12){ c.moveX=0; return; }                     // looming — the wait IS the tell
+    if(c.canAct()){
+      if(c.okiPlan==='throw'){
+        if(p.downed<=2 && c.aura>=6){ c.tryThrow(); c.okiPlan=null; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); }   // starts as you rise -> grabs AFTER the invuln (teched/jumped, never OTG)
+        else c.moveX=0;
+        return;
+      }
+      if(c.okiPlan==='strike'){
+        const t=dist>80?'kick':'punch';
+        if(Math.round(ATK[t].cost*c.char.costMul)<=c.aura) c.cpuAttack(t, 12);   // tel 12 + windup lands on the vulnerable wakeup — blockable, reversal-able
+        c.okiPlan=null; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]);
+        return;
+      }
+      c.moveX=0; return;   // 'loom' — menace without the meaty
+    }
+    return;
+  } else if((p.downed||0)<=0) c.okiPlan=null;
   // MATH-ECONOMY MIRROR — the foe's power comes from SOLVING, not a passive drip. When it can't afford a special and it's safe, it stops to solve — a real opening you can rush and interrupt.
   if(c.aura<58 && dist>140 && !(p.attack&&p.attack.ph!=='rec') && c.grounded && c.aiThink>8 && Math.random()<0.07){ c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }
   c.aiThink--;
@@ -2527,7 +2573,7 @@ function resolveHits(att,def){
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
     const cx=def.x-dir*6, cy=def.y-90;
     if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3);
-      if(att.attack && hb.type!=='special'){ att.attack.cancelOK=Math.max(att.attack.cancelOK||0,10); att.attack.blockCancel=true;   // #3 ON-BLOCK PRESSURE: a blocked normal opens a SHORT cancel window — a tight P>P/P>K follow-up is a frame trap (beats a mash, loses to continued block); capped by the drainable guard + throw. NO special-cancel on block.
+      if(att.attack && hb.type!=='special' && !att.attack.reversal){ att.attack.cancelOK=Math.max(att.attack.cancelOK||0,10); att.attack.blockCancel=true;   // #3 ON-BLOCK PRESSURE: a blocked normal opens a SHORT cancel window — a tight P>P/P>K follow-up is a frame trap (beats a mash, loses to continued block); capped by the drainable guard + throw. NO special-cancel on block. #5: a blocked REVERSAL gets NO window — it's the punishable option.
         if(att===game.player && game.frame-(att._blockCueAt||0)>50){ att._blockCueAt=game.frame; floatText(att.x+att.facing*28, att.y-120, 'PRESSURE ▸', '#9fdcff', 12); } }
       return; }
     if(res==='armor'){ hitstop=Math.max(hitstop,4); ring(cx,cy,'#ffcf6a',30,3); return; }   // MAXIMILIAN plowed through the startup — no combo/punish/launcher credit for the attacker
@@ -2789,6 +2835,7 @@ function startRound(){
     } else game.ally=null;
   }
   game.timer = game.mode==='rumble'? 99 : 75; game.heat=0;
+  game.freeBurstUsed=false; game.digitLockT=0;   // v3 #3 one FREE math-burst per round; digit lockout clears
   pickups.length=0; pickupTimer=300;
   projs.length=0; hazards.length=0;
   game.playerHidden=false; game.hiddenRecent=0;
@@ -3229,6 +3276,7 @@ function step(){
     }
     if(p.spReady()) tip('sp','SPECIAL ready — press '+keyLabel(KEYS.special)+'. Finish with it for a surprise…');
     if(game.burstChallenge){ game.burstChallenge.t--; if(game.burstChallenge.t<=0 || (p.comboedHits||0)<2 || p.ko) game.burstChallenge=null; }  // MATH-BURST window
+    if((game.digitLockT||0)>0) game.digitLockT--;   // v3 #3 busted-burst digit lockout ticks down
     resolveHits(p,e); resolveHits(e,p);
     if(game.ally) resolveHits(game.ally, game.enemy);   // Lessing's strikes chip Solomon (Solomon never targets the ally)
     storyBeatTick();                    // marquee story lines that PLAY as HP crosses a threshold
@@ -3850,7 +3898,7 @@ function drawBurstChallenge(){   // MATH BURST — a 1-digit escape prompt over 
   ctx.save(); ctx.textAlign='center';
   ctx.globalAlpha=pulse; rr(sx-92,sy-30,184,31,8); ctx.fillStyle='rgba(50,8,14,0.9)'; ctx.fill();
   ctx.strokeStyle='#ff5a5a'; ctx.lineWidth=2; ctx.stroke(); ctx.globalAlpha=1;
-  txtO('BURST — '+bc.ans, sx, sy-9, 15, '#ffd34d', {mono:true,sw:0});
+  txtO('BURST — '+bc.a+'−'+bc.b+' = ?', sx, sy-9, 15, '#ffd34d', {mono:true,sw:0});   // v3 #3 the ESCAPE is earned: solve it, don't read it
   ctx.fillStyle='#ff5a5a'; ctx.fillRect(sx-84, sy-3, 168*clamp(bc.t/100,0,1), 2);
   ctx.restore();
 }
