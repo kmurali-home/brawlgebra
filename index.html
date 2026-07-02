@@ -1868,7 +1868,7 @@ class Fighter {
         else if(a.ph==='act'){ a.ph='rec'; a.t=a.def.rec;
           if(!this.hitThisSwing){ dust(this.x+this.facing*22, this.floorY||GROUND, 3, 1.7); if(this===game.player) addTrauma(0.05); if(a.def.heavy) a.t+=3; }  // WHIFF: felt over-commitment + a touch more recovery on heavies
         }
-        else this.attack=null;
+        else { this._recoveredAt=game.frame; this.attack=null; }   // v5 #2 recovery-end stamp — a punish landed within ~6f of recovery still PAYS (fast pokes are punishable, as the OPEN tell promises)
       }
     }
     // INPUT-BUFFER REPLAY (player only) — fire a recently-pressed action the instant it becomes legal; expires after 6f
@@ -2514,6 +2514,13 @@ function controlCPU(c){
   else if(dist < rMin)          c.moveX = -dir*0.16*cfg.speed*P.ret; // too close → back off at this fighter's tempo
   else if(Math.random()<0.01)   c.moveX = -dir*0.2*cfg.speed;
   hopCover(c);
+  // v5 #2 FAST POKE — inside its preferred band the CPU sometimes jabs at near-player speed (tel 10-14, chip-tier damage, NO solve window): entering range carries raw risk, so mid-range is a READ, not a memorized rhythm. Never two in a row; heavies/specials stay fully telegraphed — the solve economy keeps living on the big commits.
+  if(c.grounded && c.aiThink<=0 && dist>=rMin && dist<=rMin+40 && !c._lastQuick && Math.random()<([0,0.25,0.45][Math.min(2,DIFF.level||0)]||0) && canAfford('punch')){
+    c.cpuAttack('punch', rnd(10,14));
+    if(c.attack){ c.attack.quick=true; c.attack.def=Object.assign({},c.attack.def,{dmg:Math.max(3,Math.round((c.attack.def.dmg||6)*0.6))}); }
+    c._lastQuick=true; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return;
+  }
+  if(c.aiThink<=0 && Math.random()<0.2) c._lastQuick=false;   // the no-repeat flag decays — a gap always follows a fast poke
   // THROW the turtle — when point-blank and you're guarding, this fighter occasionally grabs (you must throw-tech: A+S)
   if(dist<50 && c.grounded && p.wantBlock && c.aiThink<=0 && Math.random()<P.thr && c.aura>=6){
     if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0]+10,cfg.cool[1]+20); return; }
@@ -2624,7 +2631,7 @@ function resolveHits(att,def){
     let gcombo=0;
     if(att.attack && att.attack.galaxyComboMul){ gcombo=att.attack.galaxyComboMul; dmg *= gcombo; }  // GALAXY combo finisher — the unlocked string pays off big (×2..×5)
     let punish=false;
-    if(def.attack && def.attack.ph==='rec' && hb.type!=='special'){ punish=true; dmg *= 1.3; }   // WHIFF-PUNISH: catch a foe in the recovery of their own swing — reward the read
+    if(hb.type!=='special' && ((def.attack && def.attack.ph==='rec') || (!def.attack && game.frame-(def._recoveredAt||-1e9)<=6))){ punish=true; dmg *= 1.3; }   // WHIFF-PUNISH: catch a foe in (or within 6f of) the recovery of their own swing — the grace stamp makes even fast pokes punishable
     const airHit = !def.grounded && !!def.knockingDown;   // hitting a LAUNCHED (juggled) foe
     if(airHit) dmg *= Math.pow(0.72, def.airHits||0);     // JUGGLE decay — each extra air hit does less (no infinite juggle)
     if(att.attack && att.attack.just) dmg *= 1.2;   // #8 JUST-frame cancel — precise late-cancel timing pays off (a skill lever OFF the math; meter credit moved to the CLEAN-hit path so a blocked JUST earns nothing)
@@ -2696,7 +2703,7 @@ function cardWorldPoint(){ // world coords beneath the math card
 function computeDanger(f){ // the foe winding up on f right now (whole telegraph) — drives the WARNING UI
   const foes = (game.mode==='rumble'&&game.fighters)? game.fighters.filter(x=>x!==f&&!x.ko&&!x.gone) : [f.opp];
   for(const o of foes){
-    if(!o || !o.attack) continue;
+    if(!o || !o.attack || o.attack.quick) continue;   // v5 #2 fast pokes never feed the danger/NOW UI — you BLOCK or eat those; you SOLVE the big commits
     const ph=o.attack.ph, ok = game.mode2p? (ph==='wind'||ph==='act') : (ph==='tel'||ph==='wind'||ph==='act');
     if(ok && Math.abs(o.x-f.x)<190) return o;
   }
@@ -2713,7 +2720,7 @@ const PERFECT_WIN=26;   // max window; the ACTUAL window scales with each attack
 function perfectWin(o){ return clamp(Math.round((o.attack && o.attack.fuse || 40)*0.42), 10, PERFECT_WIN); }
 function perfectFoe(f){  // the foe whose strike is inside its tight perfect-dodge window, or null
   const foes=(game.mode==='rumble'&&game.fighters)? game.fighters.filter(x=>x!==f&&!x.ko&&!x.gone):[f.opp];
-  for(const o of foes){ if(o && o.attack && Math.abs(o.x-f.x)<190 && framesToHit(o)<=perfectWin(o)) return o; }
+  for(const o of foes){ if(o && o.attack && !o.attack.quick && Math.abs(o.x-f.x)<190 && framesToHit(o)<=perfectWin(o)) return o; }   // quick pokes open no perfect window (too fast to solve-react — block them)
   return null;
 }
 // Apply a solved/missed math result to fighter f. Shared by offline + online
@@ -3340,11 +3347,13 @@ function step(){
       if(pf){
         if(pf.attack!==game.relockAtk){ game.relockAtk=pf.attack;
           if(ans1!==''){ ans1=''; cardFx.shake=Math.max(cardFx.shake||0,9); }
+          if(!game.daily){ const a=rnd(3,9), b=rnd(1,a-1); game.problem={text:a+'−'+b, ans:a-b, op:'−', micro:true}; game.problemAt=game.frame; }   // v5 #4 AGE-HONEST NOW LANE — the reactive read is ALWAYS a 1-digit micro-problem (a median 12yo can use the fork); the full-heat problem stays the safe/bank lane
           cardFx.flash=Math.max(cardFx.flash||0,11); cardFx.col='#ffd34d';
           floatText(p.x,p.y-200,'ANSWER — NOW','#ffd34d',18);
-          tip('relock','Your answer clears the instant he commits — answer again in the NOW window, or BLOCK.');
+          tip('relock','Your answer clears the instant he commits — answer the QUICK one in the NOW window, or BLOCK.');
         }
-      } else game.relockAtk=null;
+      } else { game.relockAtk=null;
+        if(game.problem && game.problem.micro && !game.daily){ game.problem=newProblem(Math.floor(game.heat)); game.problemAt=game.frame; } }   // danger passed unanswered — the bank lane returns to full-heat problems (no cheap 1-digit banking)
     }
     if(p.spReady()) tip('sp','SPECIAL ready — press '+keyLabel(KEYS.special)+'. Finish with it for a surprise…');
     if(game.burstChallenge){ game.burstChallenge.t--; if(game.burstChallenge.t<=0 || (p.comboedHits||0)<2 || p.ko) game.burstChallenge=null; }  // MATH-BURST window
