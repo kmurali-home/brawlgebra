@@ -2421,8 +2421,13 @@ function controlPlayer(p){
   if(keys[KEYS.right]||(arrows&&keys['arrowright'])) p.moveX += 1;
   const _down = keys[KEYS.block]||(arrows&&keys['arrowdown']);
   const _back = p.facing>0 ? (keys[KEYS.left]||(arrows&&keys['arrowleft'])) : (keys[KEYS.right]||(arrows&&keys['arrowright']));
-  p.wantBlock = !!(_down || _back);
-  if(_down) p.guardStance='low'; else if(_back) p.guardStance='high';   // ↓ = LOW guard (blocks low+mid); hold BACK = HIGH guard (blocks high+mid). Guess wrong and the hit lands — or out-solve it in the ⚡NOW window.
+  // v6 #2 RETREAT ≠ GUARD — hold-back only raises the HIGH guard while a threat is LIVE (foe committing nearby, or a projectile/hazard inbound); otherwise it's a real walk-back. One coupling bug had warped retreat, guard height, and the CPU's turtle-read at once.
+  const o=p.opp;
+  const threatLive = (o && o.attack && (o.attack.ph==='tel'||o.attack.ph==='wind'||o.attack.ph==='act') && Math.abs(o.x-p.x)<190)
+                  || projs.some(pr=>pr.owner && pr.owner!==p && Math.abs(pr.x-p.x)<260)
+                  || hazards.some(h=>Math.abs(h.x-p.x)<130);
+  p.wantBlock = !!(_down || (_back && threatLive));
+  if(_down) p.guardStance='low'; else if(_back && threatLive) p.guardStance='high';   // ↓ = LOW guard (blocks low+mid); hold BACK vs a live threat = HIGH guard (blocks high+mid). Guess wrong and the hit lands — or out-solve it in the ⚡NOW window.
 }
 function controlP2(f){
   f.moveX = 0;
@@ -2433,12 +2438,12 @@ function controlP2(f){
 // PER-ARCHETYPE CPU PILOTS — each fighter's AI plays its OWN game-plan, so glass-cannon-vs-tank is a real matchup, not a mirror
 const CPU_PROFILE = {
   //          preferred [min,max] range | advance | retreat | special-use | retreat-below hp% | throw-when-you-block | jump-in chance
-  mauler:   { rng:[52,112],  adv:1.2,  ret:0.5,  sp:0.5,  retHp:0,  thr:0.11, jmp:0.015 },  // TANK: walks you down, blocks, throws heavies, eats chip to close
-  ember:    { rng:[56,120],  adv:1.3,  ret:0.65, sp:0.4,  retHp:0,  thr:0.06, jmp:0.055 },  // RUSHDOWN: fast relentless pressure + jump-ins
-  frost:    { rng:[230,540], adv:0.55, ret:1.35, sp:0.9,  retHp:0,  thr:0.02, jmp:0.01 },   // ZONER: runs to fullscreen, fishes spears
-  oracle:   { rng:[150,300], adv:0.9,  ret:1.05, sp:0.6,  retHp:38, thr:0.04, jmp:0.05 },   // GLASS DART: keeps mid, darts on your recovery, bails when low
-  initiate: { rng:[78,140],  adv:1.0,  ret:1.0,  sp:0.4,  retHp:0,  thr:0.05, jmp:0.03 },   // balanced all-rounder
-  james:    { rng:[66,130],  adv:1.1,  ret:0.75, sp:0.55, retHp:0,  thr:0.06, jmp:0.04 }    // SOLOMON: relentless finisher
+  mauler:   { rng:[52,112],  adv:1.2,  ret:0.5,  sp:0.5,  retHp:0,  thr:0.11, jmp:0.015, dshI:0.020 },  // TANK: walks you down, dash-closes, throws heavies, eats chip
+  ember:    { rng:[56,120],  adv:1.3,  ret:0.65, sp:0.4,  retHp:0,  thr:0.06, jmp:0.055, dshI:0.045 },  // RUSHDOWN: dashes IN — relentless pressure + jump-ins
+  frost:    { rng:[230,540], adv:0.55, ret:1.35, sp:0.9,  retHp:0,  thr:0.02, jmp:0.01,  dshI:0.004 },  // ZONER: runs to fullscreen, fishes spears
+  oracle:   { rng:[150,300], adv:0.9,  ret:1.05, sp:0.6,  retHp:38, thr:0.04, jmp:0.05,  dshI:0.020 },  // GLASS DART: keeps mid, darts on your recovery, bails when low
+  initiate: { rng:[78,140],  adv:1.0,  ret:1.0,  sp:0.4,  retHp:0,  thr:0.05, jmp:0.03,  dshI:0.018 },  // balanced all-rounder
+  james:    { rng:[66,130],  adv:1.1,  ret:0.75, sp:0.55, retHp:0,  thr:0.06, jmp:0.04,  dshI:0.035 }   // SOLOMON: relentless finisher
 };
 function cpuProfile(c){ return CPU_PROFILE[(c&&c.char&&c.char.id)] || CPU_PROFILE.initiate; }
 function controlCPU(c){
@@ -2534,7 +2539,7 @@ function controlCPU(c){
   //    Learnable & conditionable: a fast enough attack beats its block; spacing so it whiffs the punish; baiting its block with a feint. NOT a coin-flip. ──
   let opening=null;
   if(!p.grounded && p.vy>0.4 && dist<122 && c.grounded) opening='antiair';                 // jump-in falling into range
-  else if(pRec && dist<128 && c.grounded) opening='punish';                                 // committed/whiffed in range = free punish
+  else if(pRec && dist<(DIFF.level>=1?200:128) && c.grounded) opening='punish';             // committed/whiffed in range = free punish (v6 #1: at tier 1+ the dash-S extends the punish envelope — whiffing at 'safe' range isn't)
   else if(pWind && dist<142 && c.grounded && c.blockHold<=0) opening='block';               // your startup → put up a guard
   if(opening){
     if(c.reactKind!==opening){ c.reactKind=opening; c.reactT = (opening==='antiair'? Math.max(2,cfg.react-4) : cfg.react); }
@@ -2547,7 +2552,9 @@ function controlCPU(c){
       c.guardStance = (inc==='high' && Math.random()<0.55)? 'high' : 'low';   // v3 #7 reads the HEIGHT ~half the time — the dash-overhead is a mixup vs the CPU, not a cheat
       return; }                     // reliably guards once it reads your startup — frame-trap it or stagger your timing
     if(k==='antiair' && canAfford('kick')){ c.cpuAttack('kick',Math.round(28*Math.max(0.55,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
-    if(k==='punish'){ let type=dist>92?'kick':'punch'; if(!canAfford(type)) type='punch';
+    if(k==='punish'){
+      if(dist>120 && DIFF.level>=1 && c.grounded && c.dashCd<=0 && Math.round(ATK.kick.cost*c.char.costMul)<=c.aura){ c.tryDash(dir); c.tryAttack('kick'); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }   // v6 #1 the DASH-S whiff-punish — your own 132-reach lunge, turned on you
+      let type=dist>92?'kick':'punch'; if(!canAfford(type)) type='punch';
       if(canAfford(type)){ c.cpuAttack(type,Math.round((type==='punch'?24:32)*Math.max(0.5,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }
   }
   if(c.blockHold>0) return;
@@ -2571,9 +2578,18 @@ function controlCPU(c){
   let rMin=P.rng[0], rMax=P.rng[1];
   const lowHp = P.retHp>0 && c.hp < c.char.hp*(P.retHp/100);      // a glass-cannon bails when hurt
   if(lowHp){ rMin+=140; rMax+=220; }
+  // v6 #1 CPU MOVEMENT PARITY — the opponent plays neutral with your verbs: a 3-state approach cadence instead of fractional creep, real dash-ins that convert to dash-S, and paid backdashes out of pressure.
+  if(!c._mvT || game.frame>=c._mvT){ c._mvT=game.frame+rnd(30,60); const r=Math.random(); c._mvS = r<0.45?'in' : r<0.8?'hold' : 'out'; }
   const clockLow = (game.timer!=null && game.timer<20);          // anti-timeout: even a runaway zoner must engage late
+  if(DIFF.level>=1 && c.grounded && c.dashCd<=0 && !c._lastDash && dist>170 && dist<300 && Math.random()<(P.dshI||0)){   // DASH-IN — closes the band in a blink; sometimes converts straight to the dash-S overhead (the mixup you use)
+    c.tryDash(dir); c._lastDash=true;
+    if(Math.random()<0.55 && Math.round(ATK.kick.cost*c.char.costMul)<=c.aura) c.tryAttack('kick');   // dashT>0 -> the lunging overhead, no telegraph: entering range is now scary in BOTH directions
+    c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return;
+  }
+  if(c.aiThink<=0 && Math.random()<0.25) c._lastDash=false;   // never two dash-ins in a row — a gap always follows
+  if(DIFF.level>=1 && c.grounded && c.dashCd<=0 && dist<84 && c.guard<70 && (c.guardRestT||0)>0 && Math.random()<0.05){ c.tryDash(-dir); return; }   // pressured turtle EXITS with the same (paid) backdash you have
   if(clockLow && dist>100)      c.moveX = dir*0.24*cfg.speed;     // force the approach when the clock's low
-  else if(dist > rMax)          c.moveX = dir*0.22*cfg.speed*P.adv;  // too far → approach at this fighter's tempo
+  else if(dist > rMax)          c.moveX = dir*(c._mvS==='in'?0.55 : c._mvS==='hold'?0.06 : -0.14)*cfg.speed*P.adv;  // BURST-APPROACH / HOLD-BAND / STEP-OUT — walking has texture, so range knowledge matters
   else if(dist < rMin)          c.moveX = inCorner(c)? 0 : -dir*0.16*cfg.speed*P.ret; // too close → back off at this fighter's tempo — but never retreat INTO the wall (v5 #7: a cornered zoner must fight or leap, not shrink)
   else if(Math.random()<0.01)   c.moveX = -dir*0.2*cfg.speed;
   hopCover(c);
@@ -2617,7 +2633,7 @@ function controlCPU(c){
   }
   // ranged personas open fire from distance (lance/sigil kits)
   const ranged = c.char.spKind==='spear'||c.char.spKind==='sigil';
-  if(ranged && c.aiThink<=0 && dist>=150 && dist<520 && c.aura>=Math.round(ATK.special.cost*c.char.costMul)){
+  if(ranged && c.aiThink<=0 && dist>=150 && dist<520 && c.aura>=SPEC_TIERS[0].cost){   // v6 FIX: gate on the REAL cheapest tier (25), not the retired 60-cost model — the zoner can actually play keepaway now
     c.cpuAttack('special', Math.round(80*cfg.telMul)); SFX.charge(); c.aiThink = rnd(cfg.cool[0]+30, cfg.cool[1]+40);
   }
   // commit to an attack on cadence — telegraphed (your math window). The OFFENSE now ADAPTS to your habit, so it's readable + counter-conditionable.
@@ -2635,7 +2651,7 @@ function controlCPU(c){
     if(dom==='block'){ spChance=Math.min(0.92, spChance+0.42);   // you turtle → it cracks the guard with specials (chip + guard-crush). Stop blocking, start dodging.
       if(game.frame-(c._readLineAt||0)>300){ c._readLineAt=game.frame; floatText(c.x,c.y-184,'cracking your guard','#ff9f6a',12); } }
     if(dom==='dodge') kickChance=0.7;                            // you keep dodging → faster, committed pressure that beats the dodge cooldown
-    if(c.aura>=Math.round(ATK.special.cost*c.char.costMul) && Math.random()<spChance){
+    if(c.aura>=SPEC_TIERS[0].cost && Math.random()<spChance){   // v6 FIX: real tier pricing here too
       c.cpuAttack('special', Math.round(95*cfg.telMul)); SFX.charge(); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
     } else {
       let type = Math.random()<kickChance?'kick':'punch';
@@ -2747,7 +2763,7 @@ function resolveHits(att,def){
     if(gcombo){ const big=gcombo>=3; flash(0.22,'#ffd9f0'); addTrauma(0.45+gcombo*0.06); ring(cx,cy, big?'#ff7ac0':'#ffd34d', 70+gcombo*16, 7); slowmo(240,0.4);
       floatText(def.x,def.y-212, '✦ COMBO ×'+gcombo, big?'#ff7ac0':'#ffd34d', 22+Math.min(8,gcombo*2));
       if(att.attack && att.attack.galaxyLaunch){ def.vy=-13; def.grounded=false; def.stun=Math.max(def.stun,34); def.dizzy=Math.max(def.dizzy,80); def.knockingDown=true; } }  // bigger combos launch
-    hitstop=Math.max(hitstop, hb.heavy?8:5);
+    hitstop=Math.max(hitstop, hb.heavy?11:8);   // v6 baseline crunch — every clean blow passes the eyes-closed test (counter tier still out-freezes at 12)
     addTrauma(hb.heavy?0.45:0.25);
     cam.kickX = dir*(hb.heavy?5:2.5);
     ring(cx,cy, hb.heavy?'#ffd34d':'#fff', hb.heavy?54:34, hb.heavy?5:3);
@@ -5936,7 +5952,7 @@ const ROSTER=[
 ];
 // UNIFORM MATH ECONOMY — fighters no longer vary by "degree of math": solving pays the same and moves cost the same for everyone.
 // What differs is the SPECIAL KIT (and light body archetype: hp / reach / pace). The kit's tier damage is identical across fighters.
-[...ROSTER, PROTAG, BASE_CHAR].forEach(c=>{ c.regen=0; });   // keep CPU honesty (no passive aura drip) but RESTORE per-fighter economy identity — costMul/gainMul/auraMax/streakMul now take effect, so Maximilian tanks, Krishna glass-cannons, etc. Math difficulty + special damage/cost stay uniform (specials use flat SPEC_TIERS, not costMul).
+[...ROSTER, PROTAG, BASE_CHAR, SOLOMON_CHAR, BOSS_CHAR].forEach(c=>{ c.regen=0; });   // keep CPU honesty (no passive aura drip) but RESTORE per-fighter economy identity — costMul/gainMul/auraMax/streakMul now take effect. v6 FIX: SOLOMON_CHAR/BOSS_CHAR are copies made BEFORE this pass and had leaked a free 0.04/f regen onto the marquee unlock — the one sacred economy rule now has zero exceptions.
 const MENU=[
   ['PLAY','1v1. Choose your form on the next screen — Standard, or the Rite of Silence.'],
   ['MODES','the boss ladder, the endless gauntlet, the campaign, the training hall'],
