@@ -1262,6 +1262,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
       o.stun=Math.max(o.stun||0, 32); o.hurtT=Math.max(o.hurtT||0, 22); o.attack=null;
       o.vy=-6.5; o.grounded=false; o.vx=(o.x<f.x?-1:1)*3.2; o.streak=0; o.combo=0; o.knockingDown=true;
       floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.32); SFX.heavy(); hitstop=Math.max(hitstop,5);
+      if(f.char.id==='mauler'){ f.overflowT=240; f.addAura(30); floatText(f.x,f.y-206,'OVERFLOW','#ffcf6a',17); ring(f.x,f.y-86,'#ffcf6a',56,4); }   // SIGNATURE · MAXIMILIAN — the grab feeds the BOUNDLESS PRODUCT (cap 70->100 for ~4s: T3 is earnable NOW)
       if(f===game.player) game.stats.dmg+=dmg;
       if(o.hp<=0 && typeof lethal==='function') lethal(o, true);
     }
@@ -1450,7 +1451,8 @@ const SP_KITS={
   james:   [ {name:'REDUCE',      kind:'spear', fast:true},      {name:'CANCEL',        kind:'slam', guard:true},          {name:'RESOLUTION',            kind:'sigil', big:true} ],   // SOLOMON (the Equals): distinct '='-themed kit so the marquee unlock is not a starter reskin
 };
 const STYLE_BY_ID={ initiate:'ALL-ROUNDER', mauler:'BRAWLER', ember:'RUSHDOWN', frost:'ZONER', oracle:'GLASS CANNON', james:'THE APEX' };   // one-word play-style read for the select card — the real differences are stats + specials now, not math
-const SIG_BY_ID={ mauler:'HEAVY-KICK ARMOR', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN' };   // the signature VERB each fighter must learn — the mastery hook, surfaced so a picker knows what to master
+const SIG_BY_ID={ mauler:'ARMOR = T3 OVERFLOW', ember:'CHAIN LINKS = +AURA', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN', initiate:'WIDE JUST WINDOW' };   // v3 #8 EVERY fighter has a signature VERB — the mastery hook, surfaced so a picker knows what to master
+function justWin(f){ return (f && f.char && f.char.id==='initiate')? 8 : 6; }   // SIGNATURE · INITIATE 'THE STUDENT' — learns fastest: a wider just-frame window, costs nothing
 function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
 function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
   for(let t=2;t>=0;t--) if(f.aura>=SPEC_TIERS[t].cost) return t;
@@ -1536,6 +1538,7 @@ class Fighter {
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
+    this.overflowT=0; this._carry=0;   // v3 #8 signature-verb state: Maximilian's raised-cap window · Addison's per-string carry count
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
     this.guardMax=100; this.guard=100; this.guardCrush=0;  // drainable guard — sustained pressure cracks a turtle
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
@@ -1599,7 +1602,8 @@ class Fighter {
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
     const upHeld = this===game.player? (keys[KEYS.jump]||(!game.mode2p&&keys['arrowup'])) : (game.mode2p&&this===game.enemy? !!keys['arrowup'] : false);   // v3 #7 VERB PARITY — the launcher reads each seat's OWN up-input (P2 gets juggles too, not just P1)
     const launcher = !dashAtk && !antiAir && type==='kick' && this.grounded && upHeld;   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
-    const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=6;   // #8 JUST-frame: cancel in the last 6f of the window = a pure bonus (never a punish for missing) — one execution lever OFF the math
+    const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=justWin(this);   // #8 JUST-frame: cancel in the last ~6f of the window = a pure bonus (never a punish for missing) — one execution lever OFF the math (Initiate gets 8f)
+    if(cancelling && this.char.id==='ember' && !this.attack.blockCancel && (this._carry||0)<2){ this._carry=(this._carry||0)+1; this.addAura(3); if(this===game.player) floatText(this.x,this.y-148,'+3 CARRY','#46e08a',12); }   // SIGNATURE · ADDISON 'CARRY THE ONE' — each clean-hit chain link refunds aura (cap 2/string): rushdown that sustains by touching you
     this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just, dash:dashAtk, antiAir};
     this.hitThisSwing=false; SFX.whoosh();
     if(dashAtk){ this.vx += this.facing*6.5; this.dashT=0; if(this===game.player) floatText(this.x,this.y-150,'DASH ▸','#7ae8ff',13); }
@@ -1653,7 +1657,8 @@ class Fighter {
   trySpecial(){
     if(!this.grounded) return false;
     const cancelling = this.attack && this.canCancelInto('special');   // cancel a confirmed normal into the special
-    const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=6;   // #8 JUST-frame on the special ender (last 6f of the window)
+    const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=justWin(this);   // #8 JUST-frame on the special ender (last ~6f of the window; Initiate 8f)
+    if(cancelling && this.attack && this.char.id==='ember' && !this.attack.blockCancel && (this._carry||0)<2){ this._carry=(this._carry||0)+1; this.addAura(3); if(this===game.player) floatText(this.x,this.y-148,'+3 CARRY','#46e08a',12); }   // ADDISON: the special ender is a chain link too
     if(this.attack? !cancelling : !this.canAct()) return false;
     // SPECIAL fires the highest tier the current AURA can afford (1→2→3). GALAXY = free, always tier 3.
     const tier = game.galaxy? 2 : bestSpecialTier(this);
@@ -1673,7 +1678,7 @@ class Fighter {
     if(game.tutorial && this===game.player) game.fSpecialDone=(game.fSpecialDone||0)+1;   // THE TRIAL: count the player's special fires for the ladder step
     return true;
   }
-  addAura(n){ this.aura=clamp(this.aura+n,0,this.char.auraMax); if(this.auraShown<this.aura) this.auraShown=this.aura; }
+  addAura(n){ const cap=this.char.auraMax + ((this.overflowT||0)>0? 30:0); this.aura=clamp(this.aura+n,0,cap); if(this.auraShown<this.aura) this.auraShown=this.aura; }   // SIGNATURE · MAXIMILIAN 'OVERFLOW' — a landed throw/armor absorb briefly raises his 70 cap to 100: the 90-cost BOUNDLESS PRODUCT is EARNED through his own gameplan
   spend(cost,silent){
     cost=Math.round(cost*this.char.costMul);
     if(this.aura>=cost){ this.aura-=cost; this.auraChipT=18; return true; }
@@ -1739,7 +1744,8 @@ class Fighter {
     if(this.char.id==='mauler' && this.attack && this.attack.type==='kick' && this.attack.ph==='wind' && !this.attack.armorSpent && !unblock){
       this.attack.armorSpent=true;
       const chip=Math.max(1,Math.round(dmg*0.5)); this.hp=Math.max(1,this.hp-chip); this.chipDelay=24; this.flashT=6;
-      floatText(this.x,this.y-188,'ARMOR','#ffcf6a',18); sparks(this.x,this.y-88,10,'#ffcf6a',5); SFX.block();
+      this.overflowT=240; this.addAura(30);   // SIGNATURE · MAXIMILIAN — eating a hit on armor ALSO feeds OVERFLOW (cap 70->100 ~4s): his whole gameplan funds his verdict move
+      floatText(this.x,this.y-188,'ARMOR → OVERFLOW','#ffcf6a',16); sparks(this.x,this.y-88,10,'#ffcf6a',5); SFX.block();
       return 'armor';
     }
     if(this.thinkT>0){ this.thinkT=0; floatText(this.x,this.y-150,'MISCOUNT!','#ff8a8a',13); }   // a landed hit breaks a solve-in-progress — the foe earns no aura for it
@@ -1820,6 +1826,7 @@ class Fighter {
     if(this.downed>0){ this.downed--; this.moveX=0; this.wantBlock=false; this.vx*=0.82;   // DOWNED: inert on the ground, then a safe getup-invuln rise, then a brief vulnerable wakeup (okizeme)
       if(this.downed===9){ this.iframes=Math.max(this.iframes,10); this.slipActive=false; if(this===game.player && (game.getupTaught||0)<3){ game.getupTaught=(game.getupTaught||0)+1; floatText(this.x,this.y-150,'GET UP — D = REVERSAL · or BLOCK','#ffd34d',12); } } }   // getup-invuln is FULL (safe rise), not a committal solve-slip; #5 names the wakeup RPS
     if(this.dashCd>0)this.dashCd--; if(this.dropT>0)this.dropT--; if(this.dashT>0)this.dashT--; if(this.blockstunT>0)this.blockstunT--;
+    if(this.overflowT>0){ this.overflowT--; if(this.overflowT<=0 && this.aura>this.char.auraMax) this.aura=this.char.auraMax; }   // OVERFLOW expires — the bank settles back to his true cap
     if(this.frozenT>0)this.frozenT--;
     if(this.missWobble>0)this.missWobble--;
     if(this.guardCrush>0)this.guardCrush--;
@@ -2244,8 +2251,8 @@ function drawFighter(f){
     ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 28, 72, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
     if(f===game.enemy && !game.mode2p) txtO('▸ OPEN', f.x, f.y-180, 11, '#ffd34d', {mono:true,sw:0});
   }
-  // v3 #6 JUST-window tell — a gold shimmer on the attacker in the LAST 6f of the cancel window: the drillable timing, visible instead of memorized
-  if(f.attack && f.attack.cancelOK>0 && f.attack.cancelOK<=6 && !f.attack.blockCancel && !f.ko){
+  // v3 #6 JUST-window tell — a gold shimmer on the attacker in the LAST ~6f of the cancel window: the drillable timing, visible instead of memorized
+  if(f.attack && f.attack.cancelOK>0 && f.attack.cancelOK<=justWin(f) && !f.attack.blockCancel && !f.ko){
     ctx.save(); ctx.globalAlpha=0.34+0.22*Math.sin(game.frame*0.9); ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5;
     ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 26, 70, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
   }
@@ -2596,9 +2603,9 @@ function resolveHits(att,def){
       floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6+((att.attack&&att.attack.just)?4:0)); }  // landing hits charges FOCUS (+JUST credit only on a clean hit)
-    def.streak=0; def.combo=0; def.chargedHit=false; // getting tagged breaks focus AND your combo
+    def.streak=0; def.combo=0; def.chargedHit=false; def._carry=0; // getting tagged breaks focus AND your combo (and Addison's carry count)
     if(wasVuln) att.combo=(att.combo||0)+1;   // v3 #6 HONEST COMBO — count only hits the foe couldn't act between; a recovered foe re-tagged = a NEW string
-    else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; }
+    else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; }   // new string = a fresh CARRY budget for Addison
     att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
     if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5); att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — +8 aura + forced knockdown (the air/ground RPS runs both ways)
     if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
