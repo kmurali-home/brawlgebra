@@ -1285,7 +1285,8 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
       const dmg=a.def.dmg||14;
       o.hp=Math.max(0, o.hp-dmg); o.chipDelay=0;
       o.stun=Math.max(o.stun||0, 32); o.hurtT=Math.max(o.hurtT||0, 22); o.attack=null;
-      o.vy=-6.5; o.grounded=false; o.vx=(o.x<f.x?-1:1)*3.2; o.streak=0; o.combo=0; o.knockingDown=true;
+      o.vy=-6.5; o.grounded=false; o.streak=0; o.combo=0; o.knockingDown=true;
+      { const d=(o.x<f.x?-1:1); o.vx=d*3.2*(((d<0&&o.x<WORLD_W/2)||(d>0&&o.x>WORLD_W/2))?1.3:1); }   // v5 #7 throws CARRY toward the near wall too
       floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.32); SFX.heavy(); hitstop=Math.max(hitstop,5);
       if(f.char.id==='mauler'){ f.overflowT=240; f.addAura(30); floatText(f.x,f.y-206,'OVERFLOW','#ffcf6a',17); ring(f.x,f.y-86,'#ffcf6a',56,4); }   // SIGNATURE · MAXIMILIAN — the grab feeds the BOUNDLESS PRODUCT (cap 70->100 for ~4s: T3 is earnable NOW)
       if(f===game.player) game.stats.dmg+=dmg;
@@ -1792,7 +1793,7 @@ class Fighter {
     lvl = lvl||'mid';
     const stanceOK = lvl==='mid' || (lvl==='low' && (this.guardStance||'low')==='low') || (lvl==='high' && this.guardStance==='high');   // right guard for the height? wrong guess = the block whiffs
     if(this.blocking && stanceOK && !this.ko && !unblock){
-      this.guard = Math.max(0, (this.guard||0) - (heavy?34:18)*(this.blockstunT>0?1.6:1));   // every blocked hit chips your guard — v5 #5 hits eaten INSIDE a blockstring drain 1.6x (a held turtle watches the meter travel toward crush within two touches)
+      this.guard = Math.max(0, (this.guard||0) - (heavy?34:18)*(this.blockstunT>0?1.6:1)*(typeof inCorner==='function'&&inCorner(this)?1.4:1));   // every blocked hit chips your guard — v5 #5 in-string hits drain 1.6x; v5 #7 corner blocks drain 1.4x (the wall is a clock)
       this.guardRestT=45;   // v5 #5 GUARD CLOCK — no regen for ~0.75s after any blocked contact: turtling has a visible cost curve now
       if(this.guard<=0){   // GUARD CRUSH — the turtle cracks: this hit lands clean + you can't re-block for a beat
         this.guardCrush=64; this.blocking=false;
@@ -1801,7 +1802,7 @@ class Fighter {
       } else {
         const chip = Math.max(1, Math.round(dmg*0.15*this.char.blockMul));
         this.hp=Math.max(1,this.hp-chip); this.chipDelay=24;
-        this.blockstunT=heavy?16:12; this.vx=dir*4.5;   // v3 #1 BLOCK INTEGRITY: blockstun is its OWN timer — guard HOLDS through it (stun would drop the guard, turning the #3 frame-trap window into a true unblockable). Movement/attacks stay locked via the blockstunT gates; a held block now actually beats the frame trap, and the tech input works during blockstun (tick throws are techable).
+        this.blockstunT=(heavy?16:12) + (typeof inCorner==='function'&&inCorner(this)?4:0); this.vx=dir*(typeof inCorner==='function'&&inCorner(this)?6.2:4.5);   // v3 #1 BLOCK INTEGRITY: blockstun is its OWN timer — guard HOLDS through it. v5 #7: +4 blockstun + harder shove when cornered.
         sparks(this.x+dir*-22, this.y-86, 6, '#9fdcff', 4);
         SFX.block();
         return 'block';
@@ -2323,6 +2324,9 @@ function drawFighter(f){
     const hi=f.guardStance==='high';
     txtO(hi?'HIGH GUARD':'LOW GUARD', f.x, f.y-168, 9.5, hi?'#8fd8f8':'#ffd34d', {mono:true,sw:0});
   }
+  // v5 #7 the corner is a NAMED place — both sides can read the spatial stakes
+  if(game.state==='fight' && !f.ko && inCorner(f) && game.frame%2===0)
+    txtO('CORNERED', f.x, f.y-246, 9, '#ff8a8a', {mono:true,sw:0});
   // #4 FOCUS-channel tell — a cyan arc closes around the fighter while the bank lands; readable by BOTH sides (you're open, and the foe knows it)
   if((f.focusT||0)>0 && !f.ko){
     const k=1-f.focusT/12;
@@ -2566,9 +2570,15 @@ function controlCPU(c){
   const clockLow = (game.timer!=null && game.timer<20);          // anti-timeout: even a runaway zoner must engage late
   if(clockLow && dist>100)      c.moveX = dir*0.24*cfg.speed;     // force the approach when the clock's low
   else if(dist > rMax)          c.moveX = dir*0.22*cfg.speed*P.adv;  // too far → approach at this fighter's tempo
-  else if(dist < rMin)          c.moveX = -dir*0.16*cfg.speed*P.ret; // too close → back off at this fighter's tempo
+  else if(dist < rMin)          c.moveX = inCorner(c)? 0 : -dir*0.16*cfg.speed*P.ret; // too close → back off at this fighter's tempo — but never retreat INTO the wall (v5 #7: a cornered zoner must fight or leap, not shrink)
   else if(Math.random()<0.01)   c.moveX = -dir*0.2*cfg.speed;
   hopCover(c);
+  // v5 #7 WALL LEAP — a cornered zoner can PAY to reset the map: 12 aura, leaps over the attacker back to space (an escape you can anti-air)
+  if(c.char.id==='frost' && inCorner(c) && dist<170 && c.grounded && c.aura>=12 && c.aiThink<=0 && Math.random()<0.5){
+    c.aura-=12; c.auraChipT=18; c.vy=-13.8; c.grounded=false; c.vx=(c.x<WORLD_W/2?1:-1)*9.5;
+    floatText(c.x,c.y-170,'WALL LEAP','#7ae8ff',13); dust(c.x,c.y,8,3); SFX.jump();
+    c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return;
+  }
   // v5 #2 FAST POKE — inside its preferred band the CPU sometimes jabs at near-player speed (tel 10-14, chip-tier damage, NO solve window): entering range carries raw risk, so mid-range is a READ, not a memorized rhythm. Never two in a row; heavies/specials stay fully telegraphed — the solve economy keeps living on the big commits.
   if(c.grounded && c.aiThink<=0 && dist>=rMin && dist<=rMin+40 && !c._lastQuick && Math.random()<([0,0.25,0.45][Math.min(2,DIFF.level||0)]||0) && canAfford('punch')){
     c.cpuAttack('punch', rnd(10,14));
@@ -2700,7 +2710,7 @@ function resolveHits(att,def){
       return; }
     if(res==='armor'){ hitstop=Math.max(hitstop,4); ring(cx,cy,'#ffcf6a',30,3); return; }   // MAXIMILIAN plowed through the startup — no combo/punish/launcher credit for the attacker
     // clean hit
-    if(punish){ att.addAura(14); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window: fence to earn aura, don't turtle to bank it
+    if(punish){ att.addAura(14 + (inCorner(def)?6:0)); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window (v5 #7: a CORNER punish pays +6 more — the wall compounds won exchanges)
       floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
     if(punish || (att.attack&&att.attack.just)){ hitstop=Math.max(hitstop,12); SFX.counter(); ring(cx,cy,'#ff5a5a',34,3); }   // v4/v5 COUNTER-TIER CRUNCH — a whiff-punish or JUST hit freezes harder AND has its own exclusive crack + red ring
     def._jitT=Math.max(def._jitT||0, Math.max(4,hitstop));   // v5 #15 the defender vibrates through the freeze (render-side)
@@ -2712,7 +2722,9 @@ function resolveHits(att,def){
     else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; att._stuRef=0; }   // new string = fresh per-string verb budgets (Addison's CARRY, the Initiate's refunds)
     att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
     if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5); att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — +8 aura + forced knockdown (the air/ground RPS runs both ways)
-    if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
+    if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30);
+      def.vx=dir*4*(((dir<0&&def.x<WORLD_W/2)||(dir>0&&def.x>WORLD_W/2))?1.3:1);   // v5 #7 launchers CARRY — +30% toward the defender's near wall: winning mid-screen buys the corner
+      att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
     else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
     if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed (unlike the block window)
       def.stun=Math.max(def.stun,22);   // v4 STRING TRUTH — the hit-confirm window and the hitstun are the SAME clock: cancel anywhere in it (incl. the last-6f JUST) and the follow-up is a TRUE string, exactly what the gold shimmer teaches
@@ -2884,6 +2896,7 @@ function methodHint(p){   // a one-line "how" shown on a miss — teach the meth
   if(p.op==='÷') return 'ask: how many groups of the divisor fit into the total?';
   return 'take it one step at a time';
 }
+function inCorner(f){ return f.x<290 || f.x>WORLD_W-290; }   // v5 #7 the SOFT CORNER — within ~220px of the clamp, exchanges have spatial stakes
 function completeFocus(f){   // #4 the FOCUS channel pays out — the banked answer lands (unless a hit broke it first)
   const pd=f.pendingSolve; f.pendingSolve=null; if(!pd || f.ko) return;
   const sp=game.problem, sa=game.problemAt;
