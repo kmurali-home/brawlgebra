@@ -1587,17 +1587,20 @@ class Fighter {
     if(!this.grounded) type='airkick';
     else if(type==='airkick') return false;
     const ov=this.char.atk&&this.char.atk[type];               // per-character identity normal
-    const dashAtk = type==='kick' && this.grounded && !cancelling && (this.dashT||0)>0;   // #2 S during a FORWARD dash = a lunging MID whiff-punishable poke — the neutral tool to fence with (so the whiff-punish loop can actually fire)
+    const dashAtk = type==='kick' && this.grounded && !cancelling && (this.dashT||0)>0;   // #2 S during a FORWARD dash = a lunging whiff-punishable poke — the neutral tool to fence with (so the whiff-punish loop can actually fire)
+    const antiAir = type==='punch' && this.grounded && !cancelling && !dashAtk && this.wantBlock;   // v3 #7 ↓+A = ANTI-AIR — an upward jab that contests jump-ins in SPACE (input-derived: works for P1, P2, anyone)
     let def=ov? Object.assign({},ATK[type],ov) : ATK[type];
-    if(dashAtk) def=Object.assign({}, ATK.kick, {reach:132, wind:10, act:5, rec:22, dmg:11, heavy:false, guardLevel:'mid', hy:-72});
+    if(antiAir) def=Object.assign({}, ATK.punch, {reach:56, wind:5, act:6, rec:18, dmg:7, guardLevel:'mid', hy:-150});
+    if(dashAtk) def=Object.assign({}, ATK.kick, {reach:132, wind:10, act:5, rec:22, dmg:11, heavy:false, guardLevel:'high', hy:-72});   // v3 #7 the dash-attack is an OVERHEAD — hold-↓ finally loses to something on the ground (slow + committal + whiff-punishable, so it's a read, not a gimmick)
     if(!game.galaxy && !this.spend(ATK[type].cost)){ // STANDARD: every swing spends aura. GALAXY: attacks are FREE (the gate is your unlocked combos, not aura)
       if(this===game.player) tip('noaura','No aura — answer to power your strikes.');
       return false;
     }
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
-    const launcher = !dashAtk && type==='kick' && this.grounded && this===game.player && (keys[KEYS.jump]||keys['arrowup']);   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
+    const upHeld = this===game.player? (keys[KEYS.jump]||(!game.mode2p&&keys['arrowup'])) : (game.mode2p&&this===game.enemy? !!keys['arrowup'] : false);   // v3 #7 VERB PARITY — the launcher reads each seat's OWN up-input (P2 gets juggles too, not just P1)
+    const launcher = !dashAtk && !antiAir && type==='kick' && this.grounded && upHeld;   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
     const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=6;   // #8 JUST-frame: cancel in the last 6f of the window = a pure bonus (never a punish for missing) — one execution lever OFF the math
-    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just, dash:dashAtk};
+    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just, dash:dashAtk, antiAir};
     this.hitThisSwing=false; SFX.whoosh();
     if(dashAtk){ this.vx += this.facing*6.5; this.dashT=0; if(this===game.player) floatText(this.x,this.y-150,'DASH ▸','#7ae8ff',13); }
     if(just && this===game.player){ floatText(this.x,this.y-162,'JUST!','#9fe8ff',15); flash(0.10,'#bfefff'); }
@@ -2427,7 +2430,10 @@ function controlCPU(c){
   } else { c.reactKind=null; c.reactT=0; }
   if(c.reactKind && c.reactT<=0 && c.grounded){
     const k=c.reactKind; c.reactKind=null;
-    if(k==='block'){ c.blockHold=rnd(16,28); c.wantBlock=true; return; }                     // reliably guards once it reads your startup — frame-trap it or stagger your timing
+    if(k==='block'){ c.blockHold=rnd(16,28); c.wantBlock=true;
+      const inc=(p.attack&&p.attack.def&&p.attack.def.guardLevel)||'mid';
+      c.guardStance = (inc==='high' && Math.random()<0.55)? 'high' : 'low';   // v3 #7 reads the HEIGHT ~half the time — the dash-overhead is a mixup vs the CPU, not a cheat
+      return; }                     // reliably guards once it reads your startup — frame-trap it or stagger your timing
     if(k==='antiair' && canAfford('kick')){ c.cpuAttack('kick',Math.round(28*Math.max(0.55,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
     if(k==='punish'){ let type=dist>92?'kick':'punch'; if(!canAfford(type)) type='punch';
       if(canAfford(type)){ c.cpuAttack(type,Math.round((type==='punch'?24:32)*Math.max(0.5,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }
@@ -2584,6 +2590,7 @@ function resolveHits(att,def){
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6); }  // landing hits charges FOCUS
     def.streak=0; def.combo=0; def.chargedHit=false; // getting tagged breaks focus AND your combo
     att.combo=(att.combo||0)+1; att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
+    if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5); att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — +8 aura + forced knockdown (the air/ground RPS runs both ways)
     if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER pops the foe low into a juggle route
     else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
     if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed (unlike the block window)
