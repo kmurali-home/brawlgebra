@@ -792,7 +792,7 @@ function matchendAdvance(){ // one routing for Enter AND click
 //----------------------------------------------------------------------
 const DIFF = {
   level:1, names:['EASY','NORMAL','HARD'],
-  taglines:['arithmetic warm-up','mental-math sprint','algebra · fractions · negatives'],
+  taglines:['add & subtract, small numbers','quick mental math','algebra · fractions · negatives'],
   set(n){ this.level=n; SFX.ui(); },
   cpu(){ const lv=(game.mode==='story'&&game.cpuTier!=null)?game.cpuTier:this.level; return [
     // react = frames of reaction lag (lower = faster = harder, more punishing); burstReact = frames you can combo before it breaks out; baitP = chance to feint
@@ -1480,8 +1480,8 @@ const SP_KITS={
   oracle:  [ {name:'REMAINDER',   kind:'spear', fast:true},      {name:'LONG DIVISION', kind:'fan'},                        {name:'QUOD ERAT DEMONSTRANDUM',kind:'drop'} ],
   james:   [ {name:'REDUCE',      kind:'spear', fast:true},      {name:'CANCEL',        kind:'slam', guard:true},          {name:'RESOLUTION',            kind:'sigil', big:true} ],   // SOLOMON (the Equals): distinct '='-themed kit so the marquee unlock is not a starter reskin
 };
-const STYLE_BY_ID={ initiate:'ALL-ROUNDER', mauler:'BRAWLER', ember:'RUSHDOWN', frost:'ZONER', oracle:'GLASS CANNON', james:'THE APEX' };   // one-word play-style read for the select card — the real differences are stats + specials now, not math
-const SIG_BY_ID={ mauler:'ARMOR = T3 OVERFLOW', ember:'CHAIN LINKS = +AURA', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN', initiate:'JUST = WIDE + REFUNDS' };   // v3 #8 EVERY fighter has a signature VERB — the mastery hook, surfaced so a picker knows what to master
+const STYLE_BY_ID={ initiate:'BALANCED', mauler:'SLOW · HITS HARD', ember:'FAST · GET CLOSE', frost:'KEEP THEM AWAY', oracle:'FRAIL · DEADLY', james:'THE APEX' };   // v8 the play-style chip says what the fighter DOES, in words a newcomer owns (no genre jargon)
+const SIG_BY_ID={ mauler:'ARMOR & GRABS PAY HIM AURA', ember:'COMBO HITS REFUND AURA', frost:'A BLOCKED LANCE STILL PAYS HIM', oracle:'STREAK 5 = LONGER CHAINS', initiate:'JUST CANCELS REFUND AURA' };   // v3 #8 / v8 the signature VERB in plain words — a picker knows what to master without a glossary
 const SIG2_BY_ID={ mauler:'KICK ⇢ GRAB', ember:'KICK ⇢ JAB RESTAND', frost:'LANCE ⇢ FADE', oracle:'ASCENDED P·P·P', initiate:'SPECIAL ⇢ SPECIAL' };   // v6 #9 the EXCLUSIVE cancel node — the route only this fighter owns
 const VERB_OV={   // v6 #8 per-fighter frame data on the UNIVERSAL verbs (±20%, max one bent verb each) — switching mains changes the feel of the shared moveset too
   mauler:{ throw:{reach:64, dmg:18, wind:9} },     // the grab reaches farther and hits harder, but starts slower — a tank's grip
@@ -4429,9 +4429,9 @@ function drawBanners(){
 }
 const VS_GLOSS={   // v5 #14 the matchup, taught in one line — shown the first 3 matches against each foe
   frost:'his blocked lance still pays him — blocking is losing ground. walk him down.',
-  mauler:'his armor eats one strike, and feeds his verdict. THROW him instead.',
+  mauler:'his armor eats one strike — and pays him AURA for it. THROW him instead: grabs ignore armor.',
   oracle:'every answer sharpens him. break the streak and you break the man.',
-  ember:'every touch repays her. do not trade — make her whiff.',
+  ember:'every touch repays him. do not trade — make him whiff.',
   james:'he counts as fast as you do. deny him the quiet to count in.'
 };
 const glossSeen={};   // per-session encounter counts
@@ -4677,12 +4677,12 @@ function drawTitle(){
 function drawWelcome(){   // first-run gate: teach before you ask
   ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
   drawWordmark(W/2, 142, 0.66);
-  txtO('Answer, and your strikes land. Falter, and they don’t.', W/2, 200, 15, '#9fdcff', {sw:0});
+  txtO('Answer, and you can strike. Run dry, and you cannot.', W/2, 200, 15, '#9fdcff', {sw:0});
   const pulse=0.55+Math.sin(game.frame*0.08)*0.45;
   rr(W/2-230, 268, 460, 96, 16); ctx.fillStyle='rgba(14,10,30,0.94)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5; ctx.stroke();
   txtO('UNSWORN', W/2, 300, 23, '#ffd34d', {sw:4});
-  txtO('Learn the form in 60 seconds', W/2, 330, 15, '#e8ecff', {sw:0});
+  txtO('The form takes 60 seconds.', W/2, 330, 15, '#e8ecff', {sw:0});
   ctx.globalAlpha=pulse; txtO('press ENTER  ·  or click anywhere', W/2, 354, 12, '#ffd34d', {mono:true,sw:0}); ctx.globalAlpha=1;
   txtO('(already know it? press T to skip)', W/2, 396, 10, 'rgba(160,150,190,0.7)', {mono:true,sw:0});
 }
@@ -4713,7 +4713,7 @@ const MP_OPTS=[
 function drawRumbleChoose(){
   ctx.fillStyle='rgba(3,2,10,0.55)'; ctx.fillRect(0,0,W,H);
   txtO('MULTIPLAYER', W/2, 104, 38, '#efe9ff', {sw:6});
-  txtO('play your friends — pick how', W/2, 140, 12, '#cabbe0', {mono:true,sw:0});
+  txtO('pick how you want to fight', W/2, 140, 12, '#cabbe0', {mono:true,sw:0});
   game.rumbleRects=[];
   MP_OPTS.forEach((o,i)=>{
     const sel=i===(game.mpIdx||0), y=192+i*66;
@@ -4729,7 +4729,6 @@ function drawRumbleChoose(){
   rr(game.backRect.x,game.backRect.y,140,32,8); ctx.fillStyle='rgba(18,14,32,0.85)'; ctx.fill();
   ctx.strokeStyle='#3d2658'; ctx.lineWidth=1.2; ctx.stroke();
   txtO('‹ BACK   (T)', W/2, 425, 12, '#a99cc8', {mono:true,sw:0});
-  txtO('online needs the relay server running — see PLAY-ONLINE', W/2, 462, 10, 'rgba(150,150,190,0.6)', {mono:true,sw:0});
   txtO('W/S choose · ⏎ go · T back', W/2, 482, 10, 'rgba(160,150,190,0.75)', {mono:true,sw:0});
 }
 function pipRow(label,n,col,x,y,w){
@@ -4950,7 +4949,7 @@ function drawLobby(){
     ctx.strokeStyle=on?'#ffd34d':'#3d2658'; ctx.lineWidth=1.4; ctx.stroke();
     txtO('FIRST BLOOD  '+(on?'ON':'OFF')+'   (B)', W/2, ty+5, 13, on?'#ffd34d':'#8a93b8',{mono:true,sw:0});
   } else {
-    txtO('FIRST BLOOD — the faster mind enters the bout already winning (host decides)', W/2, ty, 11, '#8fb8d8',{mono:true,sw:0});
+    txtO('FIRST BLOOD — one problem before the bell. The fastest correct answer starts at full HP; everyone else starts at 80%. (The host turns it on.)', W/2, ty, 11, '#8fb8d8',{mono:true,sw:0});
   }
   R.leave=btn('LEAVE (T)', W/2-70, H-46, 140, 30, false);
 }
@@ -5396,7 +5395,7 @@ function drawSelect(){
       const b1=bests[c.id+'_'+DIFF.level], b2=bests['tower_'+c.id+'_'+DIFF.level];
       const bg=(GRADE_RANK[b1]||0)>=(GRADE_RANK[b2]||0)? b1 : b2;
       if(bg) txtO('BEST '+bg, x+cw-30, y+24, 11, {S:'#ffd34d',A:'#46e08a',B:'#7ae8ff',C:'#ffb02a',D:'#ff4d5e'}[bg], {mono:true,sw:3});
-      const ml=mastLvl(c.id); if(ml>0) txtO('◆'.repeat(ml)+'◇'.repeat(5-ml), x+30, y+24, 9, '#b48cff', {mono:true,sw:2});   // v6 #16 the MASTERY pips — maining is measured (wins · strings · JUSTs · verb procs)
+      const ml=mastLvl(c.id); if(ml>0) txtO('MASTERY '+'◆'.repeat(ml)+'◇'.repeat(5-ml), x+38, y+24, 8, '#b48cff', {mono:true,sw:2});   // v6 #16 / v8 the pips are NAMED — maining is measured (wins · strings · JUSTs · verb procs)
     }
     if(game.mode2p && game.pickPhase===2 && i===game.p1Idx)
       txtO('P1 ✓', x+30, y+24, 11, game.player.glow||'#7ae8ff', {mono:true,sw:3});
@@ -5413,7 +5412,7 @@ function drawSelect(){
   }
   if(game.gateMsg && game.frame-game.gateMsg<150){   // tried to pick a sealed Order
     const a=1-(game.frame-game.gateMsg)/150; ctx.globalAlpha=a;
-    txtO('The four Orders are SEALED until the campaign is won.', W/2, 84, 12, '#ff9f6a',{mono:true,sw:0});
+    txtO('SEALED — each Order unseals at a set campaign chapter. Win chapters to free them.', W/2, 84, 12, '#ff9f6a',{mono:true,sw:0});
     ctx.globalAlpha=1;
   }
   // bottom row: ARCADE single/endless toggle (if applicable) + stage picker, side by side, below the cards
@@ -5436,8 +5435,8 @@ function drawSelect(){
     const g=game.galaxy;
     ctx.font=font(MONO,12);
     const segW=158, cgap=5, ctrlW=segW*2+cgap, gap=18, x0=W/2-(ctrlW+gap+spw)/2;
-    const gloss = g? 'RITE OF SILENCE — prove yourself twice at the bell, then fight unbound, on instinct alone'
-                   : 'STANDARD — every blow is paid for in answers, mid-fight, in real time';
+    const gloss = g? 'RITE OF SILENCE — no math mid-fight. Two timed answer bursts unlock your combo strings. Attacks cost nothing. One round decides it.'
+                   : 'STANDARD — every attack spends AURA. Answering math is the only way to refill it.';
     game.arcadeRect={x:x0, y:rowY, w:ctrlW, h:24};   // clicking the control flips the style (so does E)
     [['STANDARD',false,'#7ae8ff'],['RITE OF SILENCE',true,'#b48cff']].forEach((s,i)=>{
       const active=(s[1]===g), sx=x0+i*(segW+cgap);
@@ -5450,7 +5449,7 @@ function drawSelect(){
     txtO((game.practice?'PRACTICE · ':'')+gloss, W/2, rowY+38, 10, g?'#d8c4ff':'#bfe9ff', {mono:true,sw:0});   // explain the active style (below the row, clear of the cards)
   } else if(game.mode==='gauntlet'){
     game.arcadeRect=null;
-    const am='MODE  ·  ENDLESS RUN', amw=ctx.measureText(am).width+30, gap=16, x0=W/2-(amw+gap+spw)/2;
+    const am='MODE  ·  GAUNTLET', amw=ctx.measureText(am).width+30, gap=16, x0=W/2-(amw+gap+spw)/2;
     chip(am, x0, amw, rowY, 'rgba(58,30,18,0.92)', '#ff8a4d', '#ffb07a');
     game.stageRect={x:x0+amw+gap, y:rowY, w:spw, h:24};
     chip(sp, game.stageRect.x, spw, rowY, hexA(sAcc,0.14), sAcc, '#e8ecff');
@@ -5459,6 +5458,7 @@ function drawSelect(){
     game.stageRect={x:W/2-spw/2, y:rowY, w:spw, h:24};
     chip(sp, game.stageRect.x, spw, rowY, game.daily?'rgba(14,17,28,0.92)':hexA(sAcc,0.14), game.daily?'#3d4668':sAcc, game.daily?'#5b6472':'#e8ecff');
   }
+  txtO('◆ signature trait   ·   ◇ a chain only this fighter can do', W/2, H-44, 9, '#7a86a8',{mono:true,sw:0});   // v8 the card glyphs, explained where they appear
   txtO('←/→ or 1–'+n+' choose · ENTER '+(game.mode2p&&game.pickPhase===1?'lock P1':'fight')+((game.mode==='cpu'||game.practice)?' · E style':'')+' · T back', W/2, H-30, 11, '#8a93b8',{mono:true,sw:0});
 }
 function drawSettings(){
@@ -5576,7 +5576,7 @@ function drawRecords(){
   const lx=80, ly=130;
   rr(lx-22, ly-30, 384, 252, 12); ctx.fillStyle='rgba(12,15,26,0.9)'; ctx.fill(); ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
   txtO('BEST SCORES', lx+170, ly-10, 13, '#8fd8f8',{sw:0});
-  const modes=[['overall','OVERALL'],['cpu','ARCADE'],['gauntlet','ARCADE · ENDLESS'],['tower','THE TOWER'],['story','STORY'],['rumble','RUMBLE']];
+  const modes=[['overall','OVERALL'],['cpu','PLAY · 1v1'],['gauntlet','GAUNTLET'],['tower','THE TOWER'],['story','STORY'],['rumble','RUMBLE']];   // v8 one name per mode, everywhere
   let y=ly+22;
   for(const [k,label] of modes){
     ctx.font=font(MONO,13); ctx.textAlign='left'; ctx.fillStyle=k==='overall'?'#ffd34d':'#a99cc8'; ctx.fillText(label, lx, y);
@@ -6364,7 +6364,7 @@ function achievements(){
     {name:'CLEAN SHEET',      desc:'Score 6,000+ in one match',      done:(p.best&&p.best.overall||0)>=6000},
     {name:'VIRTUOSO',         desc:'Score 12,000+ in one match',     done:(p.best&&p.best.overall||0)>=12000, reward:'VIRTUOSO title'},
     {name:'TOWER CHAMPION',   desc:'Clear the Tower',                done:(p.towerClears||0)>=1, reward:'unlocks SOLOMON'},
-    {name:'THE FOUR FUNCTIONS',desc:'Finish the whole saga',         done:game.storyProg>=STORY.length, reward:'unlocks SOLOMON'},
+    {name:'THE FOUR FUNCTIONS',desc:'Win the whole campaign',        done:game.storyProg>=STORY.length, reward:'unlocks SOLOMON'},
     {name:'THE EQUALS',       desc:'Unlock & play as SOLOMON',       done:!!u.solomon},
     {name:'SCHOLAR',          desc:'Master all four functions',      done:allFourMastered(), reward:'SCHOLAR title'},
     {name:'WINNING STREAK',   desc:'Win 10 matches total',           done:(p.wins||0)>=10, reward:'GOLD robe'},
@@ -6987,7 +6987,7 @@ function netConnect(then, _retry){
   const onPages = location.host && /github\.io|githubusercontent/.test(location.host);
   const failMsg = onPages
     ? 'this link (GitHub Pages) can’t host online play — open the RELAY url instead'
-    : 'couldn’t reach the relay server — is it running? (see PLAY-ONLINE)';
+    : 'could not reach the server — check your connection and try again (the first connection can take a minute)';
   let ws; try{ ws=new WebSocket(netURL()); }catch(e){ net.err=failMsg; net.status='offline'; return; }
   net.ws=ws;
   ws.onopen=()=>{ opened=true; net.status='online'; net.connectStart=0; if(then) then();
