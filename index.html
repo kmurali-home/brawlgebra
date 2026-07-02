@@ -1480,6 +1480,11 @@ const SP_KITS={
 const STYLE_BY_ID={ initiate:'ALL-ROUNDER', mauler:'BRAWLER', ember:'RUSHDOWN', frost:'ZONER', oracle:'GLASS CANNON', james:'THE APEX' };   // one-word play-style read for the select card — the real differences are stats + specials now, not math
 const SIG_BY_ID={ mauler:'ARMOR = T3 OVERFLOW', ember:'CHAIN LINKS = +AURA', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN', initiate:'JUST = WIDE + REFUNDS' };   // v3 #8 EVERY fighter has a signature VERB — the mastery hook, surfaced so a picker knows what to master
 const SIG2_BY_ID={ mauler:'KICK ⇢ GRAB', ember:'KICK ⇢ JAB RESTAND', frost:'LANCE ⇢ FADE', oracle:'ASCENDED P·P·P', initiate:'SPECIAL ⇢ SPECIAL' };   // v6 #9 the EXCLUSIVE cancel node — the route only this fighter owns
+const VERB_OV={   // v6 #8 per-fighter frame data on the UNIVERSAL verbs (±20%, max one bent verb each) — switching mains changes the feel of the shared moveset too
+  mauler:{ throw:{reach:64, dmg:18, wind:9} },     // the grab reaches farther and hits harder, but starts slower — a tank's grip
+  oracle:{ dashS:{wind:8, reach:112} },            // the dash-overhead comes out faster but shorter — a dart, not a lance
+  ember:{ reversal:{rec:28, dmg:9} }               // her wakeup reversal recovers sooner but hits softer — rushdown gets back up
+};   // frost's bend is BEHAVIORAL: his anti-air FREEZES (below) instead of refunding aura
 function justWin(f){ return (f && f.char && f.char.id==='initiate')? 8 : 6; }   // SIGNATURE · INITIATE 'THE STUDENT' — learns fastest: a wider just-frame window, costs nothing
 function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
 function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
@@ -1637,7 +1642,7 @@ class Fighter {
     const antiAir = type==='punch' && this.grounded && !cancelling && !dashAtk && this.wantBlock;   // v3 #7 ↓+A = ANTI-AIR — an upward jab that contests jump-ins in SPACE (input-derived: works for P1, P2, anyone)
     let def=ov? Object.assign({},ATK[type],ov) : ATK[type];
     if(antiAir) def=Object.assign({}, ATK.punch, {reach:56, wind:5, act:6, rec:18, dmg:7, guardLevel:'mid', hy:-150});
-    if(dashAtk) def=Object.assign({}, ATK.kick, {reach:132, wind:10, act:5, rec:22, dmg:11, heavy:false, guardLevel:'high', hy:-72});   // v3 #7 the dash-attack is an OVERHEAD — hold-↓ finally loses to something on the ground (slow + committal + whiff-punishable, so it's a read, not a gimmick)
+    if(dashAtk) def=Object.assign({}, ATK.kick, {reach:132, wind:10, act:5, rec:22, dmg:11, heavy:false, guardLevel:'high', hy:-72}, (VERB_OV[this.char.id]||{}).dashS||{});   // v3 #7 the dash-attack is an OVERHEAD; v6 #8 per-fighter bend (Krishna's is a faster, shorter dart)
     if(!game.galaxy && !this.spend(ATK[type].cost)){ // STANDARD: every swing spends aura. GALAXY: attacks are FREE (the gate is your unlocked combos, not aura)
       if(this===game.player) tip('noaura','No aura — answer to power your strikes.');
       return false;
@@ -1663,7 +1668,8 @@ class Fighter {
     const thrCancel = this.attack && this.grounded && this.canCancelInto('throw');   // v6 #9 MAXIMILIAN's K>throw command-ender rides the confirm window
     if((this.attack && !thrCancel)||!this.grounded) return false;
     if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No aura to throw — but you can still TECH one (A+S when grabbed).'); return false; }
-    this.attack={type:'throw', kind:'throw', ph:'wind', t:7, def:{wind:7, act:2, rec:22, dmg:14, reach:52}, tel:0, fuse:7};
+    const tdef=Object.assign({wind:7, act:2, rec:22, dmg:14, reach:52}, (VERB_OV[this.char.id]||{}).throw||{});   // v6 #8 per-fighter throw
+    this.attack={type:'throw', kind:'throw', ph:'wind', t:tdef.wind, def:tdef, tel:0, fuse:tdef.wind};
     this.hitThisSwing=false; SFX.whoosh();
     return true;
   }
@@ -1678,7 +1684,7 @@ class Fighter {
     if(!game.galaxy && !this.spend(18)) return false;   // rise-window only (v4 #2): a priced read, no longer a whole-knockdown skip button
     this.downed=0; this.knockingDown=false;
     this.iframes=Math.max(this.iframes,14); this.slipActive=false;   // FULL invuln through the rise + startup (a reversal, not a committal slip)
-    this.attack={type:'kick', ph:'wind', t:6, def:Object.assign({},ATK.kick,{reach:96,wind:6,act:4,rec:34,dmg:12,heavy:true,guardLevel:'mid',hy:-80}), tel:0, fuse:6, reversal:true};
+    this.attack={type:'kick', ph:'wind', t:6, def:Object.assign({},ATK.kick,{reach:96,wind:6,act:4,rec:34,dmg:12,heavy:true,guardLevel:'mid',hy:-80},(VERB_OV[this.char.id]||{}).reversal||{}), tel:0, fuse:6, reversal:true};   // v6 #8 per-fighter reversal bend
     this.hitThisSwing=false;
     this.vy=-6.2; this.grounded=false;   // rising arc
     floatText(this.x,this.y-176,'REVERSAL!','#ffd34d',17); ring(this.x,this.y-80,'#ffd34d',52,4); SFX.special(); flash(0.08,'#ffe9b0');
@@ -2753,7 +2759,10 @@ function resolveHits(att,def){
     if(wasVuln) att.combo=(att.combo||0)+1;   // v3 #6 HONEST COMBO — count only hits the foe couldn't act between; a recovered foe re-tagged = a NEW string
     else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; att._stuRef=0; att._ssUsed=false; }   // new string = fresh per-string verb budgets (Addison's CARRY, the Initiate's refunds + re-derive)
     att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
-    if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5); att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — +8 aura + forced knockdown (the air/ground RPS runs both ways)
+    if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5);
+      if(att.char.id==='frost'){ def.frozenT=Math.max(def.frozenT||0,24); def.stun=Math.max(def.stun||0,24); floatText(def.x,def.y-204,'FROZEN MID-AIR','#bfe8ff',15); }   // v6 #8 LESSING's anti-air trades the refund for a 24f FREEZE — ice, even here
+      else { att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); }
+      ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — forced knockdown (the air/ground RPS runs both ways)
     if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30);
       def.vx=dir*4*(((dir<0&&def.x<WORLD_W/2)||(dir>0&&def.x>WORLD_W/2))?1.3:1);   // v5 #7 launchers CARRY — +30% toward the defender's near wall: winning mid-screen buys the corner
       att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
