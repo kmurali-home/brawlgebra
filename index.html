@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MODULUS</title>
+<title>BRAWLGEBRA</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
   html,body {
@@ -47,7 +47,7 @@
 <script>
 "use strict";
 //======================================================================
-//  MODULUS — the one no one can solve. A fighter where the mind is the blade.
+//  BRAWLGEBRA — the name is the joke; nothing else is. A fighter where the mind is the blade.
 //  Single file, Canvas 2D, zero dependencies. Double-click to play.
 //======================================================================
 const cv = document.getElementById("game");
@@ -4509,11 +4509,11 @@ function drawDailyBadge(){     // surfaces the Daily + at-risk streak EXACTLY wh
   if(line2) txtO(line2, W/2, 51, 9.5, '#ffd34d', {mono:true,sw:0});
   ctx.restore();
 }
-function drawWordmark(cx, cy, sc){   // MODULUS — a stark, cold-steel lockup flanked by the modulus bars |x|. The math is the accent, never the joke. (canvas-drawn, offline-safe)
+function drawWordmark(cx, cy, sc){   // BRAWLGEBRA — the stark, cold-steel lockup keeps its |x| absolute-value bars: the name grins, the steel doesn't. (canvas-drawn, offline-safe)
   sc=sc||1;
   ctx.save(); ctx.translate(cx,cy); ctx.scale(sc,sc);
-  ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font=font(DISP,64);
-  const txt='MODULUS', w=ctx.measureText(txt).width;
+  ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font=font(DISP,56);   // a touch smaller — the longer name keeps the same footprint
+  const txt='BRAWLGEBRA', w=ctx.measureText(txt).width;
   ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillText(txt,4,6);                    // depth
   ctx.fillStyle='#0a0d14'; ctx.fillText(txt,2,3);                            // dark bevel underside
   const g=ctx.createLinearGradient(0,-46,0,12);                              // bone-white → cold steel
@@ -4631,7 +4631,7 @@ function drawTrailerOverlay(){
 function drawTitle(){
   ctx.fillStyle='rgba(3,2,10,0.45)'; ctx.fillRect(0,0,W,H);
   if(game.profile && (game.profile.matches||0)>0) drawDailyBadge();   // don't shout Daily at a newcomer who hasn't fought yet
-  // logo — the cold MODULUS lockup
+  // logo — the cold BRAWLGEBRA lockup
   drawWordmark(W/2, 190, 1);
   // positioning line — fixed, stated not sold
   txtO('THE ONE NO ONE CAN SOLVE', W/2, 232, 12, '#aeb8cc', {mono:true, sw:2});
@@ -6183,7 +6183,7 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
   const r=game.dailyResult||{}, day=dayIndex();
   const acc=game.stats? Math.round(100*(game.stats.correct||0)/Math.max(1,game.stats.asked||0)) : 0;
   const grid=['🟩','🟩','🟩','🟦','🟦'].map((g,i)=> i<Math.round(acc/20)? '🟩':'⬛').join('');
-  return 'MODULUS · Trial #'+day+'\n'+(r.score||0)+' pts · '+acc+'% · ✦'+(r.streak||0)+'-day\n'+grid+'\nmodulus';
+  return 'BRAWLGEBRA · Trial #'+day+'\n'+(r.score||0)+' pts · '+acc+'% · ✦'+(r.streak||0)+'-day\n'+grid+'\nbrawlgebra';
 }
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
@@ -7022,7 +7022,7 @@ function copyRoomLink(){   // one-tap invite: code + a deep link that pre-fills 
   const canCopy = navigator.clipboard && location.protocol!=='file:';   // clipboard needs a secure-ish context; file:// origin is the literal 'null'
   if(!canCopy){ net.shareFail=1; return; }                              // be honest: fall back to showing the code, don't fake a ✓
   const link=location.origin+location.pathname+'?room='+net.room;
-  navigator.clipboard.writeText('Step into my circle in MODULUS — room '+net.room+' → '+link)
+  navigator.clipboard.writeText('Step into my circle in BRAWLGEBRA — room '+net.room+' → '+link)
     .then(()=>{ net.codeCopied=game.frame; net.shareFail=0; })
     .catch(()=>{ net.shareFail=1; });
 }

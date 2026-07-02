@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // =====================================================================
-//  MODULUS — online relay server (zero dependencies)
+//  BRAWLGEBRA — online relay server (zero dependencies)
 //  Serves the game over HTTP and relays the netplay over WebSocket on
 //  the SAME port, so all five players just open one URL.
 //
@@ -243,5 +243,5 @@ setInterval(() => {
 }, 10000);
 
 httpServer.listen(PORT, () => {
-  console.log("MODULUS relay live on http://localhost:" + PORT + "  (open this URL to play)");
+  console.log("BRAWLGEBRA relay live on http://localhost:" + PORT + "  (open this URL to play)");
 });
