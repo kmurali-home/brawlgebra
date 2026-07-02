@@ -1587,8 +1587,10 @@ class Fighter {
     }
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
     const launcher = type==='kick' && this.grounded && this===game.player && (keys[KEYS.jump]||keys['arrowup']);   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
-    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher};
+    const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=6;   // #8 JUST-frame: cancel in the last 6f of the window = a pure bonus (never a punish for missing) — one execution lever OFF the math
+    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just};
     this.hitThisSwing=false; SFX.whoosh();
+    if(just && this===game.player){ floatText(this.x,this.y-162,'JUST!','#9fe8ff',15); flash(0.10,'#bfefff'); }
     if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
     return true;
   }
@@ -1624,6 +1626,7 @@ class Fighter {
   trySpecial(){
     if(!this.grounded) return false;
     const cancelling = this.attack && this.canCancelInto('special');   // cancel a confirmed normal into the special
+    const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=6;   // #8 JUST-frame on the special ender (last 6f of the window)
     if(this.attack? !cancelling : !this.canAct()) return false;
     // SPECIAL fires the highest tier the current AURA can afford (1→2→3). GALAXY = free, always tier 3.
     const tier = game.galaxy? 2 : bestSpecialTier(this);
@@ -1634,10 +1637,11 @@ class Fighter {
                    wave:{wind:14,act:4,rec:24}, fan:{wind:12,act:3,rec:18}, beam:{wind:16,act:6,rec:22}, drop:{wind:8,act:4,rec:26}};
     const def=Object.assign({}, ATK.special, tunings[sp.kind]||tunings.dash, {dmg:SPEC_TIERS[tier].dmg});
     if(sp.reach) def.reach=sp.reach;
-    this.attack={type:'special', kind:sp.kind, tier, spName:sp.name, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind,
+    this.attack={type:'special', kind:sp.kind, tier, spName:sp.name, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, just,
       guard:sp.guard, launch:sp.launch, big:sp.big, freeze:sp.freeze, rise:sp.rise, slow:sp.slow, fast:sp.fast,
       spCol:(this.char.gi||this.accent)};
     this.hitThisSwing=false; SFX.special(); this.flashT=6;
+    if(just && this===game.player){ floatText(this.x,this.y-176,'JUST!','#9fe8ff',16); flash(0.12,'#bfefff'); }   // #8 precise late-cancel on the special ender
     if(tier>=1) announce(sp.name, this.char.gi||'#ffd34d');   // name the converter/verdict; the cheap opener stays quiet
     if(game.tutorial && this===game.player) game.fSpecialDone=(game.fSpecialDone||0)+1;   // THE TRIAL: count the player's special fires for the ladder step
     return true;
@@ -2475,6 +2479,7 @@ function resolveHits(att,def){
     if(def.attack && def.attack.ph==='rec' && hb.type!=='special'){ punish=true; dmg *= 1.3; }   // WHIFF-PUNISH: catch a foe in the recovery of their own swing — reward the read
     const airHit = !def.grounded && !!def.knockingDown;   // hitting a LAUNCHED (juggled) foe
     if(airHit) dmg *= Math.pow(0.72, def.airHits||0);     // JUGGLE decay — each extra air hit does less (no infinite juggle)
+    if(att.attack && att.attack.just){ dmg *= 1.2; if(att===game.player) game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+4); }   // #8 JUST-frame cancel — precise late-cancel timing pays off (a skill lever OFF the math)
     dmg = Math.round(dmg);
     const res=def.takeHit(dmg,dir,hb.heavy,false,hb.guardLevel);
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
