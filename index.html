@@ -621,6 +621,8 @@ addEventListener("keydown", e => {
     if(game.practice && game.galaxy && lk==='b'){ enterGalaxyBurst(1); return; }   // PRACTICE: re-roll a burst on demand
     if(game.practice && lk==='f'){ game.pracFight=!game.pracFight; SFX.ui(); if(game.pracFight) game.enemy.aura=Math.max(game.enemy.aura,30); return; }   // PRACTICE: toggle the dummy fighting back (drill defense against a live foe)
     if(lk==='r' && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.online && !game.galaxy && !p.ko && p.stun<=0){ enterRush(); return; }  // FOCUS full → SOLVE RUSH (standard mode only)
+    if(lk==='g' && !game.mode2p && !game.online && game.problem && game.problem.gambitOffer && !game.problem.gambit){   // v5 #13 OPT-IN GAMBIT — you set the stake: G wagers this problem for ×2-or-bank-wipe + a streak shield on the win
+      game.problem.gambit=true; flash(0.10,'#ff7ac0'); SFX.charge(); floatText(p.x,p.y-198,'WAGERED','#ff7ac0',16); return; }
     // INPUT BUFFER — if an action can't fire this instant, remember the INTENT for ~6f and replay it the moment it's legal
     if((lk===KEYS.punch||lk===KEYS.kick) && keys[KEYS.punch] && keys[KEYS.kick] && game.state==='fight' && !game.mode2p){   // A+S together = THROW (beats block); cancel a just-started normal into it
       if(p.attack && (p.attack.type==='punch'||p.attack.type==='kick') && p.attack.ph==='wind' && (p.attack.fuse-p.attack.t)<=2) p.attack=null;
@@ -911,10 +913,10 @@ function newProblem(heat){
   _mathSeq=false;
   game.problemAt=game.frame;                        // timestamp for the adaptive solve-speed signal
   const prob={text,ans,op};
-  // GAMBIT — occasionally a high-risk ×2-or-bust problem; more often when you're on the ropes (a comeback beat). Never in seeded Daily / online / 2P.
+  // GAMBIT — v5 #13 now an OFFER, not an ambush: some problems can be WAGERED (press G) for ×2-or-bust + a streak shield; unwagered they're normal. More offers on the ropes (a comeback beat). Never in seeded Daily / online / 2P.
   if(!game.daily && !game.online && !game.mode2p && game.player){
     const lowHP = game.player.hp < game.player.char.hp*0.30;
-    if(Math.random() < (lowHP?0.26:0.15)) prob.gambit=true;
+    if(Math.random() < (lowHP?0.34:0.18)) prob.gambitOffer=true;
   }
   return prob;
 }
@@ -1876,6 +1878,10 @@ class Fighter {
     else this.hpShown += (this.hp-this.hpShown)*0.07;
     if(this.hpShown<this.hp) this.hpShown=this.hp;
     if(game.state==='fight' && this.aura>0 && !this.ko) this.aura -= this.aura*0.0016;   // #2 anti-hoard leak: a banked bar slowly bleeds (proportional — a full/special-ready bank leaks fastest, a broke player barely) so "bank to full then commit" fails; you must fence/solve to stay funded
+    if(game.state==='fight' && !this.ko){   // v5 #13 BROKE! — hitting zero is a NAMED state (and a win condition to inflict): the first solve back pays ×1.5
+      if(this.aura<=0.5 && !this._broke){ this._broke=true; this._brokeBonus=true; floatText(this.x,this.y-178,'BROKE','#ff5a5a',17); ring(this.x,this.y-86,'#ff5a5a',40,3); SFX.fizzle(); }
+      else if(this._broke && this.aura>12) this._broke=false;
+    }
     if(this.auraFlash>0) this.auraFlash--;
     if(this.auraChipT>0) this.auraChipT--;
     else this.auraShown += (this.aura-this.auraShown)*0.12;
@@ -2624,7 +2630,7 @@ function controlCPU(c){
       c.cpuAttack(type, tel); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]);
     }
   }
-  if(c.aura<6) c.addAura(0.5);   // tiny floor so a fully-starved foe can still scrape together a cheap punch to make space — solving (above) is the real, dominant, punishable aura source
+  // v5 #13 the sub-6 drip is GONE — a starved foe must stop and ∑ solve (interruptible): sustained aura denial literally disarms it. BROKE! is a win condition you can play for.
 }
 function hopCover(c){ // jump cover that blocks the path
   if(!c.grounded || !c.moveX) return;
@@ -2700,7 +2706,8 @@ function resolveHits(att,def){
     def._jitT=Math.max(def._jitT||0, Math.max(4,hitstop));   // v5 #15 the defender vibrates through the freeze (render-side)
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6+((att.attack&&att.attack.just)?4:0)); }  // landing hits charges FOCUS (+JUST credit only on a clean hit)
-    def.streak=0; def.combo=0; def.chargedHit=false; def._carry=0; def._stuRef=0; // getting tagged breaks focus AND your combo (and the per-string verb budgets)
+    if(def._streakShield){ def._streakShield=false; floatText(def.x,def.y-158,'STREAK HELD','#ff7ac0',12); } else def.streak=0;   // v5 #13 a won gambit's shield spends itself here
+    def.combo=0; def.chargedHit=false; def._carry=0; def._stuRef=0; // getting tagged breaks your combo (and the per-string verb budgets)
     if(wasVuln) att.combo=(att.combo||0)+1;   // v3 #6 HONEST COMBO — count only hits the foe couldn't act between; a recovered foe re-tagged = a NEW string
     else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; att._stuRef=0; }   // new string = fresh per-string verb budgets (Addison's CARRY, the Initiate's refunds)
     att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
@@ -2826,6 +2833,8 @@ function applySolve(f, result, st, op){
   else if(schismLit(f)){ gain*=2; qtag='×2 RATIO'; qcol='#b48cff'; }       // SCHISM: solve atop a lit rune = double
   let gambit=false;
   if(f===game.player && game.problem && game.problem.gambit){ gain=Math.round(gain*2); gambit=true; }  // GAMBIT pays double
+  if(f.hp < f.char.hp*0.28){ gain=Math.round(gain*1.25); floatText(f.x,f.y-238,'LAST STAND +25%','#ff9f6a',13); }   // v5 #13 the WAGE rises when the fight is nearly lost (bonus on the wage, never on damage) — comebacks are counted for, not gifted
+  if(f._brokeBonus){ f._brokeBonus=false; gain=Math.round(gain*1.5); floatText(f.x,f.y-254,'RECOVERY ×1.5','#7ae8ff',13); }   // v5 #13 the first solve back from BROKE pays extra — the way out is through the count
   // SOLVE-TO-PARRY: on a COVERED perfect, holding TOWARD the foe stays in the pocket to punish (committed: smaller window) vs holding back = full evasive dodge
   const parry = perfect && slipOK && f===game.player && !game.mode2p && !game.online &&
     ((f.facing>0)? (keys[KEYS.right]||keys['arrowright']) : (keys[KEYS.left]||keys['arrowleft']));
@@ -2835,7 +2844,7 @@ function applySolve(f, result, st, op){
   f.addAura(gain); st.auraEarned=(st.auraEarned||0)+gain;
   floatText(f.x,f.y-(perfect?190:170),'+'+gain+' AURA','#7ae8ff',17);
   if(qtag) floatText(f.x,f.y-(perfect?214:194), qtag, qcol, 15);
-  if(gambit){ f.chargedHit=true; f.comboT=Math.max(f.comboT,80); floatText(f.x,f.y-(perfect?240:220),'GAMBIT — DOUBLED','#ff7ac0',16); flash(0.1,'#ff7ac0'); }
+  if(gambit){ f.chargedHit=true; f.comboT=Math.max(f.comboT,80); f._streakShield=true; floatText(f.x,f.y-(perfect?240:220),'GAMBIT — DOUBLED','#ff7ac0',16); flash(0.1,'#ff7ac0'); }   // v5 #13 a WON wager also shields your streak through the next hit
   if(perfect && slipOK){
     const o=perfectFoe(f)||computeDanger(f); if(o) o.staggered(f.char.perfectStun, f.char.id==='frost');
     st.perfects=(st.perfects||0)+1; slowmo(380,0.45); flash(0.22,'#fff1c0'); addTrauma(0.2);
@@ -2921,7 +2930,7 @@ function submitFor(f, buf){ // local typed answer (offline, or a player's own se
     const danger = (game.enemy && game.enemy.attack && (game.enemy.attack.ph==='wind'||game.enemy.attack.ph==='tel')) || (typeof dangerInfo==='function' && dangerInfo()>0);
     const cornered = game.player && game.player.hp < game.player.char.hp*0.28;
     if(danger) _h=Math.max(0,_h-2);
-    else if(cornered) _h=_h+2;
+    else if(cornered) _h=Math.max(0,_h-2);   // v5 #13 UN-INVERTED spiral — on the ropes the problems get EASIER, not harder (losing at math shouldn't compound losing at fighting)
   }
   game.problem=newProblem(_h);
   if(game.mode2p){ ans1=''; ans2=''; }
@@ -4155,7 +4164,8 @@ function drawCard(){
   const danger=dangerInfo();
   ctx.save();
   const pw = !game.mode2p && game.state==='fight' && !game.player.ko && perfectFoe(game.player); // inside the tight perfect window NOW
-  const gam = !game.mode2p && game.problem && game.problem.gambit;   // high-risk ×2-or-bust problem
+  const gam = !game.mode2p && game.problem && game.problem.gambit;   // high-risk ×2-or-bust problem (v5 #13: only ever by CHOICE)
+  const gOffer = !game.mode2p && game.problem && game.problem.gambitOffer && !game.problem.gambit;   // a wagerable problem, not yet wagered
   panel(cx-cw/2,top,cw,ch,14,{fill: gam? 'rgba(44,10,22,0.9)' : 'rgba(9,11,26,0.9)'});   // material panel (shadow + glass)
   rr(cx-cw/2,top,cw,ch,14);
   ctx.lineWidth=(pw||gam)?3.5:2.5;
@@ -4174,7 +4184,7 @@ function drawCard(){
   }
   ctx.font=font(DISP,11); ctx.textAlign='center';
   ctx.fillStyle = pw? '#ffe14d' : danger>0? '#ff8a8a': gam? '#ff7ac0':'#8fd8f8';
-  ctx.fillText(pw? 'NOW — MATCH THE HEIGHT + ANSWER' : danger>0?'INCOMING — GUARD ITS HEIGHT, ANSWER TO SLIP': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL':'ANSWER — BANK AURA', cx, top+19);
+  ctx.fillText(pw? 'NOW — MATCH THE HEIGHT + ANSWER' : danger>0?'INCOMING — GUARD ITS HEIGHT, ANSWER TO SLIP': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL': gOffer?'ANSWER — or G to WAGER ×2':'ANSWER — BANK AURA', cx, top+19);
   // (retired) the "arms <op>" hint — specials are the per-fighter KIT now (D fires the best you can afford), not operator-armed
   if(game.reveal && game.reveal.t>0){ // show what the answer was — AND how to get it (teach, don't just test)
     ctx.globalAlpha=Math.min(1,game.reveal.t/40);
