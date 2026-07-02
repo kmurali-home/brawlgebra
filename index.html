@@ -1570,7 +1570,7 @@ class Fighter {
     if(game.galaxy && (a.type==='punch'||a.type==='kick'))
       return type==='punch'||type==='kick'||type==='special';
     if(!(a.cancelOK>0)) return false;
-    if(type==='special') return a.type==='punch' || a.type==='kick';   // damage/knockdown ender
+    if(type==='special') return (a.type==='punch' || a.type==='kick') && !a.blockCancel;   // damage/knockdown ender — but NO free special-cancel on block (a blocked window only frame-traps into normals)
     if(type==='kick')    return a.type==='punch';                       // P>K (and up+K = the launcher route)
     if(type==='punch'){ const cap=(this.char.id==='oracle' && this.streak>=5)?3:2; return a.type==='punch' && (this.combo||0)<cap; }  // one P>P extension; SIGNATURE · KRISHNA ascended (streak>=5) unlocks a 2nd P>P — only he extends long chains
     return false;
@@ -1729,7 +1729,7 @@ class Fighter {
       } else {
         const chip = Math.max(1, Math.round(dmg*0.15*this.char.blockMul));
         this.hp=Math.max(1,this.hp-chip); this.chipDelay=24;
-        this.stun=9; this.vx=dir*4.5;
+        this.stun=heavy?16:12; this.vx=dir*4.5;   // #3 blockstun raised so the attacker's short cancel window is a real frame trap (light: tight follow-up beats a mash; heavy stays punishable on its long recovery)
         sparks(this.x+dir*-22, this.y-86, 6, '#9fdcff', 4);
         SFX.block();
         return 'block';
@@ -2502,7 +2502,10 @@ function resolveHits(att,def){
     const res=def.takeHit(dmg,dir,hb.heavy,false,hb.guardLevel);
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
     const cx=def.x-dir*6, cy=def.y-90;
-    if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3); return; }
+    if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3);
+      if(att.attack && hb.type!=='special'){ att.attack.cancelOK=Math.max(att.attack.cancelOK||0,10); att.attack.blockCancel=true;   // #3 ON-BLOCK PRESSURE: a blocked normal opens a SHORT cancel window — a tight P>P/P>K follow-up is a frame trap (beats a mash, loses to continued block); capped by the drainable guard + throw. NO special-cancel on block.
+        if(att===game.player && game.frame-(att._blockCueAt||0)>50){ att._blockCueAt=game.frame; floatText(att.x+att.facing*28, att.y-120, 'PRESSURE ▸', '#9fdcff', 12); } }
+      return; }
     if(res==='armor'){ hitstop=Math.max(hitstop,4); ring(cx,cy,'#ffcf6a',30,3); return; }   // MAXIMILIAN plowed through the startup — no combo/punish/launcher credit for the attacker
     // clean hit
     if(punish){ att.addAura(14); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window: fence to earn aura, don't turtle to bank it
@@ -2513,7 +2516,7 @@ function resolveHits(att,def){
     att.combo=(att.combo||0)+1; att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
     if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER pops the foe low into a juggle route
     else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
-    if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22;   // a confirmed normal opens a cancel window (~0.37s — forgiving enough to feel)
+    if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed (unlike the block window)
       if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13); }   // surface the invisible cancel window so the combo layer is discoverable
     }
     if(chain){ announce('CHAIN!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212,'CHAIN FINISHER','#ff9f2a',20); }
