@@ -1568,8 +1568,9 @@ class Fighter {
     if(game.galaxy && (a.type==='punch'||a.type==='kick'))
       return type==='punch'||type==='kick'||type==='special';
     if(!(a.cancelOK>0)) return false;
-    if(type==='special') return a.type==='punch' || a.type==='kick';
-    if(type==='kick')    return a.type==='punch';
+    if(type==='special') return a.type==='punch' || a.type==='kick';   // damage/knockdown ender
+    if(type==='kick')    return a.type==='punch';                       // P>K (and up+K = the launcher route)
+    if(type==='punch')   return a.type==='punch' && (this.combo||0)<2;  // one P>P extension (blocks infinite P>P>P)
     return false;
   }
   tryAttack(type){
@@ -1585,7 +1586,8 @@ class Fighter {
       return false;
     }
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
-    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind};
+    const launcher = type==='kick' && this.grounded && this===game.player && (keys[KEYS.jump]||keys['arrowup']);   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
+    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher};
     this.hitThisSwing=false; SFX.whoosh();
     if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
     return true;
@@ -2471,6 +2473,8 @@ function resolveHits(att,def){
     if(att.attack && att.attack.galaxyComboMul){ gcombo=att.attack.galaxyComboMul; dmg *= gcombo; }  // GALAXY combo finisher — the unlocked string pays off big (×2..×5)
     let punish=false;
     if(def.attack && def.attack.ph==='rec' && hb.type!=='special'){ punish=true; dmg *= 1.3; }   // WHIFF-PUNISH: catch a foe in the recovery of their own swing — reward the read
+    const airHit = !def.grounded && !!def.knockingDown;   // hitting a LAUNCHED (juggled) foe
+    if(airHit) dmg *= Math.pow(0.72, def.airHits||0);     // JUGGLE decay — each extra air hit does less (no infinite juggle)
     dmg = Math.round(dmg);
     const res=def.takeHit(dmg,dir,hb.heavy,false,hb.guardLevel);
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
@@ -2483,6 +2487,8 @@ function resolveHits(att,def){
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6); }  // landing hits charges FOCUS
     def.streak=0; def.combo=0; def.chargedHit=false; // getting tagged breaks focus AND your combo
     att.combo=(att.combo||0)+1; att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
+    if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER pops the foe low into a juggle route
+    else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
     if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22;   // a confirmed normal opens a cancel window (~0.37s — forgiving enough to feel)
       if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13); }   // surface the invisible cancel window so the combo layer is discoverable
     }
