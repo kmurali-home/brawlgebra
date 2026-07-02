@@ -585,7 +585,7 @@ addEventListener("keydown", e => {
       // MATH BURST — while being combo'd, digits answer the 1-digit escape challenge over your head (not the main card)
       if(game.burstChallenge && game.burstChallenge.t>0 && (game.player.comboedHits||0)>=2){
         if(+k===game.burstChallenge.ans){ if(game.player.burst(true)) game.freeBurstUsed=true; }
-        else { game.burstChallenge=null; game.digitLockT=20; SFX.fizzle(); floatText(game.player.x,game.player.y-196,'WRONG — LOCKED','#ff8a8a',13); }   // v3 #3 wrong digit = the challenge DIES + 20f lockout (no free mash-through)
+        else { game.burstChallenge=null; game.digitLockT=20; SFX.fizzle(); floatText(game.player.x,game.player.y-196,'WRONG — BURST LOST','#ff8a8a',13); }   // v3 #3 wrong digit = the challenge DIES + 20f lockout (no free mash-through)
         return;
       }
       if(ans1.replace(/[-.]/g,'').length<4) ans1+=k;
@@ -1224,7 +1224,7 @@ function spawnPickup(){
        && PILLARS.every(pl=>Math.abs(x-pl.x)>60)){
       const gy=surfaceYAt(x);
       pickups.push({x, y:gy-26, gy, type, life:760, ph:frnd(0,6)});
-      tip('pick','Energy spawned — race your rival to it! (check the minimap)');
+      tip('pick','A pickup dropped — reach it before your rival. It shows on the minimap.');
       return;
     }
   }
@@ -1282,7 +1282,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
     if(game.frame - (o.throwTechAt||-99) <= 8){          // TECH — the foe pressed throw in time: break, both pushed back, no damage
       f.vx=-f.facing*4; o.vx=(o.x<f.x?-1:1)*4;
       floatText((f.x+o.x)/2, f.y-158, 'TECH!', '#9fdcff', 20); sparks((f.x+o.x)/2, f.y-90, 10, '#9fdcff', 5); SFX.block(); hitstop=Math.max(hitstop,4);
-      if((game.throwTechShown||0)<3 && o===game.player){ game.throwTechShown=(game.throwTechShown||0)+1; tip('tech','THROW TECH — press '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' the instant you\'re grabbed'); }
+      // (the tech lesson moved to the GRAB-connects branch below — teach the player who FAILED to tech, not the one who already knows)
     } else {                                             // GRAB connects — unblockable, soft knockdown
       const dmg=Math.round((a.def.dmg||14)*(a.tick?0.8:1));   // v6 #6 a TICK throw trades damage for the guaranteed mixup position
       o.hp=Math.max(0, o.hp-dmg); o.chipDelay=0;
@@ -1291,6 +1291,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
       { const d=(o.x<f.x?-1:1); o.vx=d*3.2*(((d<0&&o.x<WORLD_W/2)||(d>0&&o.x>WORLD_W/2))?1.3:1); }   // v5 #7 throws CARRY toward the near wall too
       floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.32); SFX.heavy(); hitstop=Math.max(hitstop,5);
       if(f.char.id==='mauler'){ f.overflowT=240; f.addAura(30); floatText(f.x,f.y-206,'OVERFLOW','#ffcf6a',17); ring(f.x,f.y-86,'#ffcf6a',56,4); }   // SIGNATURE · MAXIMILIAN — the grab feeds the BOUNDLESS PRODUCT (cap 70->100 for ~4s: T3 is earnable NOW)
+      if((game.throwTechShown||0)<3 && o===game.player){ game.throwTechShown=(game.throwTechShown||0)+1; tip('tech','THROW TECH — press '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' the instant you are grabbed.'); }   // v8 the lesson fires when the grab LANDS on you
       if(f===game.player) game.stats.dmg+=dmg;
       if(o.hp<=0 && typeof lethal==='function') lethal(o, true);
     }
@@ -1614,7 +1615,7 @@ class Fighter {
     else this.dashT=0;
     if(back){ this._bdashAt=game.frame;
       if(bdashFree || game.galaxy || this.spend(4,true)){ this.iframes=Math.max(this.iframes,9); this.slipActive=false; }   // paid repeat keeps the skill i-frames
-      else if(this===game.player) floatText(this.x,this.y-150,'RAW backdash — no aura','#8a93b8',11);   // broke repeat = movement only, no invuln
+      else if(this===game.player) floatText(this.x,this.y-150,'no AURA — this backdash has no dodge','#8a93b8',11);   // broke repeat = movement only, no invuln
     }
     dust(this.x,this.y,5,2.5); SFX.whoosh();
   }
@@ -1654,7 +1655,7 @@ class Fighter {
       if(this===game.player) tip('noaura','No aura — answer to power your strikes.');
       return false;
     }
-    if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
+    if(cancelling && this===game.player){ tip('cancel','CHAINED. Cancel at the last moment — the gold shimmer — for a JUST: bonus damage.'); game.cancelDone=(game.cancelDone||0)+1; }
     const upHeld = this===game.player? (keys[KEYS.jump]||(!game.mode2p&&keys['arrowup'])) : (game.mode2p&&this===game.enemy? !!keys['arrowup'] : !!this._wantLauncher);   // v3 #7 VERB PARITY — the launcher reads each seat's OWN up-input (P2 gets juggles; v4: the CPU expresses it through _wantLauncher on its routes)
     const launcher = !dashAtk && !antiAir && type==='kick' && this.grounded && upHeld;   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
     const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=justWin(this);   // #8 JUST-frame: cancel in the last ~6f of the window = a pure bonus (never a punish for missing) — one execution lever OFF the math (Initiate gets 8f)
@@ -1675,7 +1676,7 @@ class Fighter {
     const thrCancel = this.attack && this.grounded && this.canCancelInto('throw');   // v6 #9 MAXIMILIAN's K>throw command-ender rides the confirm window; v6 #6 everyone's TICK rides the blocked window
     const tick = !!(thrCancel && this.attack.blockCancel);
     if((this.attack && !thrCancel)||!this.grounded) return false;
-    if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No aura to throw — but you can still TECH one (A+S when grabbed).'); return false; }
+    if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No AURA to throw — but you can still TECH one ('+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' when grabbed).'); return false; }
     const tdef=Object.assign({wind:7, act:2, rec:22, dmg:14, reach:52}, (VERB_OV[this.char.id]||{}).throw||{});   // v6 #8 per-fighter throw
     this.attack={type:'throw', kind:'throw', ph:'wind', t:tdef.wind, def:tdef, tel:0, fuse:tdef.wind, tick};   // v6 #6 tick throws are tagged (x0.8)
     this.hitThisSwing=false; SFX.whoosh();
@@ -1817,7 +1818,7 @@ class Fighter {
       return 'armor';
     }
     if(this.thinkT>0){ this.thinkT=0; floatText(this.x,this.y-150,'MISCOUNT!','#ff8a8a',13); }   // a landed hit breaks a solve-in-progress — the foe earns no aura for it
-    if(this.focusT>0){ this.focusT=0; this.pendingSolve=null; floatText(this.x,this.y-166,'FOCUS BROKEN','#ff8a8a',14); }   // #4 a hit mid-channel eats the banked answer — no refund (exactly like breaking the CPU's solve)
+    if(this.focusT>0){ this.focusT=0; this.pendingSolve=null; floatText(this.x,this.y-166,'BANK LOST — NO REFUND','#ff8a8a',14); }   // #4 a hit mid-channel eats the banked answer (v8: FOCUS now names the R meter only)
     lvl = lvl||'mid';
     const stanceOK = lvl==='mid' || (lvl==='low' && (this.guardStance||'low')==='low') || (lvl==='high' && this.guardStance==='high');   // right guard for the height? wrong guess = the block whiffs
     if(this.blocking && stanceOK && !this.ko && !unblock){
@@ -1845,7 +1846,7 @@ class Fighter {
     if(this===game.player && this.comboedHits>=2 && !game.burstChallenge && !game.freeBurstUsed){   // MATH BURST — ONE free escape per round, and you must actually SOLVE the micro-problem under fire (v3 #3: the answer is no longer displayed)
       const a=rnd(3,9), b=rnd(1,a-1);
       game.burstChallenge={a, b, ans:a-b, t:100};
-      tip('burst','Combo’d? SOLVE the red micro-problem over your head for a FREE escape (one per round) — or '+keyLabel(KEYS.special)+' to spend aura.');
+      tip('burst','BURST — answer the red problem over your head for a FREE escape (once per round), or press '+keyLabel(KEYS.special)+' to pay 40 AURA.');
     }
     if(this===game.enemy && this.comboedHits===2 && typeof reactBanter==='function') reactBanter('onCombo');   // player landed a combo → foe reacts
     if(this.dizzy>0) dmg*=1.18;
@@ -2512,7 +2513,7 @@ function controlCPU(c){
     if(Math.random() < 0.3+0.18*(DIFF.level||0)){
       if(Math.random()<0.42){ c._tick=game.frame+rnd(16,24); }   // the tick-throw read — beats a defender who just holds
       else { c.tryAttack('punch');   // the frame trap — beats a defender who mashes
-        if((game.trapTaught||0)<2){ game.trapTaught=(game.trapTaught||0)+1; tip('trap','FRAME TRAP — HOLD your guard through the string; mash and you get clipped. But a THROW beats holding: TECH it ('+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+').'); } }
+        if((game.trapTaught||0)<2){ game.trapTaught=(game.trapTaught||0)+1; tip('trap','FRAME TRAP — keep HOLDING guard through their hits. Swing too early and you get hit.'); } }
     }
   }
   if(!c.attack) c._pressed=0;
@@ -2732,7 +2733,7 @@ function resolveHits(att,def){
   if(hb.x<bd.x+bd.w && hb.x+hb.w>bd.x && hb.y<bd.y+bd.h && hb.y+hb.h>bd.y){
     if(def.isCPU && att===game.player && hb.guardLevel && hb.guardLevel!=='mid'){ const r=def.read||(def.read={block:0,punish:0,dodge:0}); if(hb.guardLevel==='high') r.hi=(r.hi||0)+1; else r.lo=(r.lo||0)+1; }   // v6 #10 the CPU logs your opener HEIGHTS (hit or blocked — it saw the attempt)
     if((def.downed||0)>0 && def.iframes<=0){   // v4 #2 KNOCKDOWN INTEGRITY — strikes pass THROUGH a downed body (no OTG pickup): the oki guess is the ONLY way in. A true meaty stays live and connects the moment they rise.
-      if(att.attack && !att.attack._otgCued){ att.attack._otgCued=true; if(att===game.player) floatText(def.x,def.y-146,'DOWN — meet the rise','#8a93b8',11); }
+      if(att.attack && !att.attack._otgCued){ att.attack._otgCued=true; if(att===game.player) floatText(def.x,def.y-146,'downed — no hits land until they rise','#8a93b8',11); }
       return;
     }
     att.hitThisSwing=true;
@@ -2761,7 +2762,7 @@ function resolveHits(att,def){
     if(att.attack && att.attack.just) dmg *= 1.2;   // #8 JUST-frame cancel — precise late-cancel timing pays off (a skill lever OFF the math; meter credit moved to the CLEAN-hit path so a blocked JUST earns nothing)
     dmg = Math.round(dmg);
     const res=def.takeHit(dmg,dir,hb.heavy,false,hb.guardLevel);
-    if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
+    if(res==='dodge'){ floatText(def.x,def.y-160,'SLIPPED','#9fdcff',17); return; }   // v8 one name: SLIP
     const cx=def.x-dir*6, cy=def.y-90;
     if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3);
       if(att.attack && hb.type!=='special' && !att.attack.reversal){ att.attack.cancelOK=Math.max(att.attack.cancelOK||0,10); att.attack.blockCancel=true; att._bchain=(att._bchain||0)+1;   // #3 ON-BLOCK PRESSURE: a blocked normal opens a SHORT cancel window — a tight follow-up is a frame trap (beats a mash, loses to continued block); v6 #6 counts toward the 3-contact string cap. NO special-cancel on block; a blocked REVERSAL gets NO window.
@@ -2790,7 +2791,8 @@ function resolveHits(att,def){
     else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
     if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false; att._bchain=0;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed; the blockstring counter resets (you EARNED a fresh turn)
       def.stun=Math.max(def.stun,22);   // v4 STRING TRUTH — the hit-confirm window and the hitstun are the SAME clock: cancel anywhere in it (incl. the last-6f JUST) and the follow-up is a TRUE string, exactly what the gold shimmer teaches
-      if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13); }   // surface the invisible cancel window so the combo layer is discoverable
+      if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13);
+        tip('chain','CHAIN ▸ — press punch, kick, or special now to link the next hit.'); }   // v8 teach the window the FIRST time it opens, not after it's already used
       if(att.isCPU && !game.online){   // v4 CPU PARITY (a) — the CPU hit-confirms its OWN archetype route through the same cancel path a human uses (DIFF-gated; easiest tier stays single-poke)
         const lvl=DIFF.level||0, roll=[0,0.35,0.6][Math.min(2,lvl)]||0;
         if((att.combo||0) <= (lvl>=2?2:1) && Math.random()<roll){
@@ -2799,7 +2801,7 @@ function resolveHits(att,def){
         }
       }
     }
-    if(chain){ announce(wasVuln?'CHAIN!':'CHARGED!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212, wasVuln?'CHAIN FINISHER':'CHARGED OPENER','#ff9f2a',20); }   // v4 honest label — a charged hit that STARTS a string is an opener, not a finisher (no more CHAIN FINISHER + RESET on one swing)
+    if(chain){ announce(wasVuln?'CHAIN!':'CHARGED!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212,'CHARGED HIT','#ff9f2a',20); }   // v8 one name everywhere: CHARGED (was CHAIN FINISHER / CHARGED OPENER)
     else if(att.combo>=2) floatText(att.x,att.y-202,'COMBO ×'+att.combo,'#ffd34d',15+Math.min(9,att.combo));
     if(overclocked){ ring(cx,cy,'#ffd34d',46,4); floatText(cx,cy-30,'◆',('#ffd34d'),20); }
     if(gcombo){ const big=gcombo>=3; flash(0.22,'#ffd9f0'); addTrauma(0.45+gcombo*0.06); ring(cx,cy, big?'#ff7ac0':'#ffd34d', 70+gcombo*16, 7); slowmo(240,0.4);
@@ -2887,7 +2889,7 @@ function applySolve(f, result, st, op){
     floatText(f.x,f.y-212,'ASCENDED','#ffd34d',26); flash(0.12,'#ffd34d'); ring(f.x,f.y-90,'#ffd34d',80,5);
     if(f===game.player){ floatText(f.x,f.y-182,'CHAINS EXTEND','#ffe9a0',14); mastAdd(f.char.id,'v'); }   // SIGNATURE payoff, named: Krishna can now P>P>P (feeds his ledger)
   }
-  if(f.dizzy>0||f.stun>0){ f.dizzy=0; f.stun=0; floatText(f.x,f.y-170,'FOCUSED!','#9fdcff',20); }
+  if(f.dizzy>0||f.stun>0){ f.dizzy=0; f.stun=0; floatText(f.x,f.y-170,'CLEARED','#9fdcff',20); }   // v8: was FOCUSED! — the word belongs to the R meter
   const perfect = result==='perfect';
   // #1 COMMITTAL SLIP — a reactive (NOW-window) solve slips only the height you're GUARDING (mid always; low/high per stance, mirroring the block) and a THROW blows straight through it. Read it right = slip + counter-stagger; read it wrong = you still BANK aura, but the blow lands. This un-collapses "always solve on their commit" so the high/low block + throw finally matter.
   let slipOK = true;
@@ -2941,7 +2943,7 @@ function applySolve(f, result, st, op){
     if(fk && addFnXP(fk, perfect?3:2)){ const F=FUNCS.find(x=>x.key===fk); if(F) floatText(f.x,f.y-150, F.name+' LV UP', F.col, 15); }
   }
   // COMBO × MATH: solving mid-combo charges your next hit into a CHAIN FINISHER (string commands, interspersed by math)
-  if(f.combo>0 && !f.ko){ f.chargedHit=true; f.comboT=Math.max(f.comboT,80); floatText(f.x,f.y-150,'CHAIN CHARGED','#ff9f2a',14); }
+  if(f.combo>0 && !f.ko){ f.chargedHit=true; f.comboT=Math.max(f.comboT,80); floatText(f.x,f.y-150,'CHARGED ▸ ×1.7','#ff9f2a',14); }   // v8 one name: CHARGED
   return gain;
 }
 function methodHint(p){   // a one-line "how" shown on a miss — teach the method, not just the answer
@@ -2993,8 +2995,8 @@ function submitFor(f, buf){ // local typed answer (offline, or a player's own se
     // #4 FOCUS CHANNEL — an UNTIMED correct answer takes a readable beat to bank: ~12f standing open (no swing/dash/block), then the aura lands. A hit mid-channel breaks it, no refund — the exact mirror of you rushing the CPU's ∑ solve. PERFECT (NOW-window) solves stay instant so the reactive slip is crisp; misses land instantly.
     if(f.focusT>0 && f.pendingSolve) completeFocus(f);   // roll an in-flight bank in first (humanly near-impossible at 12f, but never silently lose one)
     f.focusT=12; f.pendingSolve={problem:game.problem, problemAt:game.problemAt, st, isP1};
-    floatText(f.x,f.y-166,'∑ FOCUS','#7ae8ff',13);
-    if((game.focusChanTaught||0)<2){ game.focusChanTaught=(game.focusChanTaught||0)+1; tip('focuschan','Banking takes a BEAT — you’re open while it lands. Answer when it’s safe, or in the ⚡NOW window to slip instead.'); }
+    floatText(f.x,f.y-166,'∑ BANKING','#7ae8ff',13);
+    if((game.focusChanTaught||0)<2){ game.focusChanTaught=(game.focusChanTaught||0)+1; tip('focuschan','BANKING — a correct answer takes a beat to land, and you stand open. Answer when you are safe, or in the NOW window to SLIP instead.'); }
   } else {
     const gain=applySolve(f, result, st, game.problem.op);
     if(gain) hudFloat(isP1,'+'+gain,'#7ae8ff');
@@ -3212,7 +3214,7 @@ function exitRush(){
     flash(0.22,'#b48cff'); addTrauma(0.5); ring(p.x,p.y-90,'#b48cff',150,8); slowmo(380,0.45);
     const kit=game.galaxyKit||[], unlocked=kit.filter(k=>game.galaxyBest>=k.thr);
     const top=unlocked[unlocked.length-1];
-    announce(top? top.pat.split('').join(' ')+' — UNBOUND' : 'answer more to unbind your forms', '#c8a8ff');
+    announce(top? top.pat.split('').join(' ')+' — UNBOUND' : 'answer more to unlock your combo strings', '#c8a8ff');
     floatText(p.x,p.y-205, unlocked.length+'/'+kit.length+' COMBOS','#b48cff',24); SFX.special();
     game.rush=null; game.problem=newProblem(0); ans1=''; game.fightAt=game.frame;
     return;
@@ -3392,7 +3394,9 @@ function rumbleStep(){
   updatePickups(); updateProjs(); updateHazards();
   game.playerHidden=false; game.hiddenRecent=0;
   if(!game.player.ko){
-    if(dangerInfo()>0) tip('teln','A strike is drawn — GUARD its height (↓ low / back high), then answer in the NOW window to slip it.');
+    if(dangerInfo()>0) tip('teln','Strike incoming — ↓ blocks LOW, hold back blocks HIGH. Answer in the NOW window to SLIP it.');
+    if(game.player.downed>10) tip('wake','DOWN — press '+keyLabel(KEYS.special)+' early for a QUICK RISE (4 AURA), or as you rise for a REVERSAL (18 AURA).');   // v8 the wakeup options, taught the first time you are down
+    if(game.problem && game.problem.gambitOffer && !game.problem.gambit) tip('gambit','GAMBIT — press G to double this answer. Miss, and your bank wipes.');   // v8 the wager, taught at the first offer
     if(game.player.spReady()) tip('spn','SPECIAL ready — press '+keyLabel(KEYS.special));
   }
   for(const a of fs) if(!a.ko) for(const b of fs) if(b!==a && !b.ko) resolveHits(a,b);
@@ -3447,7 +3451,7 @@ function step(){
     if(game.practice){   // free training vs a still dummy that can't die; you can't lose; clock frozen
       if(e.hp<=e.char.hp*0.15){ e.hp=e.char.hp; e.hpShown=e.hp; floatText(e.x,e.y-182,'RESET','#9fb0c8',13); }
       p.hp=p.char.hp; game.timer=99;
-      tip('prac','PRACTICE · '+(game.pracFight?'dummy FIGHTS BACK (F: idle)':'F: make the dummy fight back')+' · P: move list · ESC quit'+(game.galaxy?' · B: re-roll burst':''));
+      tip('prac','SPARRING · '+(game.pracFight?'dummy fights back (F: idle)':'F: dummy fights back')+' · P: pause & tips · ESC: quit'+(game.galaxy?' · B: new combo strings':''));
     }
     forgeTick();                       // MULTIPLY stage: oscillate the central forge platform
     stageHazardTick();                 // ambient stage hazards (gated on settings.hazards)
@@ -3473,8 +3477,8 @@ function step(){
     updatePickups(); updateProjs(); updateHazards();
     game.playerHidden = !game.mode2p && isConcealed(p,e);
     game.hiddenRecent = game.playerHidden? 20 : Math.max(0,(game.hiddenRecent||0)-1);
-    if(game.playerHidden) tip('hide','Hidden! But your rival banks aura while you rest…');
-    if(dangerInfo()>0) tip('tel','He commits — match his height (↓ low / back high) and answer in the NOW window to slip clean. A THROW you must TECH.');
+    if(game.playerHidden) tip('hide','HIDDEN — strike from cover for an AMBUSH (+30%). Your rival banks AURA while you wait.');
+    if(dangerInfo()>0) tip('tel','Strike incoming — ↓ blocks LOW, hold back blocks HIGH. Answer in the NOW window to SLIP it.');
     // ANSWER RELOCK — when a strike crosses into its tight perfect window, your typed answer is WIPED.
     // A perfect dodge now demands SOLVING inside the ⚡NOW window (or BLOCK) — no holding a pre-typed answer from neutral.
     if(!game.mode2p && !game.online && !game.galaxy){   // GALAXY has no solve-dodge — math lives only in the bursts
@@ -3485,12 +3489,12 @@ function step(){
           if(!game.daily){ const a=rnd(3,9), b=rnd(1,a-1); game.problem={text:a+'−'+b, ans:a-b, op:'−', micro:true}; game.problemAt=game.frame; }   // v5 #4 AGE-HONEST NOW LANE — the reactive read is ALWAYS a 1-digit micro-problem (a median 12yo can use the fork); the full-heat problem stays the safe/bank lane
           cardFx.flash=Math.max(cardFx.flash||0,11); cardFx.col='#ffd34d';
           floatText(p.x,p.y-200,'ANSWER — NOW','#ffd34d',18);
-          tip('relock','Your answer clears the instant he commits — answer the QUICK one in the NOW window, or BLOCK.');
+          tip('relock','Their strike WIPES what you typed. Answer the short problem in the NOW window, or block.');
         }
       } else { game.relockAtk=null;
         if(game.problem && game.problem.micro && !game.daily){ game.problem=newProblem(Math.floor(game.heat)); game.problemAt=game.frame; } }   // danger passed unanswered — the bank lane returns to full-heat problems (no cheap 1-digit banking)
     }
-    if(p.spReady()) tip('sp','SPECIAL ready — press '+keyLabel(KEYS.special)+'. Finish with it for a surprise…');
+    if(p.spReady()) tip('sp','SPECIAL ready — press '+keyLabel(KEYS.special)+'. Hold it to pick a tier. As the final blow, it triggers the arena finish.');
     if(game.burstChallenge){ game.burstChallenge.t--; if(game.burstChallenge.t<=0 || (p.comboedHits||0)<2 || p.ko) game.burstChallenge=null; }  // MATH-BURST window
     if((game.digitLockT||0)>0) game.digitLockT--;   // v3 #3 busted-burst digit lockout ticks down
     resolveHits(p,e); resolveHits(e,p);
@@ -3500,7 +3504,7 @@ function step(){
     if(game.mode==='story' && game.storyCh===STORY.length-1 && !game.galaxy && !game.practice && p.aura>0){
       p.aura=Math.max(0, p.aura-0.04);   // SOLOMON reduces the unknown toward zero — clean solving is the only push-back (codex thesis, played)
       if(game.frame%150===0) floatText(p.x, p.y-152, '↓ to zero', '#ff9f2a', 12);
-      tip('solz','Solomon pulls your AURA toward zero — keep solving to hold the line.');
+      tip('solz','Solomon drains your AURA toward zero. Keep answering to hold it.');
     }
     game.timer -= 1/60;
     if(game.timer<=0 && game.state==='fight') endByTime();
@@ -4043,11 +4047,12 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
     };
     row(keyLabel(KEYS.punch),  'PUNCH',  ATK.punch.cost, f.aura>=ATK.punch.cost);
     row(keyLabel(KEYS.kick),   'KICK',   ATK.kick.cost,  f.aura>=ATK.kick.cost);
+    row(keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick), 'THROW', 6, f.aura>=6);   // v8 the throw finally appears in the persistent legend
     row(keyLabel(KEYS.special),'SPECIAL',null,           bt>=0, '#ffd34d');
     row(keyLabel(KEYS.block),  'BLOCK',  null,           true,  '#cabbe0');
     cy+=6;
     ctx.font=font(MONO,8.5); ctx.fillStyle='rgba(150,140,180,0.55)';
-    ctx.fillText(keyLabel(KEYS.special)+' FIRES THE TOP LIT SPECIAL · HOLD = PICK TIER', 40, cy); cy+=14;
+    ctx.fillText(keyLabel(KEYS.special)+' FIRES THE ▶ TIER — THE STRONGEST YOU CAN AFFORD · HOLD = PICK', 40, cy); cy+=14;
     for(let t=0;t<3;t++){   // the ladder — ◆ affordable · dim too-costly · ▶ the one SPECIAL fires right now
       const sp=kit[t], cost=SPEC_TIERS[t].cost, lit=f.aura>=cost, fires=(t===bt);
       ctx.globalAlpha=lit?1:0.4;
@@ -4084,7 +4089,7 @@ function drawComboMeter(){   // persistent, juicy combo counter so chains are VI
     ctx.translate(cx,168); ctx.scale(pop,pop);
     txtO(String(n),0,0,54,'#ffd34d',{sw:4});
     txtO('HIT COMBO',0,30,15,'#ffe6a8',{sw:0,mono:true});
-    if(f.chargedHit) txtO('★ CHAIN CHARGED',0,50,11,'#ff9f2a',{sw:0,mono:true});
+    if(f.chargedHit) txtO('★ CHARGED',0,50,11,'#ff9f2a',{sw:0,mono:true});
     ctx.restore(); ctx.globalAlpha=1;
   };
   one(game.player, W*0.27);
@@ -4259,7 +4264,7 @@ function drawCard(){
   }
   ctx.font=font(DISP,11); ctx.textAlign='center';
   ctx.fillStyle = pw? '#ffe14d' : danger>0? '#ff8a8a': gam? '#ff7ac0':'#8fd8f8';
-  ctx.fillText(pw? 'NOW — MATCH THE HEIGHT + ANSWER' : danger>0?'INCOMING — GUARD ITS HEIGHT, ANSWER TO SLIP': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL': gOffer?'ANSWER — or G to WAGER ×2':'ANSWER — BANK AURA', cx, top+19);
+  ctx.fillText(pw? 'NOW — MATCH THE HEIGHT + ANSWER' : danger>0?'INCOMING — GUARD ITS HEIGHT, ANSWER TO SLIP': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL': gOffer?'ANSWER — or G to WAGER: ×2 or your bank wipes':'ANSWER — BANK AURA', cx, top+19);
   if(ans1!=='' && game.player && (game.player.combo||0)>0 && !game.mode2p){   // v6 #11 a typed-but-unsubmitted answer GLOWS amber mid-string — the chain-finisher is loaded, press ⏎ to cash it
     ctx.save(); ctx.strokeStyle='#ff9f2a'; ctx.globalAlpha=0.45+0.3*Math.sin(game.frame*0.3); ctx.lineWidth=2.5;
     rr(cx-cw/2, top, cw, ch, 14); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
@@ -5896,21 +5901,22 @@ function render(){
     ctx.fillStyle='rgba(3,2,10,0.72)'; ctx.fillRect(0,0,W,H);
     txtO('PAUSED', W/2, 96, 38, '#efe9ff',{sw:7});
     const kp=keyLabel(KEYS.punch), kk=keyLabel(KEYS.kick), ks=keyLabel(KEYS.special);
-    ['← → move   ·   double-tap = dash (backdash = i-frames)',
-     '↑ jump   ·   ↓ block   ·   type digits + ⏎ to answer',
-     kp+' punch · '+kk+' kick · '+ks+' special — every swing spends aura up front'
+    ['← → move   ·   double-tap = dash (the first backdash dodges hits — repeats cost 4 AURA)',
+     '↑ jump   ·   ↓ = LOW guard   ·   hold back = HIGH guard   ·   digits + ⏎ answer',
+     kp+' punch · '+kk+' kick · '+kp+'+'+kk+' throw · '+ks+' special — every swing spends AURA up front'
     ].forEach((s,i)=> txtO(s, W/2, 150+i*26, 12, '#b8c0da',{mono:true,sw:0}));
-    // THINGS TO TRY — the execution layer most players never find
-    txtO('THINGS TO TRY', W/2, 262, 14, '#ffd34d',{sw:0});
-    [['CANCEL', 'land a hit, then '+kk+' / '+ks+' in the CHAIN ▸ flash — a combo'],
-     ['BURST', 'being combo’d? '+ks+' while stunned breaks you free'],
-     ['PERFECT DODGE', 'red ! incoming — re-answer in the gold ⚡NOW window to slip + stagger'],
-     ['CHAIN FINISHER', 'type the answer EARLY — cash it between strings for a ×1.7 opener'],
-     ['TICK THROW', 'jab into their guard, then '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' — the grab beats holding']
-    ].forEach((r,i)=>{ const y=294+i*30;
-      txtO(r[0], W/2, y, 13, '#7ae8ff',{mono:true,sw:0});
-      txtO(r[1], W/2, y+15, 10.5, '#aab4d0',{mono:true,sw:0}); });
-    txtO('P  resume   ·   M  music', W/2, 428, 12, '#8a93b8',{mono:true,sw:0});
+    // THINGS TO TRY — the execution layer most players never find (v8 pristine pass: six rows, all code-true)
+    txtO('THINGS TO TRY', W/2, 254, 14, '#ffd34d',{sw:0});
+    [['CHAIN', 'land a hit, then '+kk+' / '+ks+' inside the CHAIN ▸ flash — the moves link'],
+     ['BURST', 'caught in a combo? type the red digit = FREE escape (once per round) · or '+ks+' = 40 AURA'],
+     ['SLIP', 'a tinted ! marks a strike — guard its height (↓ for blue ▼, back for orange ▲), then answer the quick problem to SLIP it'],
+     ['CHARGED', 'answer while your combo is running — your next blow lands ×1.7'],
+     ['TICK THROW', 'they keep blocking? jab their guard, then '+kp+'+'+kk+' — a THROW grabs straight through block'],
+     ['GAMBIT', 'some problems offer a wager — G doubles the pay, but a wrong answer wipes your bank']
+    ].forEach((r,i)=>{ const y=282+i*26;
+      txtO(r[0], W/2, y, 12.5, '#7ae8ff',{mono:true,sw:0});
+      txtO(r[1], W/2, y+13, 10, '#aab4d0',{mono:true,sw:0}); });
+    txtO('P  resume   ·   M  music', W/2, 446, 12, '#8a93b8',{mono:true,sw:0});
   }
   if(game.online && net.role==='guest') drawNetHealth();   // tell the guest when it's the network, not them
   if(game.trailerMode) drawTrailerOverlay();   // trailer letterbox + scene cross-fades over everything
@@ -6218,14 +6224,14 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
 }
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
-const TUTOR_STEPS=[
-  'Your aura is empty — you cannot strike. Answer the problem below (type it, press ⏎) to fill the bar.',
-  'Now strike. '+keyLabel(KEYS.punch)+' punches. Every blow spends aura, so keep answering to keep swinging.',
-  'Land a punch, then '+keyLabel(KEYS.kick)+' before the window closes — a cancel. Chains only flow from a confirmed hit.',
-  'You are being combo\'d. Press '+keyLabel(KEYS.special)+' while stunned to break free — a combo is an exchange, not a gift.',
-  'A red ! means he commits, and your answer clears. Guard the right height (↓ low / hold back = high) and re-answer in the gold ⚡NOW window to slip + stagger him — but a THROW blows through a slip, so TECH it.',
-  'SPECIALS are your identity — each fighter has three. You have aura for one: press '+keyLabel(KEYS.special)+'. It always fires the strongest tier you can afford.',
-  'You’ve got it: solve to power up, chain & burst, time the ⚡NOW solve to dodge, and spend a full bar on your strongest SPECIAL. Your first real fight begins…',
+const TUTOR_STEPS=[   // v8 pristine pass — each step one idea, every claim code-true
+  'Your AURA is empty — you cannot strike. Answer the problem below (type it, press ⏎) to fill the bar.',
+  'Now strike. '+keyLabel(KEYS.punch)+' punches. Every blow spends AURA, so keep answering to keep swinging.',
+  'Land a punch. The moment it hits, CHAIN ▸ flashes — press '+keyLabel(KEYS.kick)+' before it fades and the kick chains on. That is a COMBO.',
+  'He has you in a COMBO. Press '+keyLabel(KEYS.special)+' while stunned to BURST free — it spends 40 AURA. Or type the red 1-digit answer over your head: a FREE escape, once per round.',
+  'A ! over the foe means a strike is coming — and your typed answer wipes. Answer the new 1-digit problem before the blow lands: you SLIP it and stagger them.',
+  'Your SPECIAL: tap '+keyLabel(KEYS.special)+' and it fires the strongest tier your AURA can buy. Fire one now — then fire again on a fuller bar and feel the jump. HOLD '+keyLabel(KEYS.special)+' to pick a tier yourself.',
+  'That is the whole engine: answer to bank AURA, spend it to strike, chain on CHAIN ▸, BURST out of combos, answer in the NOW window to SLIP. Your first real fight begins.',
 ];
 function startTutorial(){
   // capture a SAFE fight to land on after the lesson (the boot enemy may be unset → default to a real ROSTER foe)
@@ -6263,16 +6269,16 @@ function tutorTick(){
     if(!E.attack && E.grounded && P.stun<=0 && P.iframes<=0 && game.tutorT%64===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 22); }
     if(P.stun>0 && (P.comboedHits||0)<2){              // script the chained state so the BURST escape is always reachable
       P.comboedHits=2; P.stun=Math.max(P.stun,42);
-      tip('burst','Being combo’d? Press '+keyLabel(KEYS.special)+' to BURST out (costs aura).');
+      tip('burstT','BURST — answer the red problem over your head for a FREE escape (once per round), or press '+keyLabel(KEYS.special)+' to pay 40 AURA.');
     }
     if((game.burstDone||0)>=1){ game.tutorStep=4; game.tutorT=0; announce('BURST!','#ffd34d'); }
-    else if(game.tutorT>960){ game.tutorStep=4; game.tutorT=0; announce('remember it.','#9fdcff'); }
+    else if(game.tutorT>960){ game.tutorStep=4; game.tutorT=0; announce('NEXT LESSON','#9fdcff'); }
   } else if(game.tutorStep===4){                        // PERFECT DODGE — timed; the answer relocks on his commit
     if(dist>168){ E.x += (P.x>E.x?1:-1)*1.3; }          // keep the dummy inside dodge range
     game.tutorT++;
     if(!E.attack && E.grounded && game.tutorT%96===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 92); SFX.charge(); } // a slow, readable telegraph
     if((game.stats.perfects||0)>=1){ game.tutorStep=5; game.tutorT=0; announce('PERFECT DODGE!','#ffd34d'); }
-    else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; announce('again, later.','#9fdcff'); }   // SOFT-LOCK GUARD
+    else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; announce('NEXT LESSON','#9fdcff'); }   // SOFT-LOCK GUARD
   } else if(game.tutorStep===5){                        // SPECIAL — the headline mechanic: fire a tier-1, then feel the jump on a full bar
     if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }          // keep the dummy reachable for melee/dash specials
     game.tutorT++;
