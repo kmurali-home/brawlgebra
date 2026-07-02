@@ -1530,7 +1530,7 @@ class Fighter {
     this.aura=22; this.auraShown=22; this.auraChipT=0; this.auraFlash=0;   // #2 scarcity: lower start so the economy bites early
     this.facing=facing||this.facing||1;
     this.attack=null; this.hitThisSwing=false;
-    this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0; this.slipActive=false; this.slipGuard='low';
+    this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0; this.dashT=0; this.slipActive=false; this.slipGuard='low';
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
@@ -1561,6 +1561,8 @@ class Fighter {
     if(this.dashCd>0 || !this.grounded || this.blocking || this.ko || this.stun>0) return;
     this.dashCd=22; this.vx=dir*11.5;
     this.dodgeT=Math.max(this.dodgeT,8);
+    if((dir>0)===(this.facing>0)) this.dashT=10;   // #2 a FORWARD dash opens a brief window: S = a lunging dash-attack poke (the neutral fencing tool)
+    else this.dashT=0;
     if((dir>0)!==(this.facing>0)){ this.iframes=Math.max(this.iframes,9); this.slipActive=false; } // backdash: FULL i-frames (not a committal solve-slip)
     dust(this.x,this.y,5,2.5); SFX.whoosh();
   }
@@ -1582,16 +1584,19 @@ class Fighter {
     if(!this.grounded) type='airkick';
     else if(type==='airkick') return false;
     const ov=this.char.atk&&this.char.atk[type];               // per-character identity normal
-    const def=ov? Object.assign({},ATK[type],ov) : ATK[type];
+    const dashAtk = type==='kick' && this.grounded && !cancelling && (this.dashT||0)>0;   // #2 S during a FORWARD dash = a lunging MID whiff-punishable poke — the neutral tool to fence with (so the whiff-punish loop can actually fire)
+    let def=ov? Object.assign({},ATK[type],ov) : ATK[type];
+    if(dashAtk) def=Object.assign({}, ATK.kick, {reach:132, wind:10, act:5, rec:22, dmg:11, heavy:false, guardLevel:'mid', hy:-72});
     if(!game.galaxy && !this.spend(ATK[type].cost)){ // STANDARD: every swing spends aura. GALAXY: attacks are FREE (the gate is your unlocked combos, not aura)
       if(this===game.player) tip('noaura','No aura — answer to power your strikes.');
       return false;
     }
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
-    const launcher = type==='kick' && this.grounded && this===game.player && (keys[KEYS.jump]||keys['arrowup']);   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
+    const launcher = !dashAtk && type==='kick' && this.grounded && this===game.player && (keys[KEYS.jump]||keys['arrowup']);   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
     const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=6;   // #8 JUST-frame: cancel in the last 6f of the window = a pure bonus (never a punish for missing) — one execution lever OFF the math
-    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just};
+    this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just, dash:dashAtk};
     this.hitThisSwing=false; SFX.whoosh();
+    if(dashAtk){ this.vx += this.facing*6.5; this.dashT=0; if(this===game.player) floatText(this.x,this.y-150,'DASH ▸','#7ae8ff',13); }
     if(just && this===game.player){ floatText(this.x,this.y-162,'JUST!','#9fe8ff',15); flash(0.10,'#bfefff'); }
     if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
     return true;
@@ -1790,7 +1795,7 @@ class Fighter {
     if(this.landT>0)this.landT--; if(this.blockHold>0)this.blockHold--;
     if(this.downed>0){ this.downed--; this.moveX=0; this.wantBlock=false; this.vx*=0.82;   // DOWNED: inert on the ground, then a safe getup-invuln rise, then a brief vulnerable wakeup (okizeme)
       if(this.downed===9){ this.iframes=Math.max(this.iframes,10); this.slipActive=false; if(this===game.player && (game.getupTaught||0)<3){ game.getupTaught=(game.getupTaught||0)+1; floatText(this.x,this.y-150,'GET UP','#ffd34d',13); } } }   // getup-invuln is FULL (safe rise), not a committal solve-slip
-    if(this.dashCd>0)this.dashCd--; if(this.dropT>0)this.dropT--;
+    if(this.dashCd>0)this.dashCd--; if(this.dropT>0)this.dropT--; if(this.dashT>0)this.dashT--;
     if(this.frozenT>0)this.frozenT--;
     if(this.missWobble>0)this.missWobble--;
     if(this.guardCrush>0)this.guardCrush--;
@@ -1840,7 +1845,7 @@ class Fighter {
     }
     if(full){
       // locomotion
-      const acc=(this.grounded?1.0:0.45)*this.char.speed;
+      const acc=(this.grounded?1.5:0.45)*this.char.speed;   // #2 faster ground walk (steady ~7-8px/f, was ~5) — enter/exit the poke band in under a second
       if(this.moveX && this.canAct() && !this.blocking){
         const back = (this.moveX>0)!==(this.facing>0);
         this.vx += this.moveX*acc*(back?0.72:1);
@@ -2743,7 +2748,7 @@ function startRound(){
     game.placements=[]; game.rumbleRank=null; game.rumbleWinner=null;
     for(const f of game.fighters) f.opp = nearestFoe(f) || (f===game.player?game.enemy:game.player);
   } else {
-    p.reset(WORLD_W/2-420, 1); e.reset(WORLD_W/2+420, -1); // wide spawn — see the whole war-field
+    p.reset(WORLD_W/2-240, 1); e.reset(WORLD_W/2+240, -1); // #2 TIGHTER spawn (was ±420) — start inside the fighting band so the whiff-punish loop fires; WORLD_W stays wide for the cinematic pit + zoner retreat room
     if(game.mode==='story' && game.storyCh===STORY.length-1 && !game.galaxy && !game.practice){   // SOLOMON FINALE — Lessing fights at your side
       if(!game.ally) game.ally=new Fighter({name:'LESSING', x:WORLD_W/2-640, facing:1, gi:ROSTER[2].gi, trim:ROSTER[2].trim, char:ROSTER[2], isCPU:true});
       game.ally.reset(WORLD_W/2-640, 1); game.ally.hp=99999; game.ally.hpShown=99999; game.ally.aiThink=90;
