@@ -1474,7 +1474,7 @@ const SP_KITS={
   james:   [ {name:'REDUCE',      kind:'spear', fast:true},      {name:'CANCEL',        kind:'slam', guard:true},          {name:'RESOLUTION',            kind:'sigil', big:true} ],   // SOLOMON (the Equals): distinct '='-themed kit so the marquee unlock is not a starter reskin
 };
 const STYLE_BY_ID={ initiate:'ALL-ROUNDER', mauler:'BRAWLER', ember:'RUSHDOWN', frost:'ZONER', oracle:'GLASS CANNON', james:'THE APEX' };   // one-word play-style read for the select card — the real differences are stats + specials now, not math
-const SIG_BY_ID={ mauler:'ARMOR = T3 OVERFLOW', ember:'CHAIN LINKS = +AURA', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN', initiate:'WIDE JUST WINDOW' };   // v3 #8 EVERY fighter has a signature VERB — the mastery hook, surfaced so a picker knows what to master
+const SIG_BY_ID={ mauler:'ARMOR = T3 OVERFLOW', ember:'CHAIN LINKS = +AURA', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN', initiate:'JUST = WIDE + REFUNDS' };   // v3 #8 EVERY fighter has a signature VERB — the mastery hook, surfaced so a picker knows what to master
 function justWin(f){ return (f && f.char && f.char.id==='initiate')? 8 : 6; }   // SIGNATURE · INITIATE 'THE STUDENT' — learns fastest: a wider just-frame window, costs nothing
 function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
 function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
@@ -1637,6 +1637,7 @@ class Fighter {
     this.hitThisSwing=false; SFX.whoosh();
     if(dashAtk){ this.vx += this.facing*6.5; this.dashT=0; if(this===game.player) floatText(this.x,this.y-150,'DASH ▸','#7ae8ff',13); }
     if(just){ const o=this.opp; if(o && o.stun>0) o.stun+=12; }   // v3 #6 JUST GLUE (v4: +12) — the tight cancel EXTENDS the foe's hitstun so even the LATEST just-cancel's follow-up connects as a true string
+    if(just && this.char.id==='initiate' && (this._stuRef||0)<2){ this._stuRef=(this._stuRef||0)+1; const rf=Math.max(2,Math.round((def.cost||ATK[type].cost||5)*0.5)); this.addAura(rf); if(this===game.player) floatText(this.x,this.y-138,'+'+rf+' STUDIED','#d8e0f0',12); }   // v5 #14 SIGNATURE · INITIATE — a JUST link refunds half the move's cost (cap 2/string): precision is the student's economy, and you can FEEL it
     if(just && this===game.player){ floatText(this.x,this.y-162,'JUST!','#9fe8ff',15); flash(0.10,'#bfefff'); }
     if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
     return true;
@@ -2699,9 +2700,9 @@ function resolveHits(att,def){
     def._jitT=Math.max(def._jitT||0, Math.max(4,hitstop));   // v5 #15 the defender vibrates through the freeze (render-side)
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6+((att.attack&&att.attack.just)?4:0)); }  // landing hits charges FOCUS (+JUST credit only on a clean hit)
-    def.streak=0; def.combo=0; def.chargedHit=false; def._carry=0; // getting tagged breaks focus AND your combo (and Addison's carry count)
+    def.streak=0; def.combo=0; def.chargedHit=false; def._carry=0; def._stuRef=0; // getting tagged breaks focus AND your combo (and the per-string verb budgets)
     if(wasVuln) att.combo=(att.combo||0)+1;   // v3 #6 HONEST COMBO — count only hits the foe couldn't act between; a recovered foe re-tagged = a NEW string
-    else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; }   // new string = a fresh CARRY budget for Addison
+    else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; att._stuRef=0; }   // new string = fresh per-string verb budgets (Addison's CARRY, the Initiate's refunds)
     att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
     if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5); att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — +8 aura + forced knockdown (the air/ground RPS runs both ways)
     if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
@@ -2943,6 +2944,7 @@ function startMatch(){
   game.opStats={}; game.missQ=[]; game.focusOp=null; game.burstChallenge=null; game.rushMeter=0; game.rush=null;  // per-match: mastery + spaced-rep + op-focus + math-burst + SOLVE RUSH
   game.galaxyBurstsDone=0; game.galaxyBest=0; game.galaxyKit=buildGalaxyKit(game.galaxyLevel||1);   // GALAXY BRAIN: fresh randomized combo kit (scales w/ level) + best burst-solve count
   game.hpFired={}; game.tauntCd=0; game.overflow=0; game.lastSolveOp=null;   // per-match: reset mid-fight beats, banter cooldown, and per-foe-rule state
+  { const gid=game.enemy&&game.enemy.char&&game.enemy.char.id; game._glossShow = !!(gid && VS_GLOSS[gid] && (glossSeen[gid]=(glossSeen[gid]||0)+1)<=3); }   // v5 #14 matchup gloss — first 3 encounters per foe per session
   if(game.enemy) game.enemy.read={block:0,punish:0,dodge:0};   // fresh adaptive-offense reads each match
   SFX.round();
   startRound();
@@ -4331,6 +4333,14 @@ function drawBanners(){
     ctx.restore(); ctx.globalAlpha=1;
   }
 }
+const VS_GLOSS={   // v5 #14 the matchup, taught in one line — shown the first 3 matches against each foe
+  frost:'his blocked lance still pays him — blocking is losing ground. walk him down.',
+  mauler:'his armor eats one strike, and feeds his verdict. THROW him instead.',
+  oracle:'every answer sharpens him. break the streak and you break the man.',
+  ember:'every touch repays her. do not trade — make her whiff.',
+  james:'he counts as fast as you do. deny him the quiet to count in.'
+};
+const glossSeen={};   // per-session encounter counts
 function drawVS(t){ // round-1 splash — names crash in from the wings
   const e1=eoCubic(clamp(t*1.2,0,1));
   const lx=lerp(-340,256,e1), rx=lerp(W+340,W-256,e1);
@@ -4349,6 +4359,8 @@ function drawVS(t){ // round-1 splash — names crash in from the wings
   txtO('ROUND 1', W/2, 292, 13, '#8a93b8', {mono:true,sw:0});
   if(game.enemy.char.quip && t>0.5)
     txtO('“'+game.enemy.char.quip+'”', W/2, 318, 12, '#cabbe0',{mono:true,sw:0,alpha:clamp((t-0.5)*3,0,1)});
+  if(game._glossShow && VS_GLOSS[game.enemy.char.id] && t>0.62)
+    txtO('▸ '+VS_GLOSS[game.enemy.char.id], W/2, 344, 12, '#7ae8ff',{mono:true,sw:0,alpha:clamp((t-0.62)*3,0,1)});   // v5 #14 the matchup gloss — the roster's best argument, finally stated
 }
 function diffRect(i){ return {x:W/2-186+i*128, y:466, w:118, h:18}; }
 function startRect(){ return {x:W/2-150, y:446, w:300, h:50}; }
