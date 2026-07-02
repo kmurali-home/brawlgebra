@@ -1479,6 +1479,7 @@ const SP_KITS={
 };
 const STYLE_BY_ID={ initiate:'ALL-ROUNDER', mauler:'BRAWLER', ember:'RUSHDOWN', frost:'ZONER', oracle:'GLASS CANNON', james:'THE APEX' };   // one-word play-style read for the select card — the real differences are stats + specials now, not math
 const SIG_BY_ID={ mauler:'ARMOR = T3 OVERFLOW', ember:'CHAIN LINKS = +AURA', frost:'BLOCKED = +METER', oracle:'STREAK 5 = +CHAIN', initiate:'JUST = WIDE + REFUNDS' };   // v3 #8 EVERY fighter has a signature VERB — the mastery hook, surfaced so a picker knows what to master
+const SIG2_BY_ID={ mauler:'KICK ⇢ GRAB', ember:'KICK ⇢ JAB RESTAND', frost:'LANCE ⇢ FADE', oracle:'ASCENDED P·P·P', initiate:'SPECIAL ⇢ SPECIAL' };   // v6 #9 the EXCLUSIVE cancel node — the route only this fighter owns
 function justWin(f){ return (f && f.char && f.char.id==='initiate')? 8 : 6; }   // SIGNATURE · INITIATE 'THE STUDENT' — learns fastest: a wider just-frame window, costs nothing
 function spKitFor(c){ return SP_KITS[c&&c.id] || SP_KITS.initiate; }
 function bestSpecialTier(f){   // highest tier (0..2) the current aura affords, else -1
@@ -1565,7 +1566,7 @@ class Fighter {
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
-    this.overflowT=0; this._carry=0; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false; this._dHoldAt=0;   // v3 #8 signature-verb state + v4 CPU-parity state + v5 #3 tier-charge
+    this.overflowT=0; this._carry=0; this._stuRef=0; this._ssUsed=false; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false; this._dHoldAt=0; this._lastDash=false;   // v3 #8 signature-verb state + v4 CPU-parity state + v5 #3 tier-charge + v6 #9 node budgets
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
     this.guardMax=100; this.guard=100; this.guardCrush=0; this.guardRestT=0; this._bdashAt=-999;  // drainable guard — sustained pressure cracks a turtle; v5 #5 guard-rest clock + backdash pricing stamp
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
@@ -1593,6 +1594,11 @@ class Fighter {
   tryDash(dir){
     if(this.dashCd>0 || !this.grounded || this.blocking || this.ko || this.stun>0 || (this.blockstunT||0)>0 || (this.focusT||0)>0) return;
     const back=(dir>0)!==(this.facing>0);
+    if(this.attack){   // v6 #9 mid-attack dashes are gone (was a silent quirk) — EXCEPT the zoner's signature exit:
+      if(this.char.id==='frost' && this.attack.type==='special' && this.attack.ph==='rec' && back && !this.attack.blockCancel){
+        this.attack=null; if(this===game.player) floatText(this.x,this.y-158,'LANCE FADE','#7ae8ff',12);   // SIGNATURE NODE · LESSING — cancel lance recovery into a backdash: fire, fade, re-set the range (only he exits his own commitment)
+      } else return;
+    }
     const bdashFree = !back || game.frame-(this._bdashAt||-999)>180;   // v5 #5 the FIRST backdash in ~3s keeps its free i-frames; repeats are PRICED (4 aura) — spamming out of every exchange has a cost curve
     this.dashCd = (back && !bdashFree)? 28 : 22;
     this.vx=dir*11.5;
@@ -1610,10 +1616,14 @@ class Fighter {
     // GALAXY: free-flowing target combos — chain any normal into another (or special) ANY time mid-move, NO hit-confirm (max accessible)
     if(game.galaxy && (a.type==='punch'||a.type==='kick'))
       return type==='punch'||type==='kick'||type==='special';
+    if(type==='special' && this.char.id==='initiate' && a.type==='special' && a.ph==='rec' && !this._ssUsed) return true;   // v6 #9 SIGNATURE NODE · INITIATE — once per string his kit chains into ITSELF (special>special out of recovery): the student re-derives the proof
     if(!(a.cancelOK>0)) return false;
     if(type==='special') return (a.type==='punch' || a.type==='kick') && !a.blockCancel;   // damage/knockdown ender — but NO free special-cancel on block (a blocked window only frame-traps into normals)
+    if(type==='throw')   return this.char.id==='mauler' && a.type==='kick' && !a.blockCancel;   // v6 #9 SIGNATURE NODE · MAXIMILIAN — K>THROW command-ender: the confirmed crusher kick drags them into the grab (feeds OVERFLOW; clean hits only, and the cancelling attacker gets NO tech stamp)
     if(type==='kick')    return a.type==='punch';                       // P>K (and up+K = the launcher route)
-    if(type==='punch'){ const cap=(this.char.id==='oracle' && this.streak>=5)?3:2; return a.type==='punch' && (this.combo||0)<cap; }  // one P>P extension; SIGNATURE · KRISHNA ascended (streak>=5) unlocks a 2nd P>P — only he extends long chains
+    if(type==='punch'){
+      if(this.char.id==='ember' && a.type==='kick' && !a.blockCancel && (this._carry||0)<2) return true;   // v6 #9 SIGNATURE NODE · ADDISON — K>P RESTAND: only she turns the kick back into a jab (spends a CARRY slot via her link hook)
+      const cap=(this.char.id==='oracle' && this.streak>=5)?3:2; return a.type==='punch' && (this.combo||0)<cap; }  // one P>P extension; SIGNATURE · KRISHNA ascended (streak>=5) unlocks a 2nd P>P — only he extends long chains
     return false;
   }
   tryAttack(type){
@@ -1650,7 +1660,8 @@ class Fighter {
     if(this.ko) return false;
     if(!this.attack && this.grounded && (this.downed||0)<=0) this.throwTechAt=game.frame;   // v3 #2 TECH stamp = DEFENSIVE contexts only (works in block/hitstun — tick throws are techable — but a mid-swing attacker gets no free tech option-select)
     if(this.stun>0||this.hurtT>0||(this.blockstunT||0)>0||(this.focusT||0)>0||(this.downed||0)>0) return false;   // v3 #2 no grabbing from the floor / out of stun
-    if(this.attack||!this.grounded) return false;
+    const thrCancel = this.attack && this.grounded && this.canCancelInto('throw');   // v6 #9 MAXIMILIAN's K>throw command-ender rides the confirm window
+    if((this.attack && !thrCancel)||!this.grounded) return false;
     if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No aura to throw — but you can still TECH one (A+S when grabbed).'); return false; }
     this.attack={type:'throw', kind:'throw', ph:'wind', t:7, def:{wind:7, act:2, rec:22, dmg:14, reach:52}, tel:0, fuse:7};
     this.hitThisSwing=false; SFX.whoosh();
@@ -1697,6 +1708,7 @@ class Fighter {
   trySpecial(tierPick){
     if(!this.grounded) return false;
     const cancelling = this.attack && this.canCancelInto('special');   // cancel a confirmed normal into the special
+    if(cancelling && this.attack.type==='special'){ this._ssUsed=true; if(this===game.player) floatText(this.x,this.y-158,'RE-DERIVED','#d8e0f0',12); }   // v6 #9 the Initiate's special>special node spends its once-per-string budget
     const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=justWin(this);   // #8 JUST-frame on the special ender (last ~6f of the window; Initiate 8f)
     if(cancelling && this.attack && this.char.id==='ember' && !this.attack.blockCancel && (this._carry||0)<2){ this._carry=(this._carry||0)+1; this.addAura(3); if(this===game.player) floatText(this.x,this.y-148,'+3 CARRY','#46e08a',12); }   // ADDISON: the special ender is a chain link too
     if(this.attack? !cancelling : !this.canAct()) return false;
@@ -2739,7 +2751,7 @@ function resolveHits(att,def){
     if(def._streakShield){ def._streakShield=false; floatText(def.x,def.y-158,'STREAK HELD','#ff7ac0',12); } else def.streak=0;   // v5 #13 a won gambit's shield spends itself here
     def.combo=0; def.chargedHit=false; def._carry=0; def._stuRef=0; // getting tagged breaks your combo (and the per-string verb budgets)
     if(wasVuln) att.combo=(att.combo||0)+1;   // v3 #6 HONEST COMBO — count only hits the foe couldn't act between; a recovered foe re-tagged = a NEW string
-    else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; att._stuRef=0; }   // new string = fresh per-string verb budgets (Addison's CARRY, the Initiate's refunds)
+    else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; att._carry=0; att._stuRef=0; att._ssUsed=false; }   // new string = fresh per-string verb budgets (Addison's CARRY, the Initiate's refunds + re-derive)
     att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
     if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5); att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — +8 aura + forced knockdown (the air/ground RPS runs both ways)
     if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30);
@@ -5313,6 +5325,7 @@ function drawSelect(){
         rr(x+26, y+300, cw-52, 20, 6); ctx.fillStyle=sel?'rgba(255,211,77,0.16)':'rgba(120,160,220,0.12)'; ctx.fill();
         txtO(st, x+cw/2, y+314, 10, (c.gi||'#8fd8f8'),{mono:true,sw:0}); } }
     { const sg=SIG_BY_ID[c.id]; if(sg) txtO('◆ '+sg, x+cw/2, y+332, 8, sel?(c.gi||'#ffd34d'):'#9aa6c8',{mono:true,sw:0}); }   // signature-verb read — what to learn on this fighter
+    { const s2=SIG2_BY_ID[c.id]; if(s2) txtO('◇ '+s2, x+cw/2, y+344, 7.5, sel?'#cdd6ee':'#7a86a8',{mono:true,sw:0}); }   // v6 #9 the exclusive route
     // (blurb dropped from the card — the tagline + SPECIALS kit carry identity now, and the 5-card layout is too narrow for it)
     if(!game.mode2p){ // best grade at this difficulty (versus or tower, whichever ranks higher)
       const b1=bests[c.id+'_'+DIFF.level], b2=bests['tower_'+c.id+'_'+DIFF.level];
