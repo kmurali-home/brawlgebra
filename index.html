@@ -1551,7 +1551,7 @@ class Fighter {
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
     this.overflowT=0; this._carry=0; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false; this._dHoldAt=0;   // v3 #8 signature-verb state + v4 CPU-parity state + v5 #3 tier-charge
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
-    this.guardMax=100; this.guard=100; this.guardCrush=0;  // drainable guard — sustained pressure cracks a turtle
+    this.guardMax=100; this.guard=100; this.guardCrush=0; this.guardRestT=0; this._bdashAt=-999;  // drainable guard — sustained pressure cracks a turtle; v5 #5 guard-rest clock + backdash pricing stamp
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
     this.blocking=false; this.flashT=0; this.landT=0; this.walkPh=0;
     this.animT=frnd(0,99); this.P=null; this.trail=[];
@@ -1576,11 +1576,17 @@ class Fighter {
   }
   tryDash(dir){
     if(this.dashCd>0 || !this.grounded || this.blocking || this.ko || this.stun>0 || (this.blockstunT||0)>0 || (this.focusT||0)>0) return;
-    this.dashCd=22; this.vx=dir*11.5;
+    const back=(dir>0)!==(this.facing>0);
+    const bdashFree = !back || game.frame-(this._bdashAt||-999)>180;   // v5 #5 the FIRST backdash in ~3s keeps its free i-frames; repeats are PRICED (4 aura) — spamming out of every exchange has a cost curve
+    this.dashCd = (back && !bdashFree)? 28 : 22;
+    this.vx=dir*11.5;
     this.dodgeT=Math.max(this.dodgeT,8);
-    if((dir>0)===(this.facing>0)) this.dashT=10;   // #2 a FORWARD dash opens a brief window: S = a lunging dash-attack poke (the neutral fencing tool)
+    if(!back) this.dashT=10;   // #2 a FORWARD dash opens a brief window: S = a lunging dash-attack poke (the neutral fencing tool)
     else this.dashT=0;
-    if((dir>0)!==(this.facing>0)){ this.iframes=Math.max(this.iframes,9); this.slipActive=false; } // backdash: FULL i-frames (not a committal solve-slip)
+    if(back){ this._bdashAt=game.frame;
+      if(bdashFree || game.galaxy || this.spend(4,true)){ this.iframes=Math.max(this.iframes,9); this.slipActive=false; }   // paid repeat keeps the skill i-frames
+      else if(this===game.player) floatText(this.x,this.y-150,'RAW backdash — no aura','#8a93b8',11);   // broke repeat = movement only, no invuln
+    }
     dust(this.x,this.y,5,2.5); SFX.whoosh();
   }
   canCancelInto(type){   // a HIT-CONFIRMED normal can chain into a stronger move within its cancel window
@@ -1771,7 +1777,8 @@ class Fighter {
     lvl = lvl||'mid';
     const stanceOK = lvl==='mid' || (lvl==='low' && (this.guardStance||'low')==='low') || (lvl==='high' && this.guardStance==='high');   // right guard for the height? wrong guess = the block whiffs
     if(this.blocking && stanceOK && !this.ko && !unblock){
-      this.guard = Math.max(0, (this.guard||0) - (heavy?34:18));   // every blocked hit chips your guard
+      this.guard = Math.max(0, (this.guard||0) - (heavy?34:18)*(this.blockstunT>0?1.6:1));   // every blocked hit chips your guard — v5 #5 hits eaten INSIDE a blockstring drain 1.6x (a held turtle watches the meter travel toward crush within two touches)
+      this.guardRestT=45;   // v5 #5 GUARD CLOCK — no regen for ~0.75s after any blocked contact: turtling has a visible cost curve now
       if(this.guard<=0){   // GUARD CRUSH — the turtle cracks: this hit lands clean + you can't re-block for a beat
         this.guardCrush=64; this.blocking=false;
         floatText(this.x,this.y-184,'GUARD CRUSHED!','#ff7a6a',20); sparks(this.x,this.y-86,14,'#ff7a6a',6); flash(0.12,'#ffb0a0'); SFX.heavy();
@@ -1848,7 +1855,8 @@ class Fighter {
     if(this.frozenT>0)this.frozenT--;
     if(this.missWobble>0)this.missWobble--;
     if(this.guardCrush>0)this.guardCrush--;
-    if(!this.blocking && (this.guard||0)<this.guardMax) this.guard=Math.min(this.guardMax,(this.guard||0)+0.5);  // guard recovers when you're not turtling
+    if(this.guardRestT>0) this.guardRestT--;   // v5 #5 the guard clock ticks
+    if(!this.blocking && (this.guardRestT||0)<=0 && (this.guard||0)<this.guardMax) this.guard=Math.min(this.guardMax,(this.guard||0)+0.5);  // guard recovers when you're not turtling — and not within the post-contact rest window
     if(this.dodgeCd>0)this.dodgeCd--;
     if(this.fnChargeT>0){ this.fnChargeT--; if(this.fnChargeT<=0) this.fnCharge=null; } // armed strike decays
     if(this.chipDelay>0) this.chipDelay--;
@@ -2433,15 +2441,15 @@ function controlCPU(c){
   }
   if(!c.attack) c._route=null;
   // (b) blocked-normal PRESSURE — use the cancelOK=10 window it already receives: a P>P frame trap, or book a tick THROW for right after recovery
-  if(c.attack && c.attack.blockCancel && (c.attack.cancelOK||0)>0 && !c._pressed){
-    c._pressed=true;
+  if(c.attack && c.attack.blockCancel && (c.attack.cancelOK||0)>0 && (c._pressed||0) < (DIFF.level>=2? 2:1)){   // v5 #5 hard tier extends blocked pressure to 2 links — the meter visibly travels toward crush
+    c._pressed=(c._pressed||0)+1;
     if(Math.random() < 0.3+0.18*(DIFF.level||0)){
       if(Math.random()<0.42){ c._tick=game.frame+rnd(16,24); }   // the tick-throw read — beats a defender who just holds
       else { c.tryAttack('punch');   // the frame trap — beats a defender who mashes
         if((game.trapTaught||0)<2){ game.trapTaught=(game.trapTaught||0)+1; tip('trap','FRAME TRAP — HOLD your guard through the string; mash and you get clipped. But a THROW beats holding: TECH it ('+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+').'); } }
     }
   }
-  if(!c.attack) c._pressed=false;
+  if(!c.attack) c._pressed=0;
   // (d) WAKEUP VARIANCE — the CPU's knockdown is a read for YOU too: sometimes a delayed rise (beats your timed meaty), sometimes a paid reversal (beats it outright — bait it)
   if((c.downed||0)>0){
     if(!c._wakePlan){ const r=Math.random(); c._wakePlan = r<0.2? 'delay' : (r < 0.2+0.15*(DIFF.level||0)? 'rev' : 'norm');
