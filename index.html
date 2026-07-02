@@ -1258,7 +1258,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
       const dmg=a.def.dmg||14;
       o.hp=Math.max(0, o.hp-dmg); o.chipDelay=0;
       o.stun=Math.max(o.stun||0, 32); o.hurtT=Math.max(o.hurtT||0, 22); o.attack=null;
-      o.vy=-6.5; o.grounded=false; o.vx=(o.x<f.x?-1:1)*3.2; o.streak=0; o.combo=0;
+      o.vy=-6.5; o.grounded=false; o.vx=(o.x<f.x?-1:1)*3.2; o.streak=0; o.combo=0; o.knockingDown=true;
       floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.32); SFX.heavy(); hitstop=Math.max(hitstop,5);
       if(f===game.player) game.stats.dmg+=dmg;
       if(o.hp<=0 && typeof lethal==='function') lethal(o, true);
@@ -1285,7 +1285,7 @@ function fireSpecial(f,a){
     for(const o of targets){
       if(!o.ko && Math.abs(o.x-f.x)<(big?178:160) && o.y>GROUND-170){
         const res=o.takeHit(dmg, o.x<f.x?-1:1, true, guard);   // specials deal the FLAT tier damage — identical across fighters (dmgMul is for normal attacks only)
-        if(res==='hit' && launch){ o.vy=-15; o.grounded=false; o.stun=Math.max(o.stun,34); o.dizzy=Math.max(o.dizzy,88); floatText(o.x,o.y-204,'LAUNCHED',col,16); }
+        if(res==='hit' && launch){ o.vy=-15; o.grounded=false; o.stun=Math.max(o.stun,34); o.dizzy=Math.max(o.dizzy,88); o.knockingDown=true; floatText(o.x,o.y-204,'LAUNCHED',col,16); }
         if(res==='hit' && o.hp<=0) lethal(o,true);
       }
     }
@@ -1531,6 +1531,7 @@ class Fighter {
     this.stun=0; this.hurtT=0; this.dizzy=0; this.iframes=0; this.dodgeT=0;
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
+    this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
     this.guardMax=100; this.guard=100; this.guardCrush=0;  // drainable guard — sustained pressure cracks a turtle
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
     this.blocking=false; this.flashT=0; this.landT=0; this.walkPh=0;
@@ -1544,7 +1545,7 @@ class Fighter {
     this.updatePose();
   }
   get ko(){ return this.hp<=0; }
-  canAct(){ return !this.ko && this.stun<=0 && !this.attack && this.landT<=2; }
+  canAct(){ return !this.ko && this.stun<=0 && !this.attack && this.landT<=2 && (this.downed||0)<=0; }
 
   tryJump(){
     if(!this.grounded || !this.canAct()) return false;
@@ -1763,6 +1764,8 @@ class Fighter {
     if(this.hurtT>0)this.hurtT--; if(this.dizzy>0)this.dizzy--;
     if(this.flashT>0)this.flashT--; if(this.dodgeT>0)this.dodgeT--;
     if(this.landT>0)this.landT--; if(this.blockHold>0)this.blockHold--;
+    if(this.downed>0){ this.downed--; this.moveX=0; this.wantBlock=false; this.vx*=0.82;   // DOWNED: inert on the ground, then a safe getup-invuln rise, then a brief vulnerable wakeup (okizeme)
+      if(this.downed===9){ this.iframes=Math.max(this.iframes,10); if(this===game.player && (game.getupTaught||0)<3){ game.getupTaught=(game.getupTaught||0)+1; floatText(this.x,this.y-150,'GET UP','#ffd34d',13); } } }
     if(this.dashCd>0)this.dashCd--; if(this.dropT>0)this.dropT--;
     if(this.frozenT>0)this.frozenT--;
     if(this.missWobble>0)this.missWobble--;
@@ -1832,6 +1835,7 @@ class Fighter {
       this.floorY=floorY;
       if(this.y>=floorY){
         if(!this.grounded){ this.landT=7; dust(this.x,floorY,6,2.2); SFX.land();
+          if(this.knockingDown){ this.downed=30; this.knockingDown=false; this.attack=null; this.landT=0; this.vx*=0.4; dust(this.x,floorY,12,3.6); addTrauma(0.22); }   // KNOCKDOWN — land into a DOWNED state (getup + a wakeup window), not straight back to neutral
           // only cut the airkick's RECOVERY tail on touchdown — never its wind/act. Otherwise a player
           // who paid airkick aura then landed mid-windup gets no swing (paid cost, no hitbox ever goes live).
           // Letting wind→act finish on the ground honors the paid-for swing (it reads as a low kick).
@@ -2215,7 +2219,8 @@ function drawFighter(f){
     ctx.beginPath(); ctx.ellipse(f.x,f.y-70,34,76,0,0,7); ctx.fill();
     ctx.globalAlpha=1;
   }
-  const koAng = (f.ko && !f.daze && !f.dissolving)? Math.PI/2*0.96*bounce(f.koP) : 0;
+  const koAng = (f.ko && !f.daze && !f.dissolving)? Math.PI/2*0.96*bounce(f.koP)
+              : ((f.downed||0)>0 ? Math.PI/2*0.78 : 0);   // DOWNED = lying on the ground (reads as a knockdown; rises as downed ticks out)
   if(f.ko && !f.daze && !f.dissolving && !f.koDust && f.koP>0.38){ f.koDust=true; dust(f.x,GROUND,12,3.4); addTrauma(0.35); }
   if(!f.gone){ // back-light rim halo — separates the fighter from the dark backdrop (the 'lit' look)
     ctx.save(); ctx.globalCompositeOperation='lighter';
@@ -2486,7 +2491,7 @@ function resolveHits(att,def){
     if(overclocked){ ring(cx,cy,'#ffd34d',46,4); floatText(cx,cy-30,'◆',('#ffd34d'),20); }
     if(gcombo){ const big=gcombo>=3; flash(0.22,'#ffd9f0'); addTrauma(0.45+gcombo*0.06); ring(cx,cy, big?'#ff7ac0':'#ffd34d', 70+gcombo*16, 7); slowmo(240,0.4);
       floatText(def.x,def.y-212, '✦ COMBO ×'+gcombo, big?'#ff7ac0':'#ffd34d', 22+Math.min(8,gcombo*2));
-      if(att.attack && att.attack.galaxyLaunch){ def.vy=-13; def.grounded=false; def.stun=Math.max(def.stun,34); def.dizzy=Math.max(def.dizzy,80); } }  // bigger combos launch
+      if(att.attack && att.attack.galaxyLaunch){ def.vy=-13; def.grounded=false; def.stun=Math.max(def.stun,34); def.dizzy=Math.max(def.dizzy,80); def.knockingDown=true; } }  // bigger combos launch
     hitstop=Math.max(hitstop, hb.heavy?8:5);
     addTrauma(hb.heavy?0.45:0.25);
     cam.kickX = dir*(hb.heavy?5:2.5);
