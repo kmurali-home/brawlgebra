@@ -1603,6 +1603,7 @@ class Fighter {
     this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just, dash:dashAtk, antiAir};
     this.hitThisSwing=false; SFX.whoosh();
     if(dashAtk){ this.vx += this.facing*6.5; this.dashT=0; if(this===game.player) floatText(this.x,this.y-150,'DASH ▸','#7ae8ff',13); }
+    if(just){ const o=this.opp; if(o && o.stun>0) o.stun+=8; }   // v3 #6 JUST GLUE — the tight cancel EXTENDS the foe's hitstun, so the execution reward never breaks the true string it earned
     if(just && this===game.player){ floatText(this.x,this.y-162,'JUST!','#9fe8ff',15); flash(0.10,'#bfefff'); }
     if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
     return true;
@@ -2243,6 +2244,11 @@ function drawFighter(f){
     ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 28, 72, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
     if(f===game.enemy && !game.mode2p) txtO('▸ OPEN', f.x, f.y-180, 11, '#ffd34d', {mono:true,sw:0});
   }
+  // v3 #6 JUST-window tell — a gold shimmer on the attacker in the LAST 6f of the cancel window: the drillable timing, visible instead of memorized
+  if(f.attack && f.attack.cancelOK>0 && f.attack.cancelOK<=6 && !f.attack.blockCancel && !f.ko){
+    ctx.save(); ctx.globalAlpha=0.34+0.22*Math.sin(game.frame*0.9); ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 26, 70, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
+  }
   // block-stance readout — the high/low is unreadable without knowing your own guard height
   if(f===game.player && f.blocking && !game.mode2p){
     const hi=f.guardStance==='high';
@@ -2366,6 +2372,7 @@ function controlCPU(c){
   // COMBO ESCAPE — once you've chained it a few hits, the foe breaks out after a difficulty-scaled window (learnable: you learn how long YOUR combo lasts before it bursts)
   if((c.comboedHits||0)>=2 && c.stun>0){
     c.burstT=(c.burstT||0)+1;
+    if(c.burstT===Math.max(1,cfg.burstReact-10)){ floatText(c.x,c.y-198,'BURST?','#ffd34d',15); ring(c.x,c.y-90,'#ffd34d',44,3); c.flashT=Math.max(c.flashT||0,4); }   // v3 #6 TELEGRAPH — 10f warning: end your string NOW and the whiffed burst is punishable (a read, not a silent confiscation)
     if(c.burstT>=cfg.burstReact && c.burst()){ c.burstT=0; return; }
   } else c.burstT=0;
   // MATH-ECONOMY MIRROR — when disengaged + low on aura the CPU stops to "solve" (a visible, whiff-punishable refuel beat you can rush)
@@ -2553,6 +2560,7 @@ function resolveHits(att,def){
   if(hb.x<bd.x+bd.w && hb.x+hb.w>bd.x && hb.y<bd.y+bd.h && hb.y+hb.h>bd.y){
     att.hitThisSwing=true;
     const dir = def.x<att.x?-1:1;
+    const wasVuln = def.stun>0 || !def.grounded || (def.downed||0)>0 || !!def.knockingDown;   // v3 #6 captured BEFORE the hit lands — was the foe still reeling (a TRUE string) or had they recovered (a reset)?
     let dmg=hb.dmg, ambush=false;
     // math streak sharpens strikes (any human fighter)
     dmg += Math.min(3,Math.floor(att.streak/3))*(hb.type==='special'?2:1)*att.char.streakMul;
@@ -2563,7 +2571,7 @@ function resolveHits(att,def){
     // aura was already spent up front when the swing started, so a landed hit is pure payoff
     // COMBO: stringing hits scales damage; a hit charged by a mid-combo solve becomes a CHAIN FINISHER
     let chain=false;
-    if(att.combo>0) dmg *= 1 + 0.10*Math.min(att.combo,5);
+    if(att.combo>0) dmg *= Math.max(0.65, 1 - 0.07*Math.min(att.combo,5));   // v3 #6 mild PRORATION — strings decay instead of snowballing (no reverse-proration); the payoff levers are the ENDERS: chain x1.7, the special, the launcher's aura refund
     if(att.chargedHit){ dmg *= 1.7; chain=true; att.chargedHit=false; }
     let overclocked=false;
     if((att.overclock||0)>game.frame){ dmg *= 1.25; overclocked=true; att.overclock=0; }  // OVERCLOCK — fast-solve bonus cashed on the swing
@@ -2573,7 +2581,7 @@ function resolveHits(att,def){
     if(def.attack && def.attack.ph==='rec' && hb.type!=='special'){ punish=true; dmg *= 1.3; }   // WHIFF-PUNISH: catch a foe in the recovery of their own swing — reward the read
     const airHit = !def.grounded && !!def.knockingDown;   // hitting a LAUNCHED (juggled) foe
     if(airHit) dmg *= Math.pow(0.72, def.airHits||0);     // JUGGLE decay — each extra air hit does less (no infinite juggle)
-    if(att.attack && att.attack.just){ dmg *= 1.2; if(att===game.player) game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+4); }   // #8 JUST-frame cancel — precise late-cancel timing pays off (a skill lever OFF the math)
+    if(att.attack && att.attack.just) dmg *= 1.2;   // #8 JUST-frame cancel — precise late-cancel timing pays off (a skill lever OFF the math; meter credit moved to the CLEAN-hit path so a blocked JUST earns nothing)
     dmg = Math.round(dmg);
     const res=def.takeHit(dmg,dir,hb.heavy,false,hb.guardLevel);
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
@@ -2587,11 +2595,13 @@ function resolveHits(att,def){
     if(punish){ att.addAura(14); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window: fence to earn aura, don't turtle to bank it
       floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
-    if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6); }  // landing hits charges FOCUS
+    if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6+((att.attack&&att.attack.just)?4:0)); }  // landing hits charges FOCUS (+JUST credit only on a clean hit)
     def.streak=0; def.combo=0; def.chargedHit=false; // getting tagged breaks focus AND your combo
-    att.combo=(att.combo||0)+1; att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
+    if(wasVuln) att.combo=(att.combo||0)+1;   // v3 #6 HONEST COMBO — count only hits the foe couldn't act between; a recovered foe re-tagged = a NEW string
+    else { if((att.combo||0)>=2) floatText(att.x+att.facing*30, att.y-134, 'RESET', '#8a93b8', 12); att.combo=1; }
+    att.comboT=84; att.comboShownAt=game.frame;  // extend the chain window (more forgiving) + stamp for the HUD meter
     if(att.attack && att.attack.antiAir && !def.grounded && !def.knockingDown){ def.knockingDown=true; def.airHits=2; def.vy=Math.max(def.vy,2.5); att.addAura(8); floatText(def.x,def.y-204,'ANTI-AIR','#7ae8ff',15); ring(cx,cy,'#7ae8ff',44,4); }   // v3 #7 ↓+A swats a jump-in out of the sky — +8 aura + forced knockdown (the air/ground RPS runs both ways)
-    if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER pops the foe low into a juggle route
+    if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
     else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
     if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed (unlike the block window)
       if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13); }   // surface the invisible cancel window so the combo layer is discoverable
