@@ -1283,7 +1283,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
       floatText((f.x+o.x)/2, f.y-158, 'TECH!', '#9fdcff', 20); sparks((f.x+o.x)/2, f.y-90, 10, '#9fdcff', 5); SFX.block(); hitstop=Math.max(hitstop,4);
       if((game.throwTechShown||0)<3 && o===game.player){ game.throwTechShown=(game.throwTechShown||0)+1; tip('tech','THROW TECH — press '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' the instant you\'re grabbed'); }
     } else {                                             // GRAB connects — unblockable, soft knockdown
-      const dmg=a.def.dmg||14;
+      const dmg=Math.round((a.def.dmg||14)*(a.tick?0.8:1));   // v6 #6 a TICK throw trades damage for the guaranteed mixup position
       o.hp=Math.max(0, o.hp-dmg); o.chipDelay=0;
       o.stun=Math.max(o.stun||0, 32); o.hurtT=Math.max(o.hurtT||0, 22); o.attack=null;
       o.vy=-6.5; o.grounded=false; o.streak=0; o.combo=0; o.knockingDown=true;
@@ -1624,11 +1624,16 @@ class Fighter {
       return type==='punch'||type==='kick'||type==='special';
     if(type==='special' && this.char.id==='initiate' && a.type==='special' && a.ph==='rec' && !this._ssUsed) return true;   // v6 #9 SIGNATURE NODE · INITIATE — once per string his kit chains into ITSELF (special>special out of recovery): the student re-derives the proof
     if(!(a.cancelOK>0)) return false;
+    if(a.blockCancel && (this._bchain||0)>=3) return false;   // v6 #6 BLOCKSTRING CAP — 3 contacts and your turn is OVER (guard damage + the tick are the only extensions past that, and they aren't)
     if(type==='special') return (a.type==='punch' || a.type==='kick') && !a.blockCancel;   // damage/knockdown ender — but NO free special-cancel on block (a blocked window only frame-traps into normals)
-    if(type==='throw')   return this.char.id==='mauler' && a.type==='kick' && !a.blockCancel;   // v6 #9 SIGNATURE NODE · MAXIMILIAN — K>THROW command-ender: the confirmed crusher kick drags them into the grab (feeds OVERFLOW; clean hits only, and the cancelling attacker gets NO tech stamp)
+    if(type==='throw'){
+      if(a.blockCancel) return true;   // v6 #6 the TICK THROW — EVERYONE owns it off a blocked normal (x0.8 dmg, techable, whiff = rec 34): the true hold/tech guess, mirroring the CPU's booked tick
+      return this.char.id==='mauler' && a.type==='kick';   // v6 #9 SIGNATURE NODE · MAXIMILIAN — the CLEAN-hit K>GRAB command-ender stays his exclusive
+    }
     if(type==='kick')    return a.type==='punch';                       // P>K (and up+K = the launcher route)
     if(type==='punch'){
-      if(this.char.id==='ember' && a.type==='kick' && !a.blockCancel && (this._carry||0)<2) return true;   // v6 #9 SIGNATURE NODE · ADDISON — K>P RESTAND: only she turns the kick back into a jab (spends a CARRY slot via her link hook)
+      if(a.blockCancel) return a.type==='punch' || a.type==='kick';     // v6 #6 blockstrings: jab-after-jab or kick-back-to-jab, capped by _bchain above
+      if(this.char.id==='ember' && a.type==='kick' && (this._carry||0)<2) return true;   // v6 #9 SIGNATURE NODE · ADDISON — K>P RESTAND (clean hits; blockCancel handled above)
       const cap=(this.char.id==='oracle' && this.streak>=5)?3:2; return a.type==='punch' && (this.combo||0)<cap; }  // one P>P extension; SIGNATURE · KRISHNA ascended (streak>=5) unlocks a 2nd P>P — only he extends long chains
     return false;
   }
@@ -1666,11 +1671,12 @@ class Fighter {
     if(this.ko) return false;
     if(!this.attack && this.grounded && (this.downed||0)<=0) this.throwTechAt=game.frame;   // v3 #2 TECH stamp = DEFENSIVE contexts only (works in block/hitstun — tick throws are techable — but a mid-swing attacker gets no free tech option-select)
     if(this.stun>0||this.hurtT>0||(this.blockstunT||0)>0||(this.focusT||0)>0||(this.downed||0)>0) return false;   // v3 #2 no grabbing from the floor / out of stun
-    const thrCancel = this.attack && this.grounded && this.canCancelInto('throw');   // v6 #9 MAXIMILIAN's K>throw command-ender rides the confirm window
+    const thrCancel = this.attack && this.grounded && this.canCancelInto('throw');   // v6 #9 MAXIMILIAN's K>throw command-ender rides the confirm window; v6 #6 everyone's TICK rides the blocked window
+    const tick = !!(thrCancel && this.attack.blockCancel);
     if((this.attack && !thrCancel)||!this.grounded) return false;
     if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No aura to throw — but you can still TECH one (A+S when grabbed).'); return false; }
     const tdef=Object.assign({wind:7, act:2, rec:22, dmg:14, reach:52}, (VERB_OV[this.char.id]||{}).throw||{});   // v6 #8 per-fighter throw
-    this.attack={type:'throw', kind:'throw', ph:'wind', t:tdef.wind, def:tdef, tel:0, fuse:tdef.wind};
+    this.attack={type:'throw', kind:'throw', ph:'wind', t:tdef.wind, def:tdef, tel:0, fuse:tdef.wind, tick};   // v6 #6 tick throws are tagged (x0.8)
     this.hitThisSwing=false; SFX.whoosh();
     return true;
   }
@@ -1928,7 +1934,7 @@ class Fighter {
         else if(a.ph==='act'){ a.ph='rec'; a.t=a.def.rec;
           if(!this.hitThisSwing){ dust(this.x+this.facing*22, this.floorY||GROUND, 3, 1.7); if(this===game.player) addTrauma(0.05); if(a.def.heavy) a.t+=3; }  // WHIFF: felt over-commitment + a touch more recovery on heavies
         }
-        else { this._recoveredAt=game.frame; this.attack=null; }   // v5 #2 recovery-end stamp — a punish landed within ~6f of recovery still PAYS (fast pokes are punishable, as the OPEN tell promises)
+        else { this._recoveredAt=game.frame; this.attack=null; this._bchain=0; }   // v5 #2 recovery-end stamp (fast pokes stay punishable) + v6 #6 the blockstring counter clears when the string truly ends
       }
     }
     // INPUT-BUFFER REPLAY (player only) — fire a recently-pressed action the instant it becomes legal; expires after 6f
@@ -2753,7 +2759,7 @@ function resolveHits(att,def){
     if(res==='dodge'){ floatText(def.x,def.y-160,'DODGED','#9fdcff',17); return; }
     const cx=def.x-dir*6, cy=def.y-90;
     if(res==='block'){ hitstop=Math.max(hitstop,3); ring(cx,cy,'#9fdcff',26,3);
-      if(att.attack && hb.type!=='special' && !att.attack.reversal){ att.attack.cancelOK=Math.max(att.attack.cancelOK||0,10); att.attack.blockCancel=true;   // #3 ON-BLOCK PRESSURE: a blocked normal opens a SHORT cancel window — a tight P>P/P>K follow-up is a frame trap (beats a mash, loses to continued block); capped by the drainable guard + throw. NO special-cancel on block. #5: a blocked REVERSAL gets NO window — it's the punishable option.
+      if(att.attack && hb.type!=='special' && !att.attack.reversal){ att.attack.cancelOK=Math.max(att.attack.cancelOK||0,10); att.attack.blockCancel=true; att._bchain=(att._bchain||0)+1;   // #3 ON-BLOCK PRESSURE: a blocked normal opens a SHORT cancel window — a tight follow-up is a frame trap (beats a mash, loses to continued block); v6 #6 counts toward the 3-contact string cap. NO special-cancel on block; a blocked REVERSAL gets NO window.
         if(att===game.player && game.frame-(att._blockCueAt||0)>50){ att._blockCueAt=game.frame; floatText(att.x+att.facing*28, att.y-120, 'PRESSURE ▸', '#9fdcff', 12); } }
       return; }
     if(res==='armor'){ hitstop=Math.max(hitstop,4); ring(cx,cy,'#ffcf6a',30,3); return; }   // MAXIMILIAN plowed through the startup — no combo/punish/launcher credit for the attacker
@@ -2777,7 +2783,7 @@ function resolveHits(att,def){
       def.vx=dir*4*(((dir<0&&def.x<WORLD_W/2)||(dir>0&&def.x>WORLD_W/2))?1.3:1);   // v5 #7 launchers CARRY — +30% toward the defender's near wall: winning mid-screen buys the corner
       att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
     else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
-    if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed (unlike the block window)
+    if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false; att._bchain=0;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed; the blockstring counter resets (you EARNED a fresh turn)
       def.stun=Math.max(def.stun,22);   // v4 STRING TRUTH — the hit-confirm window and the hitstun are the SAME clock: cancel anywhere in it (incl. the last-6f JUST) and the follow-up is a TRUE string, exactly what the gold shimmer teaches
       if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13); }   // surface the invisible cancel window so the combo layer is discoverable
       if(att.isCPU && !game.online){   // v4 CPU PARITY (a) — the CPU hit-confirms its OWN archetype route through the same cancel path a human uses (DIFF-gated; easiest tier stays single-poke)
@@ -4249,6 +4255,10 @@ function drawCard(){
   ctx.font=font(DISP,11); ctx.textAlign='center';
   ctx.fillStyle = pw? '#ffe14d' : danger>0? '#ff8a8a': gam? '#ff7ac0':'#8fd8f8';
   ctx.fillText(pw? 'NOW — MATCH THE HEIGHT + ANSWER' : danger>0?'INCOMING — GUARD ITS HEIGHT, ANSWER TO SLIP': gam?'GAMBIT — DOUBLE, OR LOSE IT ALL': gOffer?'ANSWER — or G to WAGER ×2':'ANSWER — BANK AURA', cx, top+19);
+  if(ans1!=='' && game.player && (game.player.combo||0)>0 && !game.mode2p){   // v6 #11 a typed-but-unsubmitted answer GLOWS amber mid-string — the chain-finisher is loaded, press ⏎ to cash it
+    ctx.save(); ctx.strokeStyle='#ff9f2a'; ctx.globalAlpha=0.45+0.3*Math.sin(game.frame*0.3); ctx.lineWidth=2.5;
+    rr(cx-cw/2, top, cw, ch, 14); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
+  }
   // (retired) the "arms <op>" hint — specials are the per-fighter KIT now (D fires the best you can afford), not operator-armed
   if(game.reveal && game.reveal.t>0){ // show what the answer was — AND how to get it (teach, don't just test)
     ctx.globalAlpha=Math.min(1,game.reveal.t/40);
@@ -5864,7 +5874,8 @@ function render(){
     [['CANCEL', 'land a hit, then '+kk+' / '+ks+' in the CHAIN ▸ flash — a combo'],
      ['BURST', 'being combo’d? '+ks+' while stunned breaks you free'],
      ['PERFECT DODGE', 'red ! incoming — re-answer in the gold ⚡NOW window to slip + stagger'],
-     ['CHAIN FINISHER', 'answer MID-combo to charge a ×1.7 blow']
+     ['CHAIN FINISHER', 'type the answer EARLY — cash it between strings for a ×1.7 opener'],
+     ['TICK THROW', 'jab into their guard, then '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' — the grab beats holding']
     ].forEach((r,i)=>{ const y=294+i*30;
       txtO(r[0], W/2, y, 13, '#7ae8ff',{mono:true,sw:0});
       txtO(r[1], W/2, y+15, 10.5, '#aab4d0',{mono:true,sw:0}); });
