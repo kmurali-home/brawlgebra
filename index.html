@@ -1538,7 +1538,7 @@ class Fighter {
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
-    this.overflowT=0; this._carry=0;   // v3 #8 signature-verb state: Maximilian's raised-cap window · Addison's per-string carry count
+    this.overflowT=0; this._carry=0; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false;   // v3 #8 signature-verb state + v4 CPU-parity state
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
     this.guardMax=100; this.guard=100; this.guardCrush=0;  // drainable guard — sustained pressure cracks a turtle
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
@@ -1600,14 +1600,14 @@ class Fighter {
       return false;
     }
     if(cancelling && this===game.player){ tip('cancel','COMBO! Land a hit, then chain into a stronger move before the window closes.'); game.cancelDone=(game.cancelDone||0)+1; }
-    const upHeld = this===game.player? (keys[KEYS.jump]||(!game.mode2p&&keys['arrowup'])) : (game.mode2p&&this===game.enemy? !!keys['arrowup'] : false);   // v3 #7 VERB PARITY — the launcher reads each seat's OWN up-input (P2 gets juggles too, not just P1)
+    const upHeld = this===game.player? (keys[KEYS.jump]||(!game.mode2p&&keys['arrowup'])) : (game.mode2p&&this===game.enemy? !!keys['arrowup'] : !!this._wantLauncher);   // v3 #7 VERB PARITY — the launcher reads each seat's OWN up-input (P2 gets juggles; v4: the CPU expresses it through _wantLauncher on its routes)
     const launcher = !dashAtk && !antiAir && type==='kick' && this.grounded && upHeld;   // ↑+kick = LAUNCHER — pops the foe into a juggle (a knockdown route)
     const just = cancelling && this.attack && this.attack.cancelOK>0 && this.attack.cancelOK<=justWin(this);   // #8 JUST-frame: cancel in the last ~6f of the window = a pure bonus (never a punish for missing) — one execution lever OFF the math (Initiate gets 8f)
     if(cancelling && this.char.id==='ember' && !this.attack.blockCancel && (this._carry||0)<2){ this._carry=(this._carry||0)+1; this.addAura(3); if(this===game.player) floatText(this.x,this.y-148,'+3 CARRY','#46e08a',12); }   // SIGNATURE · ADDISON 'CARRY THE ONE' — each clean-hit chain link refunds aura (cap 2/string): rushdown that sustains by touching you
     this.attack={type, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, launcher, just, dash:dashAtk, antiAir};
     this.hitThisSwing=false; SFX.whoosh();
     if(dashAtk){ this.vx += this.facing*6.5; this.dashT=0; if(this===game.player) floatText(this.x,this.y-150,'DASH ▸','#7ae8ff',13); }
-    if(just){ const o=this.opp; if(o && o.stun>0) o.stun+=8; }   // v3 #6 JUST GLUE — the tight cancel EXTENDS the foe's hitstun, so the execution reward never breaks the true string it earned
+    if(just){ const o=this.opp; if(o && o.stun>0) o.stun+=12; }   // v3 #6 JUST GLUE (v4: +12) — the tight cancel EXTENDS the foe's hitstun so even the LATEST just-cancel's follow-up connects as a true string
     if(just && this===game.player){ floatText(this.x,this.y-162,'JUST!','#9fe8ff',15); flash(0.10,'#bfefff'); }
     if(this===game.player && game.galaxy && (type==='punch'||type==='kick')) galaxyTrackCombo(this, type);
     return true;
@@ -2383,7 +2383,9 @@ function controlCPU(c){
     if(c.burstT>=cfg.burstReact && c.burst()){ c.burstT=0; return; }
   } else c.burstT=0;
   // MATH-ECONOMY MIRROR — when disengaged + low on aura the CPU stops to "solve" (a visible, whiff-punishable refuel beat you can rush)
-  if(c.thinkT>0){ c.thinkT--; c.moveX=0; if(c.thinkT<=0){ c.addAura(34); floatText(c.x,c.y-150,'+ SOLVED','#7ae8ff',14); } return; }   // aura is EARNED here (the visible, punishable refuel) — break it by hitting them mid-solve
+  if(c.thinkT>0){ c.thinkT--; c.moveX=0; if(c.thinkT<=0){ c.addAura(34); c.streak=Math.min(8,(c.streak||0)+2);   // v4 (c) the CPU's solve builds STREAK too — interrupting it now denies streak, and CPU-Krishna can actually ASCEND
+    if(c.char.id==='oracle' && c.streak>=5 && !c._ascCue){ c._ascCue=true; floatText(c.x,c.y-212,'ASCENDED','#ffd34d',22); ring(c.x,c.y-90,'#ffd34d',70,4); }
+    floatText(c.x,c.y-150,'+ SOLVED','#7ae8ff',14); } return; }   // aura is EARNED here (the visible, punishable refuel) — break it by hitting them mid-solve
   // v3 #2 THROW TECH — the CPU learns to tech (difficulty-scaled, never twice in a row), so throws are a MIXUP, not a lock. Runs BEFORE the canAct gate: teching works from blockstun (the tick-throw read).
   {
     const pThrow = p.attack && p.attack.type==='throw' && (p.attack.ph==='wind'||p.attack.ph==='act') && Math.abs(p.x-c.x)<84;
@@ -2392,8 +2394,34 @@ function controlCPU(c){
       if(Math.random()<techP){ c.throwTechAt=game.frame; c._justTeched=true; } else c._justTeched=false;
     } else if(!pThrow) c._sawThrow=false;
   }
+  // v4 CPU PARITY — the CPU plays the systems the player does (pre-canAct: these run mid-attack / mid-knockdown)
+  // (a) execute a hit-confirmed archetype ROUTE inside its own cancel window — the SAME tryAttack/trySpecial path a human uses
+  if(c._route && c.attack && (c.attack.cancelOK||0)>0 && !c.attack.blockCancel && game.frame>=(c._routeAt||0)){
+    const rt=c._route; c._route=null;
+    if(rt==='special') c.trySpecial();
+    else if(rt==='launcher'){ c._wantLauncher=true; c.tryAttack('kick'); c._wantLauncher=false; }
+    else c.tryAttack(rt);
+  }
+  if(!c.attack) c._route=null;
+  // (b) blocked-normal PRESSURE — use the cancelOK=10 window it already receives: a P>P frame trap, or book a tick THROW for right after recovery
+  if(c.attack && c.attack.blockCancel && (c.attack.cancelOK||0)>0 && !c._pressed){
+    c._pressed=true;
+    if(Math.random() < 0.3+0.18*(DIFF.level||0)){
+      if(Math.random()<0.42){ c._tick=game.frame+rnd(16,24); }   // the tick-throw read — beats a defender who just holds
+      else { c.tryAttack('punch');   // the frame trap — beats a defender who mashes
+        if((game.trapTaught||0)<2){ game.trapTaught=(game.trapTaught||0)+1; tip('trap','FRAME TRAP — HOLD your guard through the string; mash and you get clipped. But a THROW beats holding: TECH it ('+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+').'); } }
+    }
+  }
+  if(!c.attack) c._pressed=false;
+  // (d) WAKEUP VARIANCE — the CPU's knockdown is a read for YOU too: sometimes a delayed rise (beats your timed meaty), sometimes a paid reversal (beats it outright — bait it)
+  if((c.downed||0)>0){
+    if(!c._wakePlan){ const r=Math.random(); c._wakePlan = r<0.2? 'delay' : (r < 0.2+0.15*(DIFF.level||0)? 'rev' : 'norm');
+      if(c._wakePlan==='delay') c.downed+=12; }
+    if(c._wakePlan==='rev' && c.downed<=2 && c.aura>=18){ c.tryReversal(); c._wakePlan=null; return; }
+  } else c._wakePlan=null;
   if(!c.canAct()) return;
   const dist = Math.abs(p.x-c.x), dir = p.x>c.x?1:-1;
+  if(c._tick){ if(game.frame>=c._tick){ c._tick=null; if(dist<72 && c.aura>=6){ c.tryThrow(); return; } } else { c.moveX=dir; return; } }   // v4 (b) walk the booked TICK THROW in — teched by A+S, jumped, or backdashed
   // #4 PUNISH-THE-REFUEL — a player banking mid-fight (FOCUS channel) is an opening the foe HUNTS, exactly as you can rush its ∑ solve. Bank at range or behind cover; bank in its face and eat the counter.
   if((p.focusT||0)>0 && c.grounded){
     if(dist<138){ const t=dist>92?'kick':'punch';
@@ -2601,6 +2629,7 @@ function resolveHits(att,def){
     // clean hit
     if(punish){ att.addAura(14); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window: fence to earn aura, don't turtle to bank it
       floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
+    if(punish || (att.attack&&att.attack.just)) hitstop=Math.max(hitstop,12);   // v4 COUNTER-TIER CRUNCH — the skill payoffs must be FELT: a whiff-punish or JUST hit freezes harder than any stray jab
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6+((att.attack&&att.attack.just)?4:0)); }  // landing hits charges FOCUS (+JUST credit only on a clean hit)
     def.streak=0; def.combo=0; def.chargedHit=false; def._carry=0; // getting tagged breaks focus AND your combo (and Addison's carry count)
@@ -2611,9 +2640,17 @@ function resolveHits(att,def){
     if(att.attack && att.attack.launcher){ def.vy=-9; def.grounded=false; def.knockingDown=true; def.airHits=0; def.stun=Math.max(def.stun||0,30); att.addAura(10); floatText(att.x,att.y-176,'+10 AURA','#7ae8ff',13); floatText(def.x,def.y-208,'LAUNCH!','#ffd34d',18); ring(cx,cy,'#ffd34d',56,5); addTrauma(0.25); }   // ↑+kick LAUNCHER — less raw damage (proration) but knockdown/oki + an aura refund that FUNDS the next string (v3 #6 ender identity: special=damage, launcher=position+economy)
     else if(airHit){ def.airHits=(def.airHits||0)+1; if(def.airHits>=2) def.vy=Math.max(def.vy,4.5); }   // JUGGLE cap — after 2 air hits they fall into a knockdown (#6)
     if(att.attack && hb.type!=='special'){ att.attack.cancelOK=22; att.attack.blockCancel=false;   // a CLEAN-hit confirm opens the full cancel window (~0.37s) — special-cancel allowed (unlike the block window)
+      def.stun=Math.max(def.stun,22);   // v4 STRING TRUTH — the hit-confirm window and the hitstun are the SAME clock: cancel anywhere in it (incl. the last-6f JUST) and the follow-up is a TRUE string, exactly what the gold shimmer teaches
       if(att===game.player && game.frame-(att._chainCueAt||0)>40){ att._chainCueAt=game.frame; floatText(att.x+att.facing*28, att.y-118, 'CHAIN ▸', '#7ae8ff', 13); }   // surface the invisible cancel window so the combo layer is discoverable
+      if(att.isCPU && !game.online){   // v4 CPU PARITY (a) — the CPU hit-confirms its OWN archetype route through the same cancel path a human uses (DIFF-gated; easiest tier stays single-poke)
+        const lvl=DIFF.level||0, roll=[0,0.35,0.6][Math.min(2,lvl)]||0;
+        if((att.combo||0) <= (lvl>=2?2:1) && Math.random()<roll){
+          att._route={mauler:'special', ember:'kick', oracle:'punch', frost:'launcher', initiate:'kick', james:'special'}[att.char.id]||'kick';
+          att._routeAt=game.frame+rnd(6,14);   // cancels mid-window — sometimes even in the JUST frames
+        }
+      }
     }
-    if(chain){ announce('CHAIN!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212,'CHAIN FINISHER','#ff9f2a',20); }
+    if(chain){ announce(wasVuln?'CHAIN!':'CHARGED!','#ff9f2a'); flash(0.18,'#ffd9a0'); slowmo(220,0.42); ring(cx,cy,'#ff9f2a',82,6); floatText(att.x,att.y-212, wasVuln?'CHAIN FINISHER':'CHARGED OPENER','#ff9f2a',20); }   // v4 honest label — a charged hit that STARTS a string is an opener, not a finisher (no more CHAIN FINISHER + RESET on one swing)
     else if(att.combo>=2) floatText(att.x,att.y-202,'COMBO ×'+att.combo,'#ffd34d',15+Math.min(9,att.combo));
     if(overclocked){ ring(cx,cy,'#ffd34d',46,4); floatText(cx,cy-30,'◆',('#ffd34d'),20); }
     if(gcombo){ const big=gcombo>=3; flash(0.22,'#ffd9f0'); addTrauma(0.45+gcombo*0.06); ring(cx,cy, big?'#ff7ac0':'#ffd34d', 70+gcombo*16, 7); slowmo(240,0.4);
