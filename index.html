@@ -1298,6 +1298,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
     floatText(f.x, f.y-150, 'whiff', '#8a93b8', 12);
   }
 }
+const SP_LVL={ drop:'high', beam:'high', slam:'low', wave:'low', spear:'mid', fan:'mid', sigil:'mid', dash:'mid' };   // v5 #12 specials carry GUARD HEIGHTS — overheads fall, quakes run low, bolts fly mid: zoner defense is a read, not an omni-answer
 function fireSpecial(f,a){
   const kind=a.kind||'dash';
   if(kind==='dash') return;   // a dash is a melee lunge resolved by normal hit-resolution — no projectile/hazard (else it double-dips damage + drops a stray glyph)
@@ -1313,25 +1314,25 @@ function fireSpecial(f,a){
     SFX.heavy();
     for(const o of targets){
       if(!o.ko && Math.abs(o.x-f.x)<(big?178:160) && o.y>GROUND-170){
-        const res=o.takeHit(dmg, o.x<f.x?-1:1, true, guard);   // specials deal the FLAT tier damage — identical across fighters (dmgMul is for normal attacks only)
+        const res=o.takeHit(dmg, o.x<f.x?-1:1, true, guard, (a.def&&a.def.guardLevel)||'low');   // specials deal the FLAT tier damage — identical across fighters; v5 #12 a QUAKE runs LOW (crouch-block it)
         if(res==='hit' && launch){ o.vy=-15; o.grounded=false; o.stun=Math.max(o.stun,34); o.dizzy=Math.max(o.dizzy,88); o.knockingDown=true; floatText(o.x,o.y-204,'LAUNCHED',col,16); }
         if(res==='hit' && o.hp<=0) lethal(o,true);
       }
     }
   } else if(kind==='spear'){   // a long instant poke / travelling bolt
-    projs.push({x:f.x+f.facing*32, y:f.y-92, vx:f.facing*(a.slow?4.2:a.fast?12:9.5), owner:f, life:160, col, dmg, freeze:!!a.freeze, slim:!!a.fast, lessSpear:(f.char.id==='frost')});
+    projs.push({x:f.x+f.facing*32, y:f.y-92, vx:f.facing*(a.slow?4.2:a.fast?12:9.5), owner:f, life:160, col, dmg, freeze:!!a.freeze, slim:!!a.fast, lessSpear:(f.char.id==='frost'), lvl:'mid'});
     SFX.whoosh();
   } else if(kind==='wave'){   // a slow ground-hugging front that crawls toward the foe
-    projs.push({x:f.x+f.facing*40, y:GROUND-24, vx:f.facing*(a.big?3.4:4.4), owner:f, life:260, col, dmg, freeze:!!a.freeze, wave:true, r:(a.big?120:90)});
+    projs.push({x:f.x+f.facing*40, y:GROUND-24, vx:f.facing*(a.big?3.4:4.4), owner:f, life:260, col, dmg, freeze:!!a.freeze, wave:true, r:(a.big?120:90), lvl:'low'});   // v5 #12 the ground-front runs LOW
     addTrauma(0.3); dust(f.x,f.y,12,4); SFX.heavy();
   } else if(kind==='fan'){   // LONG DIVISION — one input divides into three angled shards
     const sh=Math.max(8,Math.round(dmg*0.5));   // each shard ~half-tier; a clean read connects one or two
-    for(const vy of [-3.4,0,3.4]) projs.push({x:f.x+f.facing*30, y:f.y-92, vx:f.facing*9, vy, owner:f, life:150, col, dmg:sh, slim:true});
+    for(const vy of [-3.4,0,3.4]) projs.push({x:f.x+f.facing*30, y:f.y-92, vx:f.facing*9, vy, owner:f, life:150, col, dmg:sh, slim:true, lvl:'mid'});
     addTrauma(0.3); SFX.charge();
   } else { // 'beam' (vertical pillar) / 'drop' (overhead) / 'sigil' — a positioned burst ON the foe
     const o=f.opp;
     hazards.push({x:o?o.x:f.x+f.facing*200, t:(kind==='drop'?30:16), owner:f, col, dmg,
-                  glyph:(kind==='drop'?'∴':kind==='beam'?'Q':(f.char.sigil||'∴')), r:(a.big?92:78), vr:210, pillar:(kind==='beam')});
+                  glyph:(kind==='drop'?'∴':kind==='beam'?'Q':(f.char.sigil||'∴')), r:(a.big?92:78), vr:210, pillar:(kind==='beam'), lvl:SP_LVL[kind]||'mid'});   // v5 #12 drops/beams fall HIGH — stand-block them
     SFX.charge();
   }
 }
@@ -1352,7 +1353,7 @@ function updateProjs(){
                           : (pr.x>bd.x && pr.x<bd.x+bd.w && pr.y>bd.y && pr.y<bd.y+bd.h);
       if(hit){
         dead=true;
-        const res=t.takeHit((pr.dmg||18), pr.vx>0?1:-1, true);   // special projectiles: flat tier damage, identical across fighters
+        const res=t.takeHit((pr.dmg||18), pr.vx>0?1:-1, true, false, pr.lvl||'mid');   // special projectiles: flat tier damage; v5 #12 waves demand a LOW guard, bolts a MID
         if(res==='block' && pr.lessSpear){ pr.owner.addAura(9); if(pr.owner===game.player) floatText(pr.owner.x,pr.owner.y-178,'+TEMPO','#7ae8ff',14); }   // SIGNATURE · LESSING — a BLOCKED Glacial Lance still builds his meter: the keepaway win con (out-resource the turtle)
         if(res==='hit' && pr.freeze){ t.frozenT=64; t.stun=Math.max(t.stun,64); floatText(t.x,t.y-176,'FROZEN!','#bfe8ff',20); }
         if(res!=='dodge'){ ring(pr.x, pr.wave?GROUND-20:pr.y, pcol, pr.wave?(pr.r||90):42, pr.wave?6:4); if(pr.wave) addTrauma(0.35); }
@@ -1404,7 +1405,7 @@ function updateHazards(){
       const r=h.r||78, vr=h.vr||150, dmg=h.dmg||30;
       for(const t of tgts){
         if(t && !t.ko && Math.abs(t.x-h.x)<r && Math.abs(t.y-hy)<vr){
-          const res=t.takeHit(dmg, t.x<h.x?-1:1, true);   // special/stage hazards: flat damage, no per-fighter scaling (specials are uniform)
+          const res=t.takeHit(dmg, t.x<h.x?-1:1, true, false, h.lvl||'mid');   // special/stage hazards: flat damage; v5 #12 drops/beams are OVERHEADS — stand-block them
           if(res==='hit' && t.hp<=0) lethal(t,true);
         }
       }
@@ -1682,7 +1683,7 @@ class Fighter {
       kind=sp.kind;
       const tunings={dash:{wind:10,act:12,rec:20}, slam:{wind:14,act:6,rec:22}, spear:{wind:11,act:3,rec:16},
                      wave:{wind:14,act:4,rec:24}, fan:{wind:12,act:3,rec:18}, beam:{wind:16,act:6,rec:22}, drop:{wind:8,act:4,rec:26}};
-      def=Object.assign({}, ATK.special, tunings[kind]||tunings.dash, {dmg:SPEC_TIERS[tier].dmg});
+      def=Object.assign({}, ATK.special, tunings[kind]||tunings.dash, {dmg:SPEC_TIERS[tier].dmg, guardLevel:SP_LVL[kind]||'mid'});
       if(sp.reach) def.reach=sp.reach;
     } else {
       const ov=this.char.atk&&this.char.atk[type];
@@ -1706,7 +1707,7 @@ class Fighter {
     if(!game.galaxy){ const cost=SPEC_TIERS[tier].cost; this.aura-=cost; this.auraChipT=18; spendFx(this, cost); }   // flat per-tier cost — uniform across fighters
     const tunings={dash:{wind:10,act:12,rec:20}, slam:{wind:14,act:6,rec:22}, spear:{wind:11,act:3,rec:16},
                    wave:{wind:14,act:4,rec:24}, fan:{wind:12,act:3,rec:18}, beam:{wind:16,act:6,rec:22}, drop:{wind:8,act:4,rec:26}};
-    const def=Object.assign({}, ATK.special, tunings[sp.kind]||tunings.dash, {dmg:SPEC_TIERS[tier].dmg});
+    const def=Object.assign({}, ATK.special, tunings[sp.kind]||tunings.dash, {dmg:SPEC_TIERS[tier].dmg, guardLevel:SP_LVL[sp.kind]||'mid'});
     if(sp.reach) def.reach=sp.reach;
     this.attack={type:'special', kind:sp.kind, tier, spName:sp.name, ph:'wind', t:def.wind, def, tel:0, fuse:def.wind, just,
       guard:sp.guard, launch:sp.launch, big:sp.big, freeze:sp.freeze, rise:sp.rise, slow:sp.slow, fast:sp.fast,
@@ -2398,12 +2399,15 @@ function drawFighter(f){
     txtO('HIDDEN', f.x, f.y-184, 12, '#9fdcff',
       {mono:true, sw:3, alpha:0.65+Math.sin(game.frame*0.1)*0.2});
   }
-  // telegraph "!"
+  // telegraph "!" — v5 #12 TINTED BY HEIGHT: the tell teaches the read (orange=stand-block HIGH, blue=crouch LOW, red=MID)
   if(f.attack && (f.attack.ph==='tel') ){
+    const lv=(f.attack.def&&f.attack.def.guardLevel)||'mid';
+    const tc = lv==='high'?'#ff9f2a' : lv==='low'?'#2ea8ff' : '#ff4040';
     const popS = f.attack.pop>0? eoBack(1-f.attack.pop/8):1;
     const by = f.y-182 - Math.abs(Math.sin(game.frame*0.18))*7;
     ctx.save(); ctx.translate(f.x,by); ctx.scale(popS,popS);
-    txtO('!',0,0,30,'#ff4040',{sw:5});
+    txtO('!',0,0,30,tc,{sw:5});
+    if(lv!=='mid') txtO(lv==='high'?'▲ HIGH':'▼ LOW',0,18,10,tc,{mono:true,sw:0});
     ctx.restore();
   }
 }
@@ -4136,7 +4140,7 @@ function drawOffscreenArrow(){
     ctx.globalAlpha=0.75+Math.sin(game.frame*0.2)*0.2;
     ctx.fillStyle = f===game.player? '#39c5ff' : (f.attack? '#ff4040':'#ff8a9a');
     ctx.beginPath(); ctx.moveTo(dir*13,0); ctx.lineTo(-dir*4,-9); ctx.lineTo(-dir*4,9); ctx.closePath(); ctx.fill();
-    if(f.attack && f.attack.ph==='tel') txtO('!',-dir*16,5,16,'#ff4040',{sw:3});
+    if(f.attack && f.attack.ph==='tel'){ const lv=(f.attack.def&&f.attack.def.guardLevel)||'mid'; txtO('!',-dir*16,5,16, lv==='high'?'#ff9f2a':lv==='low'?'#2ea8ff':'#ff4040',{sw:3}); }
     ctx.restore();
   }
   ctx.globalAlpha=1;
