@@ -1575,7 +1575,7 @@ class Fighter {
     this.combo=0; this.comboT=0; this.chargedHit=false;   // combo system
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
-    this.overflowT=0; this._carry=0; this._stuRef=0; this._ssUsed=false; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false; this._dHoldAt=0; this._lastDash=false;   // v3 #8 signature-verb state + v4 CPU-parity state + v5 #3 tier-charge + v6 #9 node budgets
+    this.overflowT=0; this._carry=0; this._stuRef=0; this._ssUsed=false; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false; this._dHoldAt=0; this._lastDash=false; this._noBurst=false;   // v3 #8 signature-verb state + v4 CPU-parity state + v5 #3 tier-charge + v6 #9 node budgets + v10 trailer-shot burst gate
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
     this.guardMax=100; this.guard=100; this.guardCrush=0; this.guardRestT=0; this._bdashAt=-999;  // drainable guard — sustained pressure cracks a turtle; v5 #5 guard-rest clock + backdash pricing stamp
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
@@ -2481,7 +2481,7 @@ function controlCPU(c){
   c.dmgMul = cfg.dmgMul*c.char.dmg; // persona power × difficulty
   c.moveX = 0; c.wantBlock = c.blockHold>0;
   // COMBO ESCAPE — once you've chained it a few hits, the foe breaks out after a difficulty-scaled window (learnable: you learn how long YOUR combo lasts before it bursts)
-  if((c.comboedHits||0)>=2 && c.stun>0){
+  if((c.comboedHits||0)>=2 && c.stun>0 && !c._noBurst){
     c.burstT=(c.burstT||0)+1;
     if(c.burstT===Math.max(1,cfg.burstReact-10)){ floatText(c.x,c.y-198,'BURST?','#ffd34d',15); ring(c.x,c.y-90,'#ffd34d',44,3); c.flashT=Math.max(c.flashT||0,4); }   // v3 #6 TELEGRAPH — 10f warning: end your string NOW and the whiffed burst is punishable (a read, not a silent confiscation)
     if(c.burstT>=cfg.burstReact && c.burst()){ c.burstT=0; return; }
@@ -4570,48 +4570,56 @@ function drawKeyArt(){   // a dedicated hero composition for the store capsule /
   txtO('four sworn Orders · one war over every number', W/2, H-34, 12, 'rgba(205,205,235,0.85)', {mono:true,sw:0});
   txtO('press any key to return', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
 }
-// ===== AUTO-PLAYING TRAILER v2 — director-SCRIPTED money shots, not random mush. Record over it; SFX crunch survives your song. =====
+// ===== AUTO-PLAYING TRAILER v3 — CUT TO THE SONG (Brawljibra.mp3, 152s): every boundary sits on the track's real structure.
+// Song map (measured RMS): quiet intro 0-10s · verse 10-31 · a one-beat DIP at 31s · build 32-43 · chorus 43-63 · THE DROP at 63.5s · we fade out by ~78s.
+// Times below are song-seconds × 60 (the song is the master clock — see trailerDirector). 1 tick = 1/60th of a SONG second.
 const _ta=()=>{ if(game.problem) submitFor(game.player, String(game.problem.ans)); };   // puppet: the player answers correctly
 const TRAILER=[
-  // ACT 1 — COLD OPEN: the mechanic, wordless. Bank an answer, then spend it as violence.
-  {type:'fight', p:'oracle', e:'ember', stage:'schism', dur:118, slow:[64,94], music:'mul',
+  // 0.0-10.0s — the quiet intro carries the HEART: one lonely question, slow type.
+  {type:'story', w:'YOU', c:'#cfe0ff', scene:'giraffe', t:'Does it get easier — being the thing no one can solve?', sfx:'heart', slow:0.85, dur:600, music:'minus'},
+  // 10.0-13.5s — the thesis card as the verse kicks in.
+  {type:'card',  text:'EVERY BLOW IS A PROBLEM', dur:210},
+  // 13.5-21.0s — SHOT A: bank an answer (∑ BANKING on screen), spend it as violence. Slow-mo on the sigil.
+  {type:'fight', p:'oracle', e:'ember', stage:'schism', dur:450, slow:[240,330], music:'mul',
    pose:(p,e)=>{ p.reset(WORLD_W/2-70,1); e.reset(WORLD_W/2+70,-1); p.aura=12; e.wantBlock=false; },
-   script:[ {at:8, fn:()=>_ta()},                                        // ∑ BANKING → +AURA lands on screen
-            {at:34, fn:p=>p.tryDash(1)}, {at:38, fn:p=>p.tryAttack('kick')},   // dash-S overhead opener
-            {at:58, fn:p=>p.trySpecial()} ]},                            // cancel into the sigil — the answer became the blow
-  {type:'card',  text:'EVERY BLOW IS A PROBLEM', dur:60},
-  // ACT 2 — THE READ: a strike telegraphed blue, slipped with a 1-digit answer, punished.
-  {type:'fight', p:'ember', e:'frost', stage:'frost', dur:118, slow:[40,62], music:'mul',
+   script:[ {at:30,  fn:()=>_ta()},
+            {at:120, fn:p=>p.tryDash(1)}, {at:132, fn:p=>p.tryAttack('kick')},
+            {at:210, fn:p=>p.trySpecial()} ]},
+  // 21.0-28.5s — SHOT B: the blue ▼ telegraph, slipped with a 1-digit answer, punished.
+  {type:'fight', p:'ember', e:'frost', stage:'frost', dur:450, slow:[60,150], music:'mul',
    pose:(p,e)=>{ p.reset(WORLD_W/2-46,1); e.reset(WORLD_W/2+46,-1); p.aura=30; },
-   script:[ {at:6,  fn:(p,e)=>e.cpuAttack('kick',30)},                   // the ▼ blue telegraph
-            {at:36, fn:p=>{ p.guardStance='low'; _ta(); }},              // the 1-digit NOW answer → SLIP + stagger
-            {at:52, fn:p=>p.tryAttack('kick')}, {at:66, fn:p=>p.trySpecial()} ]},
-  {type:'card',  text:'ANSWER IN TIME — OR BLEED', dur:56},
-  // ACT 3 — THE CEILING: launcher, juggle, ender.
-  {type:'fight', p:'oracle', e:'mauler', stage:'void', dur:104, slow:[18,40], music:'mul',
+   script:[ {at:30,  fn:(p,e)=>e.cpuAttack('kick',30)},
+            {at:62,  fn:p=>{ p.guardStance='low'; _ta(); }},
+            {at:168, fn:p=>p.tryAttack('kick')}, {at:240, fn:p=>p.trySpecial()} ]},
+  // 28.5-31.0s — card riding the last verse bars…
+  {type:'card',  text:'ANSWER IN TIME — OR BLEED', dur:150},
+  // 31.0-33.0s — …and ZERO lands EXACTLY on the song's one-beat dip at 31s.
+  {type:'card',  text:'EVERYTHING ENDS AT ZERO', dur:120},
+  // 33.0-40.5s — the THREAT rises with the build.
+  {type:'story', w:'SOLOMON, the EQUALS', c:'#ff9f2a', scene:'equals', t:'I will reduce you all to one answer. Nothing.', sfx:'dread', slow:0.78, dur:450, music:'james'},
+  // 40.5-48.0s — SHOT D on the chorus: a BROKE zoner who cannot even swing, hunted down.
+  {type:'fight', p:'ember', e:'frost', stage:'chasm', dur:450, music:'mul', ai:'live',
+   pose:(p,e)=>{ p.reset(WORLD_W/2-90,1); e.reset(WORLD_W/2+60,-1); e.aura=0.4; p.aura=70; },
+   script:[ {at:60,  fn:p=>p.tryDash(1)}, {at:72,  fn:p=>p.tryAttack('kick')},
+            {at:210, fn:p=>p.tryDash(1)}, {at:222, fn:p=>p.tryAttack('kick')},
+            {at:330, fn:p=>p.tryDash(1)}, {at:342, fn:p=>p.tryAttack('kick')} ]},
+  // 48.0-55.5s — the DEFIANCE line over the chorus.
+  {type:'story', w:'YOU', c:'#cfe0ff', scene:'equals', t:'Every sum has two sides. You only counted one.', sfx:'toll', slow:0.7, dur:450, music:'james'},
+  // 55.5-63.5s — SHOT C: launcher → juggle → ender, building into the drop.
+  {type:'fight', p:'oracle', e:'mauler', stage:'void', dur:480, slow:[84,180], music:'mul',
    pose:(p,e)=>{ p.reset(WORLD_W/2-40,1); e.reset(WORLD_W/2+34,-1); },
-   script:[ {at:6,  fn:p=>p.tryAttack('punch')},
-            {at:18, fn:p=>{ keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false; }},   // ↑K LAUNCH
-            {at:32, fn:p=>p.tryAttack('punch')},                          // one juggle tag
-            {at:46, fn:p=>p.trySpecial()} ]},
-  // ACT 4 — THE WORLD + THE HEART + THE THREAT (unchanged bones — they work)
-  {type:'card',  text:'FOUR ORDERS.', sub:'ONE WAR OVER EVERY NUMBER.', dur:84},
-  {type:'story', w:'YOU', c:'#cfe0ff', scene:'giraffe', t:'Does it get easier — being the thing no one can solve?', sfx:'heart', slow:0.62, dur:158, music:'minus'},
-  {type:'story', w:'SOLOMON, the EQUALS', c:'#ff9f2a', scene:'equals', t:'I will reduce you all to one answer. Nothing.', sfx:'dread', slow:0.78, dur:162, music:'james'},
-  {type:'card',  text:'EVERYTHING ENDS AT ZERO', dur:70},
-  // ACT 5 — STARVATION: break their bank, and they cannot even swing. Chase them down.
-  {type:'fight', p:'ember', e:'frost', stage:'chasm', dur:104, music:'mul', ai:'live',
-   pose:(p,e)=>{ p.reset(WORLD_W/2-90,1); e.reset(WORLD_W/2+60,-1); e.aura=0.4; p.aura=70; },      // BROKE! fires on him immediately
-   script:[ {at:16, fn:p=>p.tryDash(1)}, {at:20, fn:p=>p.tryAttack('kick')},
-            {at:52, fn:p=>p.tryDash(1)}, {at:56, fn:p=>p.tryAttack('kick')} ]},
-  {type:'story', w:'YOU', c:'#cfe0ff', scene:'equals', t:'Every sum has two sides. You only counted one.', sfx:'toll', slow:0.62, dur:150, music:'james'},
-  // ACT 6 — CLIMAX: eat a hit on armor, and answer with the verdict. Then the name.
-  {type:'fight', p:'mauler', e:'ember', stage:'forge', dur:132, slow:[26,78], music:'mul',
+   script:[ {at:30,  fn:p=>p.tryAttack('punch')},
+            {at:90,  fn:p=>{ keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false; }},
+            {at:150, fn:p=>p.tryAttack('punch')},
+            {at:240, fn:p=>p.trySpecial()} ]},
+  // 63.5-71.5s — THE DROP: Maximilian eats a jab on ARMOR → OVERFLOW → THE BOUNDLESS PRODUCT, in long slow-mo, ON the drop.
+  {type:'fight', p:'mauler', e:'ember', stage:'forge', dur:480, slow:[54,320], music:'mul',
    pose:(p,e)=>{ p.reset(WORLD_W/2-44,1); e.reset(WORLD_W/2+40,-1); p.aura=68; },
-   script:[ {at:6,  fn:p=>p.tryAttack('kick')},                           // the crusher winds up…
-            {at:7,  fn:(p,e)=>e.cpuAttack('punch',1)},                    // …their jab lands INTO the armor → OVERFLOW
-            {at:30, fn:p=>p.trySpecial(2)} ]},                            // THE BOUNDLESS PRODUCT — the T3 his card promises
-  {type:'logo',  dur:250, music:'james'},
+   script:[ {at:12, fn:p=>p.tryAttack('kick')},
+            {at:18, fn:(p,e)=>e.cpuAttack('punch',1)},
+            {at:60, fn:p=>p.trySpecial(2)} ]},
+  // 71.5-78.5s — the name, holding the drop's energy; the song bows out under it.
+  {type:'logo',  dur:420, music:'james'},
 ];
 function startShowcase(){   // v9 — V from any menu: two fighters walk in and FIGHT, letterboxed, hands-free (record over it)
   const pool=[...ROSTER]; const a=pool.splice(Math.floor(Math.random()*pool.length),1)[0]; const b=pool[Math.floor(Math.random()*pool.length)];
@@ -4639,11 +4647,17 @@ addEventListener('drop', e=>{ e.preventDefault();
     game._songToast=game.frame; SFX.correct();
   }
 });
-function enterTrailer(){ game.trailerMode=true; game.trailer=null; const h=document.getElementById('hint'); if(h) h.style.display='none';
+function enterTrailer(){ game.trailerMode=true; game.trailer=null; game.trailerLoading=true; const h=document.getElementById('hint'); if(h) h.style.display='none';
   findTrailerSong().then(ok=>{
-    if(ok && game.trailerMode){ try{ trailerSongEl=new Audio(trailerSongURL); trailerSongEl.volume=0.92; trailerSongEl.play().catch(()=>{}); game.trailerSongOn=true; if(musG) musG.gain.value=0; }catch(_){}}
-  });
-  setupTrailerScene(0);
+    if(!game.trailerMode) return;
+    if(ok){
+      try{
+        trailerSongEl=new Audio(trailerSongURL); trailerSongEl.volume=0.92;
+        trailerSongEl.play().then(()=>{ game.trailerSongOn=true; if(musG) musG.gain.value=0; }).catch(()=>{ trailerSongEl=null; game.trailerSongOn=false; });   // autoplay blocked (no gesture) -> graceful synth fallback
+      }catch(_){ trailerSongEl=null; }
+    }
+    game.trailerLoading=false; setupTrailerScene(0);
+  }).catch(()=>{ game.trailerLoading=false; setupTrailerScene(0); });
 }
 function exitTrailer(){ game.trailerMode=false; game.cinema=false; game.cinemaSlow=false; const h=document.getElementById('hint'); if(h) h.style.display='';
   if(trailerSongEl){ try{ trailerSongEl.pause(); }catch(_){} trailerSongEl=null; }
@@ -4651,7 +4665,9 @@ function exitTrailer(){ game.trailerMode=false; game.cinema=false; game.cinemaSl
   setMusic('default'); game.state='title'; }
 function setupTrailerScene(i){
   if(i>=TRAILER.length){ exitTrailer(); return; }
-  const S=TRAILER[i]; game.trailer={scene:i, t:0, dur:S.dur, slow:(S.type==='fight'?S.slow:null), card:S};
+  const S=TRAILER[i]; game.trailer={scene:i, t:0, dur:S.dur, slow:(S.type==='fight'?S.slow:null), card:S,
+    songBase:(game.trailerSongOn && trailerSongEl && !isNaN(trailerSongEl.currentTime))? trailerSongEl.currentTime : null};   // v10 the scene remembers where the SONG was when it began
+  if(S.script) S.script.forEach(a=>{ a._f=false; });   // re-arm the shot script
   if(S.music && !game.trailerSongOn) setMusic(S.music);   // v9 your song owns the trailer when present — the synth score steps aside
   if(S.type==='fight'){
     game.mode='cpu'; game.galaxy=false; game.practice=false; game.mode2p=false; game.tutorial=false; game.cpuTier=null; DIFF.level=2;
@@ -4662,8 +4678,8 @@ function setupTrailerScene(i){
     game.player.reset(WORLD_W/2-135,1); game.enemy.reset(WORLD_W/2+135,-1);   // close + charged so the short clips land action instantly
     game.player.aura=game.player.char.auraMax; game.enemy.aura=game.enemy.char.auraMax;
     if(S.pose) try{ S.pose(game.player, game.enemy); }catch(_){}
-    if(S.ai==='live'){ game.player.aiThink=8; game.enemy.aiThink=6; }
-    else { game.player.aiThink=99999; game.enemy.aiThink=99999; }   // v9 scripted shots: the AIs breathe (spacing) but the SCRIPT lands the beats — no more random mush
+    if(S.ai==='live'){ game.player.aiThink=8; game.enemy.aiThink=6; game.enemy._noBurst=false; }
+    else { game.player.aiThink=99999; game.enemy.aiThink=99999; game.enemy._noBurst=true; }   // v9 scripted shots: the AIs breathe but the SCRIPT lands the beats — and nobody bursts out of a money shot (v10)
   } else if(S.type==='story'){
     game.cinema=false; game.cinemaSlow=false; game.storyCh=-1;
     game.dlg={lines:[{w:S.w,c:S.c,t:S.t,sfx:S.sfx,slow:S.slow||0.8}], i:0, _i:-1, skip:false, lineStart:game.frame, scene:S.scene, after:'trailer'};
@@ -4672,11 +4688,19 @@ function setupTrailerScene(i){
   else if(S.type==='logo'){ game.cinema=false; game.cinemaSlow=false; game.state='keyart'; }
 }
 function trailerDirector(){
+  if(game.trailerLoading) return;   // the song decides when we start
   const tr=game.trailer; if(!tr){ setupTrailerScene(0); return; }
-  tr.t++;
+  // v10 SONG-LOCKED CLOCK — when your track is playing, IT is the master timeline (1 song-second = 60 ticks). Slow-mo stretches the SIM, never the music; the drop lands where the drop lands.
+  let songDriven=false;
+  if(game.trailerSongOn && trailerSongEl && tr.songBase!=null){
+    const s=trailerSongEl.currentTime;
+    if(s>0){ tr.t=Math.max(tr.t, Math.round((s-tr.songBase)*60)); songDriven=true; }
+  }
+  if(!songDriven) tr.t++;
   const S=TRAILER[tr.scene];
-  if(S && S.script && game.state==='fight') for(const a of S.script) if(a.at===tr.t){ try{ a.fn(game.player, game.enemy); }catch(_){} }   // v9 the director LANDS the money shots
+  if(S && S.script && game.state==='fight') for(const a of S.script) if(!a._f && tr.t>=a.at){ a._f=true; try{ a.fn(game.player, game.enemy); }catch(_){} }   // the director LANDS the money shots (>= : the song clock can skip exact ticks)
   game.cinemaSlow = !!(tr.slow && tr.t>=tr.slow[0] && tr.t<=tr.slow[1]);
+  if(trailerSongEl && game.trailerSongOn && TRAILER[tr.scene+1]===undefined && tr.dur-tr.t<160){ try{ trailerSongEl.volume=Math.max(0, 0.92*(tr.dur-tr.t)/160); }catch(_){} }   // the song bows out with the logo
   if(tr.t>=tr.dur) setupTrailerScene(tr.scene+1);
 }
 function drawTrailercard(){

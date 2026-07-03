@@ -1,81 +1,101 @@
-# BRAWLGEBRA — Theme Song
-### Suno-ready · ~60 seconds · nostalgic synthwave (Stranger Things vibe)
+# BRAWLGEBRA — Trailer Music
+### Suno-ready · trailer cue (build → drop) · arcade × west-coast hip-hop · "the chosen one"
 
-Catchy, nostalgic, feel-good — warm 80s synthwave with a melodic *sung* vocal and a wordless
-"oh-oh-oh" hook. Coming-of-age, believe-in-yourself: the doubting kid who trains their mind and
-watches the results follow. **BRAWLGEBRA** is the sung hook so it's clearly the game's theme.
+A **trailer track**, not a radio song — it moves in an arc: sparse tension → build → big
+**drop**, a loud-quiet-loud break, a final riser, the biggest drop, and a bare stinger for the
+logo. Arcade energy with a West Coast hip-hop backbone (G-funk synths, 808s, half-rap tension,
+soaring sung hook). Never metal. Story: **you are the chosen one**, unlocking ancient
+mathematical functions and the power of your mind (it can move mountains); the road is brutal,
+you fail constantly, but you train, unleash it, and rise. **No ordinary fight — it's Brawlgebra.**
+
+> **Pronunciation:** **BRAWL-GIH-bra** (hard G), NOT "brawl-JEE-bra" like *algebra*. In the sung
+> lyrics it's spelled **"Brawlgibra"** to force it. Title/on-screen spelling stays **BRAWLGEBRA**.
+> (If a take still says it wrong, spell it "Brawl-gib-ra" in the lyric.)
 
 ---
 
 ## STYLE  (paste into Suno's "Style of Music")
 
 ```
-nostalgic 80s synthwave, Stranger Things vibe, warm analog synths, arpeggiated bassline,
-dreamy gated-reverb drums, melodic earnest male vocal, catchy synth-pop hook with wordless
-oh-oh-oh, uplifting coming-of-age, hopeful and anthemic, retro, feel-good, ~110 BPM
+epic game-trailer music, cinematic build to a huge drop, west coast hip hop influence, G-funk
+synth lead, arcade chiptune arpeggios, booming 808s and trailer drums, spoken half-rap tension
+verses into a soaring gang-vocal hook, dynamic loud-quiet-loud, triumphant, ~92 BPM
 ```
 
 **Title field:** `BRAWLGEBRA`
-**Exclude Styles:** `metal, heavy, aggressive, screaming, shouty, thrash, hardcore, ballad`
+**Exclude Styles:** `metal, rock, heavy, screaming, growl, distorted guitar`
 
 ---
 
 ## LYRICS  (paste into the "Lyrics" box)
 
-[Intro]
-Close your eyes… count to four.
+[Intro: sparse pulse, spoken cool, tension]
+This is Brawlgibra.
+The only fight that matters… is the one inside.
 
-[Verse]
-Small-town kid with a head full of doubt
-Numbers on the board I could never work out
-But I put in the hours when the lights burned low
-Train the mind, trust the work, and watch it start to show
+[Build: 808 creeps in, arp rising, half-rap]
+They said you can't — but they never saw the fire
+ancient functions waking, pull you higher, higher…
+one thought… can move a mountain
 
-[Pre-Chorus]
-I can feel it changing, something's opening wide
-Every question in the dark — there's an answer inside
+[Drop: beat slams, big gang-vocal hook]
+BRAWLGIBRA! (unlock your mind)
+BRAWLGIBRA! (you were born for this)
+no ordinary fight — the chosen one arrives
+BRAWLGIBRA!
 
-[Chorus]
-BRAWLGEBRA — believe, and you rise
-Every answer lights a spark in your eyes
-Train your mind and the rest will follow
-Hold on tight, we'll take on tomorrow
-(oh-oh-oh-oh… BRAWLGEBRA)
+[Break: near-silence, one voice + heartbeat]
+You'll fail. And fail again.
+…get up.
 
-[Bridge]
-Plus, Minus, Multiply, Divide —
-four little keys and a fire inside
-When they say that you're not enough
-Answer back — show 'em what you're made of
+[Final Build: fast riser, chant]
+Plus — Minus — Multiply — Divide!
+four ancient keys — the power's inside!
 
-[Chorus]
-BRAWLGEBRA — believe, and you rise
-Every answer lights a spark in your eyes
-Train your mind and the rest will follow
-Hold on tight, we'll take on tomorrow
-(oh-oh-oh-oh… BRAWLGEBRA)
+[Final Drop: biggest, everything in]
+BRAWLGIBRA! (unleash it now)
+BRAWLGIBRA! (move the mountain)
+train in the dark and you rise to the light
+BRAWLGIBRA — no ordinary fight!
 
-[Outro]
-Just believe… BRAWLGEBRA.
+[Outro: one hit, then tail]
+The chosen one…
+Brawlgibra.
+
+---
+
+## HOW IT MAPS TO THE TRAILER (music ↔ picture)
+
+| Section | Trailer moment |
+|---|---|
+| Intro (title-drop, sparse) | cold open / logo whisper, first math question |
+| Build ("higher, higher…") | reveals, the world, quick combat |
+| Drop #1 (hook) | first big hit / hero moment |
+| Break ("you'll fail… get up") | slow-mo, story/emotional beat |
+| Final Build (function chant) | the montage riser before the finish |
+| Final Drop (biggest) | the climax / **K.O.** lands here |
+| Outro stinger | the **logo / title card** |
+
+**One rule:** the biggest drop goes on the K.O.; the outro stinger goes on the logo.
 
 ---
 
 ## ALTERNATE STYLE FLAVORS  (swap the Style line, keep lyrics)
 
-**A — dreamy retrowave (The Midnight / FM-84):**
+**A — more hip-hop forward:**
 ```
-dreamy retrowave, nostalgic 80s synth-pop, warm pads, saxophone accents, gated-reverb drums,
-earnest melodic vocal, catchy hopeful chorus, coming-of-age, ~105 BPM
-```
-
-**B — a-ha / Take On Me bright synth-pop:**
-```
-bright 80s synth-pop anthem, sparkling arpeggio synths, punchy drums, soaring catchy male vocal,
-euphoric hook, nostalgic, feel-good, ~115 BPM
+cinematic west coast hip hop trailer, boom-bap + trap drums, deep 808s, funky G-funk synth,
+arcade chiptune accents, half-rap verses to a gang-vocal drop, dynamic build, ~92 BPM
 ```
 
-**C — Stranger Things analog (more instrumental/eerie-hopeful):**
+**B — more arcade / synth forward:**
 ```
-Stranger Things style analog synth, pulsing arpeggiator, John Carpenter vibe, warm and nostalgic,
-builds to a hopeful anthemic swell, cinematic, ~110 BPM
+arcade synth trailer anthem, bright chiptune arpeggios, funky synth bass, hip-hop drum groove,
+big build to an anthemic drop, playful and epic, ~96 BPM
+```
+
+**C — biggest / most cinematic:**
+```
+epic hybrid trailer, cinematic synth brass + arcade arps, trap 808s, huge gang-vocal drop,
+spoken tension into triumph, blockbuster energy, ~92 BPM
 ```
