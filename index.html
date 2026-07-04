@@ -541,9 +541,9 @@ addEventListener("keydown", e => {
     return;
   }
   if(game.state==='howto'){
-    if(lk==='t'){ SFX.ui(); startTutorial(); game.pendingFight=null; return; }   // replay THE TRIAL → ends back at title (pendingFight nulled)
     if(k==='ArrowLeft'||k==='ArrowRight'||lk===KEYS.left||lk===KEYS.right){ game.howPage=1-(game.howPage||0); SFX.ui(); return; }   // v8 two pages: THE FIGHT / THE EDGE
-    if(k==='Enter'||k===' '){ SFX.ui();
+    if((k==='Enter'||k===' '||lk==='t') && game.howReturn!=='fight'){ SFX.ui(); startTutorial(); game.pendingFight=null; return; }   // the lesson LEADS: ⏎ = THE TRIAL, a guided walkthrough (mid-fight help keeps ⏎ = back to the bout)
+    if(k==='Enter'||k===' '||k==='Escape'){ SFX.ui();
       if(game.howReturn==='fight') startMatch(); else if(game.howReturn==='story') game.state='story'; else game.state='title'; }
     return;
   }
@@ -645,8 +645,10 @@ addEventListener("keydown", e => {
     if(lk==='g' && !game.mode2p && !game.online && game.problem && game.problem.gambitOffer && !game.problem.gambit){   // v5 #13 OPT-IN GAMBIT — you set the stake: G wagers this problem for ×2-or-bank-wipe + a streak shield on the win
       game.problem.gambit=true; flash(0.10,'#ff7ac0'); SFX.charge(); floatText(p.x,p.y-198,'WAGERED','#ff7ac0',16); return; }
     // INPUT BUFFER — if an action can't fire this instant, remember the INTENT for ~6f and replay it the moment it's legal
-    if((lk===KEYS.punch||lk===KEYS.kick) && keys[KEYS.punch] && keys[KEYS.kick] && game.state==='fight' && !game.mode2p){   // A+S together = THROW (beats block); cancel a just-started normal into it
-      if(p.attack && (p.attack.type==='punch'||p.attack.type==='kick') && p.attack.ph==='wind' && (p.attack.fuse-p.attack.t)<=2) p.attack=null;
+    if((lk===KEYS.punch||lk===KEYS.kick) && keys[KEYS.punch] && keys[KEYS.kick] && game.state==='fight' && !game.mode2p){   // A+S together = THROW (beats block)
+      // HUMAN-CHORD FIX: fingers land 3-9 frames apart, so the first key has already STARTED a punch/kick
+      // (a punch's whole windup is ~5f). If that normal hasn't CONNECTED yet, the intent was clearly the grab — convert it.
+      if(p.attack && (p.attack.type==='punch'||p.attack.type==='kick') && !p.hitThisSwing && (p.attack.ph==='wind'||p.attack.ph==='act')) p.attack=null;
       if(p.tryThrow()) return;
     }
     if(lk===KEYS.punch){ if(!p.tryAttack('punch')) p.bufferedInput={action:'punch',frame:game.frame}; }
@@ -2550,6 +2552,10 @@ function controlCPU(c){
   } else c._wakePlan=null;
   if(!c.canAct()) return;
   const dist = Math.abs(p.x-c.x), dir = p.x>c.x?1:-1;
+  // v8 ENGAGEMENT CLOCK — the opponent is never allowed to circle for seconds. If it hasn't swung or been point-blank in ~3.7s, it COMES TO YOU: cadence forced to approach, decision gap cut, and even a zoner's band collapses to strike range until contact is made.
+  if(c._engAt==null || c.attack || dist<120) c._engAt=game.frame;
+  const starving = game.frame-c._engAt > 220;
+  if(starving && c.aiThink>24) c.aiThink=24;
   if(c._tick){ if(game.frame>=c._tick){ c._tick=null; if(dist<72 && c.aura>=6){ c.tryThrow(); return; } } else { c.moveX=dir; return; } }   // v4 (b) walk the booked TICK THROW in — teched by A+S, jumped, or backdashed
   // #4 PUNISH-THE-REFUEL — a player banking mid-fight (FOCUS channel) is an opening the foe HUNTS, exactly as you can rush its ∑ solve. Bank at range or behind cover; bank in its face and eat the counter.
   if((p.focusT||0)>0 && c.grounded){
@@ -2583,7 +2589,7 @@ function controlCPU(c){
   if(c.aura < Math.round(ATK.punch.cost*c.char.costMul) && c.thinkT<=0 && dist<=140 && c.grounded && !c.attack){   // v7 FIX: BROKE and in your face with nothing to swing — it BACKS OUT to count (was: stood there doing literally nothing). The starvation story now reads on screen: break him, chase him.
     c.moveX = -dir*0.30*cfg.speed; hopCover(c); return;
   }
-  if(c.aura<58 && dist>140 && !(p.attack&&p.attack.ph!=='rec') && c.grounded && c.aiThink>8 && c.aiThink<9000 && Math.random()<(c.aura<6?0.25:0.07)){ c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }   // v7: a BROKE foe starts counting fast (0.25/f) instead of pacing
+  if(c.aura<58 && dist>140 && !(p.attack&&p.attack.ph!=='rec') && c.grounded && c.aiThink>8 && c.aiThink<9000 && !starving && game.frame>(c._solveCd||0) && Math.random()<(c.aura<6?0.25:0.07)){ c._solveCd=game.frame+300; c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }   // v7: a BROKE foe counts fast · v8: at most one stall per 5s, and NEVER while it owes you a fight (the chain-stall read as 'the AI is frozen')
   c.aiThink--;
   // READS — the foe builds a picture of YOUR defensive habit and decays it (recency). Its offense then adapts (below), so the attacker becomes readable + counter-conditionable.
   const rd = c.read || (c.read={block:0,punish:0,dodge:0});
@@ -2639,8 +2645,10 @@ function controlCPU(c){
   let rMin=P.rng[0], rMax=P.rng[1];
   const lowHp = P.retHp>0 && c.hp < c.char.hp*(P.retHp/100);      // a glass-cannon bails when hurt
   if(lowHp){ rMin+=140; rMax+=220; }
+  if(starving){ rMin=Math.min(rMin,70); rMax=Math.min(rMax,140); }   // v8 engagement clock: even the zoner's band collapses to strike range until it makes contact
   // v6 #1 CPU MOVEMENT PARITY — the opponent plays neutral with your verbs: a 3-state approach cadence instead of fractional creep, real dash-ins that convert to dash-S, and paid backdashes out of pressure.
   if(!c._mvT || game.frame>=c._mvT){ c._mvT=game.frame+rnd(30,60); const r=Math.random(); c._mvS = r<0.45?'in' : r<0.8?'hold' : 'out'; }
+  if(starving) c._mvS='in';   // no footsies theater while it owes you a fight
   const clockLow = (game.timer!=null && game.timer<20);          // anti-timeout: even a runaway zoner must engage late
   if(DIFF.level>=1 && c.grounded && c.dashCd<=0 && !c._lastDash && dist>170 && dist<300 && Math.random()<(P.dshI||0)){   // DASH-IN — closes the band in a blink; sometimes converts straight to the dash-S overhead (the mixup you use)
     c.tryDash(dir); c._lastDash=true;
@@ -5040,7 +5048,12 @@ function drawHowTo(){   // v8 PRISTINE REBUILD — two pages, every line verifie
   const kp=keyLabel(KEYS.punch), kk=keyLabel(KEYS.kick), ks=keyLabel(KEYS.special);
   const pg = game.howPage||0;
   txtO('HOW TO FIGHT', W/2, 46, 30, '#efe9ff',{sw:6});
-  txtO(pg===0?'PAGE 1 — THE FIGHT':'PAGE 2 — THE EDGE', W/2, 66, 12, '#8a93b8',{sw:0,mono:true});
+  if(game.howReturn!=='fight'){   // the lesson leads; the written guide backs it up
+    const pl=0.6+Math.sin(game.frame*0.08)*0.4;
+    rr(W/2-260, 54, 520, 22, 8); ctx.fillStyle='rgba(50,32,80,0.9)'; ctx.fill();
+    ctx.globalAlpha=pl; ctx.strokeStyle='#ffd34d'; ctx.lineWidth=1.6; rr(W/2-260, 54, 520, 22, 8); ctx.stroke(); ctx.globalAlpha=1;
+    txtO('⏎  THE TRIAL — a guided walkthrough of every move, one at a time (2 min)', W/2, 69, 11, '#ffd34d',{mono:true,sw:0});
+  } else txtO(pg===0?'PAGE 1 — THE FIGHT':'PAGE 2 — THE EDGE', W/2, 66, 12, '#8a93b8',{sw:0,mono:true});
   const PAGES=[[
    ['#7ae8ff','THE DEAL',
     'Every attack spends AURA up front. Answering the math card refills it. At zero you cannot swing. That is the whole economy: spend, answer, spend.'],
@@ -5091,7 +5104,7 @@ function drawHowTo(){   // v8 PRISTINE REBUILD — two pages, every line verifie
   for(let i=0;i<2;i++){ ctx.beginPath(); ctx.arc(W/2-10+i*20, fy-16, 4, 0, 7); ctx.fillStyle = i===pg? '#ffd34d':'#3a4258'; ctx.fill(); }
   const pulse=0.6+Math.sin(game.frame*0.08)*0.4;
   ctx.globalAlpha=pulse;
-  txtO('←/→  PAGE      '+(game.howReturn==='fight'? '⏎  FIGHT':'⏎  BACK')+'      T  REPLAY THE TRIAL', W/2, fy, 13, '#ffd34d',{sw:0,mono:true});
+  txtO(game.howReturn==='fight'? '←/→  PAGE      ⏎  BACK TO THE FIGHT' : '⏎  START THE TRIAL      ←/→  PAGE      ESC  BACK', W/2, fy, 13, '#ffd34d',{sw:0,mono:true});
   ctx.globalAlpha=1;
 }
 function btn(label, x, y, w, h, hot){
@@ -6516,14 +6529,16 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
 }
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
-const TUTOR_STEPS=[   // v8 pristine pass — each step one idea, every claim code-true
+const TUTOR_STEPS=[   // v9 — every element of the fight, one idea at a time, each gated on DOING it (see tutorTick)
   'Your AURA is empty — you cannot strike. Answer the problem below (type it, press ⏎) to fill the bar.',
   'Now strike. '+keyLabel(KEYS.punch)+' punches. Every blow spends AURA, so keep answering to keep swinging.',
   'Land a punch. The moment it hits, CHAIN ▸ flashes — press '+keyLabel(KEYS.kick)+' before it fades and the kick chains on. That is a COMBO.',
+  'Now DEFEND. He is winding up — the ! over his head says where it lands. Blue ▼: hold ↓ to guard LOW. Red: hold ↓ or hold back, either guard works. Block two strikes.',
+  'Better than blocking: a ! also deals you a quick 1-digit problem. Answer it before the blow lands and you SLIP straight through it and stagger him.',
+  'He is hiding behind his guard. Press '+keyLabel(KEYS.punch)+' and '+keyLabel(KEYS.kick)+' TOGETHER to THROW — a grab goes straight through block. (Grabbed yourself? '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' right back techs out.)',
   'He has you in a COMBO. Press '+keyLabel(KEYS.special)+' while stunned to BURST free — it spends 40 AURA. Or type the red 1-digit answer over your head: a FREE escape, once per round.',
-  'A ! over the foe means a strike is coming — and your typed answer wipes. Answer the new 1-digit problem before the blow lands: you SLIP it and stagger them.',
   'Your SPECIAL: tap '+keyLabel(KEYS.special)+' and it fires the strongest tier your AURA can buy. Fire one now — then fire again on a fuller bar and feel the jump. HOLD '+keyLabel(KEYS.special)+' to pick a tier yourself.',
-  'That is the whole engine: answer to bank AURA, spend it to strike, chain on CHAIN ▸, BURST out of combos, answer in the NOW window to SLIP. Your first real fight begins.',
+  'That is the whole fight: answer to bank AURA · spend it to strike · chain on CHAIN ▸ · guard the ! · answer fast to SLIP · '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' grabs a turtle · BURST out of combos. Your first real fight begins.',
 ];
 function startTutorial(){
   // capture a SAFE fight to land on after the lesson (the boot enemy may be unset → default to a real ROSTER foe)
@@ -6534,6 +6549,7 @@ function startTutorial(){
   game.daily=false; _mrng=null;                  // the lesson uses normal math, not the seeded Daily stream
   game.tutorial=true; game.tutorStep=0; game.tutorT=0;
   game.cancelDone=0; game.burstDone=0; game.fDone=0; game.fSpecialDone=0; game._tierTip=0; game.relockAtk=null;  // fresh lesson gates
+  game._blkN=0; game._blkWas=false; game._threwSwing=false;   // v9 gates for the GUARD + THROW lessons
   game.mode='cpu';
   if(!(game.player.char&&game.player.char.id)) game.player.setCharacter(PROTAG);
   game.enemy.setCharacter(DUMMY_CHAR);
@@ -6552,10 +6568,34 @@ function tutorTick(){
   } else if(game.tutorStep===2){                       // CANCEL — land a punch, then cancel into a kick
     if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }          // keep the dummy in melee range
     game.tutorT++;
-    if((game.cancelDone||0)>=1){ game.tutorStep=3; game.tutorT=0; announce('COMBO!','#ffd34d'); }   // a REAL hit-confirm cancel
-    else if(game.tutorT>720){ game.tutorStep=3; game.tutorT=0; }   // never strand
-  } else if(game.tutorStep===3){                       // BURST — get combo'd, then escape
+    if((game.cancelDone||0)>=1){ game.tutorStep=3; game.tutorT=0; game._blkN=0; announce('COMBO!','#ffd34d'); }   // a REAL hit-confirm cancel
+    else if(game.tutorT>720){ game.tutorStep=3; game.tutorT=0; game._blkN=0; }   // never strand
+  } else if(game.tutorStep===3){                       // v9 GUARD — the dummy telegraphs slow strikes; block two of them
+    if(dist>150){ E.x += (P.x>E.x?1:-1)*1.3; }
+    game.tutorT++;
+    if(!E.attack && E.grounded && P.stun<=0 && game.tutorT%110===0){ E.facing=(P.x>E.x?1:-1);
+      E.cpuAttack(game._blkN? 'kick':'punch', 60); SFX.charge(); }   // slow, readable; the second one comes in LOW (↓ only)
+    if((P.blockstunT||0)>0 && !game._blkWas){ game._blkN=(game._blkN||0)+1; game._blkWas=true; announce('GUARDED','#46e08a'); }
+    else if((P.blockstunT||0)<=0) game._blkWas=false;
+    if((game._blkN||0)>=2){ game.tutorStep=4; game.tutorT=0; announce('DEFENSE!','#46e08a'); }
+    else if(game.tutorT>1100){ game.tutorStep=4; game.tutorT=0; announce('NEXT LESSON','#9fdcff'); }   // soft-lock guard
+  } else if(game.tutorStep===4){                        // SLIP (the perfect dodge) — timed; the answer relocks on his commit
+    if(dist>168){ E.x += (P.x>E.x?1:-1)*1.3; }          // keep the dummy inside dodge range
+    game.tutorT++;
+    if(!E.attack && E.grounded && game.tutorT%96===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 92); SFX.charge(); } // a slow, readable telegraph
+    if((game.stats.perfects||0)>=1){ game.tutorStep=5; game.tutorT=0; game._threwSwing=false; announce('SLIPPED!','#ffd34d'); }
+    else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; game._threwSwing=false; announce('NEXT LESSON','#9fdcff'); }   // SOFT-LOCK GUARD
+  } else if(game.tutorStep===5){                        // v9 THROW — the dummy turtles; grab straight through the guard
+    P.aura=Math.max(P.aura,20);                         // gas for the 6-cost grab (and a punch to feel it bounce off block first)
+    if(dist>110){ E.x += (P.x>E.x?1:-1)*1.4; }          // grabs are short-range — keep him close
+    game.tutorT++;
+    E.wantBlock=true; E.blockHold=Math.max(E.blockHold||0,30); E.guardStance='low'; E.facing=(P.x>E.x?1:-1);   // a wall of guard: strikes bounce, the grab does not
+    if(P.attack && P.attack.type==='throw') game._threwSwing=true;
+    if(game._threwSwing && E.stun>10){ game.tutorStep=6; game.tutorT=0; announce('GRABBED!','#ff9f6a'); }
+    else if(game.tutorT>1000){ game.tutorStep=6; game.tutorT=0; announce('NEXT LESSON','#9fdcff'); }   // soft-lock guard
+  } else if(game.tutorStep===6){                       // BURST — get combo'd, then escape
     P.aura=Math.max(P.aura,60);                         // gas to pay for the burst
+    E.wantBlock=false; E.blockHold=0;
     if(dist>150){ E.x += (P.x>E.x?1:-1)*1.4; }
     game.tutorT++;
     if(!E.attack && E.grounded && P.stun<=0 && P.iframes<=0 && game.tutorT%64===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 22); }
@@ -6563,23 +6603,17 @@ function tutorTick(){
       P.comboedHits=2; P.stun=Math.max(P.stun,42);
       tip('burstT','BURST — answer the red problem over your head for a FREE escape (once per round), or press '+keyLabel(KEYS.special)+' to pay 40 AURA.');
     }
-    if((game.burstDone||0)>=1){ game.tutorStep=4; game.tutorT=0; announce('BURST!','#ffd34d'); }
-    else if(game.tutorT>960){ game.tutorStep=4; game.tutorT=0; announce('NEXT LESSON','#9fdcff'); }
-  } else if(game.tutorStep===4){                        // PERFECT DODGE — timed; the answer relocks on his commit
-    if(dist>168){ E.x += (P.x>E.x?1:-1)*1.3; }          // keep the dummy inside dodge range
-    game.tutorT++;
-    if(!E.attack && E.grounded && game.tutorT%96===0){ E.facing=(P.x>E.x?1:-1); E.cpuAttack('punch', 92); SFX.charge(); } // a slow, readable telegraph
-    if((game.stats.perfects||0)>=1){ game.tutorStep=5; game.tutorT=0; announce('PERFECT DODGE!','#ffd34d'); }
-    else if(game.tutorT>900){ game.tutorStep=5; game.tutorT=0; announce('NEXT LESSON','#9fdcff'); }   // SOFT-LOCK GUARD
-  } else if(game.tutorStep===5){                        // SPECIAL — the headline mechanic: fire a tier-1, then feel the jump on a full bar
+    if((game.burstDone||0)>=1){ game.tutorStep=7; game.tutorT=0; announce('BURST!','#ffd34d'); }
+    else if(game.tutorT>960){ game.tutorStep=7; game.tutorT=0; announce('NEXT LESSON','#9fdcff'); }
+  } else if(game.tutorStep===7){                        // SPECIAL — the headline mechanic: fire a tier-1, then feel the jump on a full bar
     if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }          // keep the dummy reachable for melee/dash specials
     game.tutorT++;
     if((game.fSpecialDone||0)===0){ P.aura=Math.max(P.aura,25); }                    // exactly a tier-1
     else if((game.fSpecialDone||0)===1){ P.aura=Math.max(P.aura,90);                 // a full bar → the strongest tier
       if(!game._tierTip){ game._tierTip=1; announce('FULL BAR — '+keyLabel(KEYS.special)+' FIRES YOUR STRONGEST','#ffd34d'); } }
-    if((game.fSpecialDone||0)>=2){ game.tutorStep=6; game.tutorT=0; announce('SPECIAL!','#ffd34d'); }
-    else if(game.tutorT>1000){ game.tutorStep=6; game.tutorT=0; }                    // soft-lock guard
-  } else if(game.tutorStep===6){                        // wrap-up
+    if((game.fSpecialDone||0)>=2){ game.tutorStep=8; game.tutorT=0; announce('SPECIAL!','#ffd34d'); }
+    else if(game.tutorT>1000){ game.tutorStep=8; game.tutorT=0; }                    // soft-lock guard
+  } else if(game.tutorStep===8){                        // wrap-up
     game.tutorT++;
     if(game.tutorT>150) endTutorial();
   }
