@@ -1167,9 +1167,13 @@ function drawTip(){
   ctx.restore();
 }
 function drawFloaters(){
+  const _fhalf=(W/2)/cam.z;   // clamp every floater into view — coaching prompts and damage numbers must never clip at the camera edge
   for(const f of floaters){
     const s = eoBack(Math.min(1,f.t*4));
-    ctx.save(); ctx.translate(f.x,f.y); ctx.scale(s,s);
+    ctx.save(); ctx.font=font(DISP,f.size);
+    const _fw=Math.min(ctx.measureText(String(f.txt)).width/2+8, _fhalf-4);
+    const _fx=clamp(f.x, cam.x-_fhalf+_fw+16, cam.x+_fhalf-_fw-16);   // +16: screen-shake margin so a corner floater stays whole mid-shake
+    ctx.translate(_fx,f.y); ctx.scale(s,s);
     ctx.globalAlpha = f.t<0.6?1:1-(f.t-0.6)/0.4;
     txtO(f.txt,0,0,f.size,f.col,{sw:Math.max(3,f.size/7)});
     ctx.restore();
@@ -2378,9 +2382,11 @@ function drawFighter(f){
     const hi=f.guardStance==='high';
     txtO(hi?'HIGH GUARD':'LOW GUARD', f.x, f.y-168, 9.5, hi?'#8fd8f8':'#ffd34d', {mono:true,sw:0});
   }
-  // v5 #7 the corner is a NAMED place — both sides can read the spatial stakes
-  if(game.state==='fight' && !f.ko && inCorner(f) && game.frame%2===0)
-    txtO('CORNERED', f.x, f.y-246, 9, '#ff8a8a', {mono:true,sw:0});
+  // v5 #7 the corner is a NAMED place — both sides can read the spatial stakes (label clamps into view: a cornered fighter hugs the camera edge by definition)
+  if(game.state==='fight' && !f.ko && inCorner(f) && game.frame%2===0){
+    const _ch=(W/2)/cam.z;
+    txtO('CORNERED', clamp(f.x, cam.x-_ch+72, cam.x+_ch-72), f.y-246, 9, '#ff8a8a', {mono:true,sw:0});
+  }
   // #4 FOCUS-channel tell — a cyan arc closes around the fighter while the bank lands; readable by BOTH sides (you're open, and the foe knows it)
   if((f.focusT||0)>0 && !f.ko){
     const k=1-f.focusT/12;
@@ -4135,11 +4141,11 @@ function drawDangerSolve(){   // FUSION FIX: during the ⚡NOW window, float the
   if(game.mode2p || game.online || game.galaxy) return;
   const p=game.player; if(!p || p.ko || !game.problem) return;
   if(!perfectFoe(p)) return;                       // only while a strike is inside its tight perfect window
-  const sx = W/2 + (p.x-cam.x)*cam.z;
   const sy = clamp(300 + (p.y-176-cam.lookY())*cam.z, 96, 430);
   const txt = game.problem.text+' = '+(ans1||'')+(((game.frame>>3)&1)?'_':' ');
   ctx.save(); ctx.textAlign='center';
   ctx.font=font(MONO,18); const w=ctx.measureText(txt).width+24;
+  const sx = clamp(W/2 + (p.x-cam.x)*cam.z, w/2+12, W-w/2-12);   // the NOW card follows the fighter but never leaves the screen (cornered = exactly when you need it whole)
   const pulse=0.55+Math.sin(game.frame*0.45)*0.45;
   ctx.globalAlpha=pulse; txtO('◆ NOW — ANSWER', sx, sy-32, 13, '#ffd34d', {sw:0,mono:true}); ctx.globalAlpha=1;
   rr(sx-w/2, sy-24, w, 27, 7); ctx.fillStyle='rgba(8,10,20,0.85)'; ctx.fill();
@@ -4187,9 +4193,10 @@ function drawMinimap(){
   }
 }
 function drawRumbleBars(){ // overhead name + hp, world-space
+  const _half=(W/2)/cam.z;   // keep labels on screen even when their fighter hugs the view edge
   for(const f of game.fighters){
     if(f.gone) continue;
-    const x=f.x, y=f.y-176;
+    const x=clamp(f.x, cam.x-_half+46, cam.x+_half-46), y=f.y-176;
     ctx.save();
     if(f.ko) ctx.globalAlpha=0.5;
     txtO(f.name, x, y-2, 10.5, f.glow, {sw:2});
@@ -4824,18 +4831,24 @@ function drawTrailercard(){   // v4 KINETIC TYPE — word groups slam in on the 
   }
   const groups=c.words||[{t:c.text,at:0}], landed=groups.filter(g=>t>=g.at), n=landed.length;
   if(!n) return;
-  const y0=H/2-(n-1)*30+10, last=landed[n-1], since=t-last.at;
+  // FIT THE FRAME: long lines shrink to 86% of screen width (EVERYTHING ENDS AT ZERO measured 1048px at 44 — words were literally cut off), and wide lines slam from a smaller overshoot so even the slam stays on screen.
+  let fs=44; ctx.font=font(DISP,44);
+  for(const g of groups){ const w=ctx.measureText(g.t).width; if(w>W*0.86) fs=Math.min(fs, Math.floor(44*W*0.86/w)); }
+  const lh=Math.round(fs*1.36);
+  const y0=H/2-(n-1)*lh/2+10, last=landed[n-1], since=t-last.at;
   ctx.save(); if(since<4) ctx.translate(since%2?3:-3, since%2?-2:2);   // 4-tick impact shake on each land
   landed.forEach((g,i)=>{
-    const gt=t-g.at, k=clamp(gt/6,0,1), s=1+(1-k)*(1-k)*0.5;   // slam: 1.5 → 1.0 with a hard ease
-    ctx.save(); ctx.translate(W/2, y0+i*60); ctx.scale(s,s);
-    if(gt<5){ txtO(g.t,-3,0,44,'rgba(255,90,106,0.7)',{sw:0}); txtO(g.t,3,0,44,'rgba(122,232,255,0.7)',{sw:0}); }   // 5 ticks of chromatic split
-    txtO(g.t, 0, 0, 44, '#f2f5ff', {sw:7});
+    ctx.font=font(DISP,fs);
+    const wide=ctx.measureText(g.t).width > W*0.6, ov=wide?0.14:0.5;   // long line: a tight 1.14x slam · short line: the full 1.5x punch
+    const gt=t-g.at, k=clamp(gt/6,0,1), s=1+(1-k)*(1-k)*ov;
+    ctx.save(); ctx.translate(W/2, y0+i*lh); ctx.scale(s,s);
+    if(gt<5){ txtO(g.t,-3,0,fs,'rgba(255,90,106,0.7)',{sw:0}); txtO(g.t,3,0,fs,'rgba(122,232,255,0.7)',{sw:0}); }   // 5 ticks of chromatic split
+    txtO(g.t, 0, 0, fs, '#f2f5ff', {sw:7});
     ctx.restore();
   });
   ctx.restore();
   const bw=clamp((t-groups[0].at)/8,0,1)*220;   // the accent rule snaps in under the block
-  ctx.fillStyle='#7ae8ff'; ctx.fillRect(W/2-bw/2, y0+n*60-30, bw, 3);
+  ctx.fillStyle='#7ae8ff'; ctx.fillRect(W/2-bw/2, y0+n*lh-30, bw, 3);
 }
 function drawTrailerShot(){   // v4 cinematic story vignette — Ken Burns push-in over the cutscene stage, fast lower-third type, no dialogue box
   const tr=game.trailer; if(!tr) return; const S=tr.card, t=tr.t;
@@ -5035,7 +5048,10 @@ function wrapText(s,x,y,maxW,lh,dry){
 }
 function drawTutorBanner(){
   const txt=TUTOR_STEPS[game.tutorStep]||'';
-  rr(W/2-345, 106, 690, 48, 10);
+  ctx.font=font(MONO,11);
+  const lines=wrapText(txt, 0, 0, 650, 13, true);   // dry-measure: the panel sizes to its lesson (v9 steps run longer)
+  const bh=30+lines*13+8;
+  rr(W/2-345, 106, 690, bh, 10);
   ctx.fillStyle='rgba(10,14,28,0.95)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2; ctx.globalAlpha=0.8+Math.sin(game.frame*0.12)*0.2; ctx.stroke(); ctx.globalAlpha=1;
   txtO('THE TRIAL   '+'●'.repeat(game.tutorStep+1)+'○'.repeat(Math.max(0,TUTOR_STEPS.length-game.tutorStep-1)), W/2-250, 121, 10, '#ffd34d',{mono:true,sw:0});
