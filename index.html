@@ -4648,38 +4648,38 @@ function exportPack(){   // every Steam art slot + the og:image, center-cropped 
 }
 // ===== AUTO-PLAYING TRAILER v6 — THE HOOK CUT. Built for a STRANGER with a 3-second attention span; the song (Brawljibra v2, 118.6s) is the master clock; 25 shots in 70.5s.
 // Song map (measured RMS): fade-in 0-4 · verse 4-24 (hit AT 24) · quiet 24.5-29 · build 29.5-37.5 · DEAD SILENCE 37.5-39.5 · DROP 40.0 · chorus 40-61 (peak ~61) · decay 62-71.
-// Grammar: frame ONE is a math problem (the scroll-stopper) · answer detonates into violence · the NAME lands at 9.4s ·
-// four plain-speech teaching shots end on the 24s hit · Solomon framed as the STORY MODE villain · roster reveal up the build ·
+// Grammar: THE PROMISE first — speak to the kid in the dark ("what if I told you your mind was the most powerful force on the planet?"),
+// reframe their life (THEY CALLED IT HOMEWORK. IT WAS TRAINING.), then PROVE it: the equation detonates into violence · the NAME at 11.2s ·
+// five plain-speech teaching shots end on the 24s hit · Solomon framed as the STORY MODE villain · roster reveal up the build ·
 // ZERO alone in the silence · MAXIMILIAN'S reveal IS the drop · chorus = friends + modes over the combo reel · a K.O. on the peak · end card.
 const _ta=()=>{ if(game.problem) submitFor(game.player, String(game.problem.ans)); };   // puppet: the player answers correctly
 let _paBuf='';   // the PROOF SHOT types its answer at human speed — digit by digit into the real card — so the trailer demonstrates the hook instead of claiming it
 const _paStart=()=>{ _paBuf=game.problem? String(game.problem.ans):''; ans1=''; };
 const _paType=n=>{ if(_paBuf) ans1=_paBuf.slice(0,n); };
 const TRAILER=[
- // ---- ACT 1 · THE HOOK (0-9.4s): a math problem is frame one. Three seconds later it's a fight. ----
- {type:'card', problem:'7 × 8 =', answer:'56', ansAt:[54,72], ringAt:96, dur:132, music:'minus'},
+ // ---- ACT 1 · THE PROMISE (0-9.0s): speak straight to the kid in the dark, reframe their life, then PROVE it ----
+ {type:'shot', scene:'black', center:true, mono:true, size:16, spd:0.5, tAt:14, dur:216, fin:10, music:'minus',
+  t:'What if I told you your mind was the most powerful force on the planet?'},
+ {type:'card', words:[{t:'THEY CALLED IT HOMEWORK.',at:0},{t:'IT WAS TRAINING.',at:66}], dur:192, flash:true},
+ {type:'card', problem:'7 × 8 =', answer:'56', ansAt:[42,60], ringAt:84, dur:132, flash:true},
  {type:'fight', p:'mauler', e:'frost', stage:'forge', gap:82, hud:false, dur:132, slow:[30,84], flash:true, tag:{t:'ANSWERS ARE AMMO', s:'solve it, then spend it'},
   script:[{at:2,fn:()=>_ta()},{at:22,fn:p=>p.trySpecial(1)}]},
- {type:'fight', p:'ember', e:'mauler', stage:'pit', gap:80, hud:false, dur:132, slow:[80,120], flash:true,
-  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:24,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:48,fn:p=>p.tryAttack('punch')},{at:84,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'frost', e:'oracle', stage:'frost', gap:84, hud:false, dur:168, slow:[24,58], flash:true,
-  script:[{at:6,fn:(p,e)=>e.cpuAttack('punch',18)},{at:26,fn:p=>p.tryAttack('punch')},{at:60,fn:p=>p.tryAttack('kick')},{at:104,fn:p=>p.trySpecial(1)}]},
- // ---- ACT 1b · THE WELCOME (9.4s): the name slams in while the verse swells. Now they know what they're watching. ----
- {type:'title', dur:192},
- // ---- ACT 2 · HOW IT WORKS (12.6-24.5s): four beats of plain speech, ending exactly on the 24s hit ----
- {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:180, slow:[58,84], flash:true, tag:{t:'TYPE THE ANSWER', s:'it becomes AURA. everything costs AURA.'},
+ // ---- ACT 1b · THE NAME (11.2s): now that they believe it, tell them what it's called ----
+ {type:'title', dur:144},
+ // ---- ACT 2 · HOW IT WORKS (13.6-24.5s): five beats of plain speech, ending exactly on the 24s hit ----
+ {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:174, slow:[58,84], flash:true, tag:{t:'TYPE THE ANSWER', s:'it becomes AURA. everything costs AURA.'},
   pose:(p,e)=>{ p.aura=12; },
   script:[{at:6,fn:()=>_paStart()},{at:20,fn:()=>_paType(1)},{at:34,fn:()=>_paType(2)},{at:48,fn:()=>_paType(3)},{at:60,fn:()=>_ta()},   // the PROOF: problem read, answer typed digit by digit, banked
           {at:80,fn:p=>p.tryDash(1)},{at:92,fn:p=>p.tryAttack('kick')},{at:116,fn:p=>p.tryAttack('kick')},{at:142,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'ember', e:'frost', stage:'void', gap:92, dur:132, slow:[26,48], flash:true, tag:{t:'ANSWER FAST', s:'and you walk straight through their best hit'},
-  script:[{at:4,fn:(p,e)=>e.cpuAttack('kick',26)},{at:28,fn:p=>{p.guardStance='low'; _ta();}},{at:50,fn:p=>p.tryAttack('kick')},{at:74,fn:p=>p.tryAttack('punch')},{at:100,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:86, dur:138, slow:[104,134], flash:true, tag:{t:'CHAIN IT', s:'launch, juggle, cancel. the counter keeps score.'},
-  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:26,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:52,fn:p=>p.tryAttack('punch')},{at:78,fn:p=>p.tryAttack('kick')},{at:108,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'frost', e:'ember', stage:'pit', gap:120, dur:132, ai:'live', flash:true, tag:{t:'RUN THEM DRY', s:'zero AURA means they cannot even swing'},
+ {type:'fight', p:'ember', e:'frost', stage:'void', gap:92, dur:120, slow:[24,46], flash:true, tag:{t:'ANSWER FAST', s:'and you walk straight through their best hit'},
+  script:[{at:4,fn:(p,e)=>e.cpuAttack('kick',24)},{at:26,fn:p=>{p.guardStance='low'; _ta();}},{at:46,fn:p=>p.tryAttack('kick')},{at:68,fn:p=>p.tryAttack('punch')},{at:92,fn:p=>p.trySpecial()}]},
+ {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:86, dur:120, slow:[92,118], flash:true, tag:{t:'CHAIN IT', s:'launch, juggle, cancel. the counter keeps score.'},
+  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:24,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:48,fn:p=>p.tryAttack('punch')},{at:70,fn:p=>p.tryAttack('kick')},{at:96,fn:p=>p.trySpecial()}]},
+ {type:'fight', p:'frost', e:'ember', stage:'pit', gap:120, dur:120, ai:'live', flash:true, tag:{t:'RUN THEM DRY', s:'zero AURA means they cannot even swing'},
   pose:(p,e)=>{ e.aura=0.5; },
-  script:[{at:6,fn:p=>p.tryDash(1)},{at:16,fn:p=>p.tryAttack('kick')},{at:48,fn:p=>p.tryDash(1)},{at:58,fn:p=>p.tryAttack('kick')},{at:88,fn:p=>p.tryDash(1)},{at:98,fn:p=>p.tryAttack('kick')}]},
- {type:'fight', p:'mauler', e:'oracle', stage:'proving', gap:80, dur:132, slow:[50,88], flash:true, tag:{t:'OR JUST GRAB THEM', s:'grabs go straight through block'},
-  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:24,fn:p=>p.tryAttack('punch')},{at:46,fn:p=>p.tryThrow()},{at:100,fn:p=>p.trySpecial()}]},
+  script:[{at:6,fn:p=>p.tryDash(1)},{at:16,fn:p=>p.tryAttack('kick')},{at:40,fn:p=>p.tryDash(1)},{at:50,fn:p=>p.tryAttack('kick')},{at:76,fn:p=>p.tryDash(1)},{at:86,fn:p=>p.tryAttack('kick')}]},
+ {type:'fight', p:'mauler', e:'oracle', stage:'proving', gap:80, dur:120, slow:[46,84], flash:true, tag:{t:'OR JUST GRAB THEM', s:'grabs go straight through block'},
+  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:22,fn:p=>p.tryAttack('punch')},{at:44,fn:p=>p.tryThrow()},{at:92,fn:p=>p.trySpecial()}]},
  // ---- ACT 3 · THE WORLD (24.5-31s): the villain speaks in the quiet, framed so a stranger knows exactly what he is ----
  {type:'shot', scene:'equals', w:'SOLOMON, the EQUALS', c:'#ff9f2a', focus:'them', zoom:[1.1,1.36], t:'I will reduce you all to one answer. Nothing.', act:'loom', sfx:'dread', spd:0.55, dur:246, fin:10, fout:10, music:'james', tag:{t:'STORY MODE', s:'fourteen chapters · the Four Orders · one Final Answer'}},
  {type:'card', words:[{t:'ANSWER IN TIME',at:0},{t:'OR BLEED',at:48}], dur:144, flash:true},   // slams as the build kicks at 29.5s
@@ -4872,8 +4872,13 @@ function drawTrailerShot(){   // v4 cinematic story vignette — Ken Burns push-
     const spd=S.spd||0.55, start=S.tAt==null?10:S.tAt;
     const shown=S.t.slice(0, Math.max(0,Math.floor((t-start)*spd)));
     if(shown){
-      if(S.w) txtO(S.w==='YOU'?(game.heroName||'YOU').toUpperCase():S.w, W/2, H-124, 12, S.c||'#cfe0ff',{mono:true,sw:0});
-      txtO(shown, W/2, H-96, 17, '#e8ecff', {sw:4});
+      const ty=S.center? H/2+6 : H-96;   // the whisper speaks from the CENTER of the dark, not a lower third
+      if(S.w) txtO(S.w==='YOU'?(game.heroName||'YOU').toUpperCase():S.w, W/2, ty-28, 12, S.c||'#cfe0ff',{mono:true,sw:0});
+      if(S.center){ const _ww=S.wrapW||W*0.44;   // a narrow column reads like a voice, and the lines break balanced
+        ctx.font=font(S.mono?MONO:DISP, S.size||17);
+        ctx.fillStyle='#e8ecff'; ctx.textAlign='center';
+        wrapText(shown, W/2, ty-(wrapText(shown,0,0,_ww,(S.size||17)*1.5,true)-1)*(S.size||17)*0.75, _ww, (S.size||17)*1.5); }
+      else txtO(shown, W/2, ty, S.size||17, '#e8ecff', {sw:4});
     }
   }
 }
