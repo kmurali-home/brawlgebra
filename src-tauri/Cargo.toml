@@ -1,7 +1,7 @@
 [package]
-name = "modulus"
+name = "brawlgebra"
 version = "1.0.0"
-description = "Modulus — a math-powered fighting game"
+description = "BRAWLGEBRA — a math-powered fighting game"
 authors = ["KMurali Studio"]
 license = "Proprietary"
 repository = ""
@@ -11,7 +11,7 @@ rust-version = "1.77.2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "modulus_lib"
+name = "brawlgebra_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

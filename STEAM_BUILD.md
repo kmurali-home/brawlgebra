@@ -1,4 +1,4 @@
-# Shipping Modulus on Steam
+# Shipping BRAWLGEBRA on Steam
 
 This is the practical path from the single-file game to a paid Steam build.
 The desktop wrapper is **[Tauri v2](https://tauri.app)** — it packages `index.html`
@@ -43,8 +43,8 @@ npm run desktop:build  # produces the installer
 
 Output lands in `src-tauri/target/release/bundle/`:
 
-- **macOS:** `dmg/Modulus_1.0.0_aarch64.dmg` and `macos/Modulus.app`
-- **Windows** (when built on Windows): `nsis/Modulus_1.0.0_x64-setup.exe` + `msi/…msi`
+- **macOS:** `dmg/BRAWLGEBRA_1.0.0_aarch64.dmg` and `macos/BRAWLGEBRA.app`
+- **Windows** (when built on Windows): `nsis/BRAWLGEBRA_1.0.0_x64-setup.exe` + `msi/…msi`
 - **Linux** (when built on Linux): `deb/`, `rpm/`, `appimage/`
 
 > You can only build a given OS's binary **on that OS** (you can't make the
@@ -63,7 +63,7 @@ attaches the installers to a draft GitHub Release.
 
 ```bash
 # from the repo root (the mental-kombat folder)
-git init && git add . && git commit -m "Modulus desktop build"
+git init && git add . && git commit -m "BRAWLGEBRA desktop build"
 git remote add origin git@github.com:<you>/brawlgebra.git
 git push -u origin main
 
@@ -87,7 +87,7 @@ you feed to Steam.
    ContentBuilder tool.
 3. Make one **depot per OS** (Windows depot, macOS depot, Linux depot) and point
    each at the matching build output from step 1/2.
-4. Set the launch options per depot (the executable name, e.g. `Modulus.exe`).
+4. Set the launch options per depot (the executable name, e.g. `BRAWLGEBRA.exe`).
 5. Upload a build, set it live on a branch, then publish the store page.
 
 Steam's own docs: *Steamworks → SteamPipe → Uploading Builds*.
@@ -101,12 +101,13 @@ These are working/limited in the desktop build and affect the store page:
 - **Fully offline & working:** The Tower, Versus, local 2-player, Gauntlet, the
   5-way Rumble (vs AI), and the whole Story mode. This is the bulk of the game and
   needs no server.
-- **Online Rumble needs a host.** `netserver.js` is a relay you must run somewhere
-  (Render/Railway/Fly/a VPS) and the client must point at its URL. Until that's
-  hosted, label online as **"LAN / self-hosted"** on the store page rather than
-  implying free matchmaking — Steam reviews punish overstated multiplayer.
-- **No gamepad support yet.** Couch/party buyers filter for the controller badge;
-  this is the next-biggest value add after this wrapper.
+- **Online is live.** The public relay runs at `brawlgebra-relay.onrender.com` and the
+  client auto-falls-back to it from any origin (Pages, `file:`, the desktop wrapper),
+  so the Steam build ships with working online 1v1 duels + 5-player rumble out of the
+  box. Free-tier Render cold-starts (~30-60s) — consider the always-on tier before
+  launch so a buyer's first online attempt doesn't hit the wake-up wait.
+- **Gamepad works.** `pollGamepad()` maps a controller to the fight controls — the
+  store page can claim partial controller support (menus still want a keyboard).
 - **Signing/notarization.** Unsigned builds run but throw OS warnings. For a clean
   install, code-sign Windows (cert) and notarize macOS (Apple Developer acct,
   $99/yr). Optional for a first release; expected for polish.

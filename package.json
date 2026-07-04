@@ -1,7 +1,7 @@
 {
   "name": "mental-kombat",
   "version": "1.0.0",
-  "description": "Modulus — a math-powered fighting game with online 5-player rumble.",
+  "description": "BRAWLGEBRA — a math-powered fighting game with online 5-player rumble.",
   "private": true,
   "scripts": {
     "start": "node netserver.js",

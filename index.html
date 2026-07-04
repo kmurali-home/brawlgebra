@@ -4,6 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>BRAWLGEBRA</title>
+<meta name="description" content="BRAWLGEBRA — the math fighting game. Every blow is a problem: answers become AURA, AURA becomes violence. Story, Tower, Gauntlet, Daily Fight, online 1v1 + 5-player rumble. Free in your browser." />
+<meta property="og:title" content="BRAWLGEBRA — every blow is a problem" />
+<meta property="og:description" content="The math fighting game. Answers become AURA, AURA becomes violence. Story, Tower, Gauntlet, Daily Fight, online 1v1 + rumble. Free in your browser." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://kmurali-home.github.io/brawlgebra/" />
+<meta property="og:image" content="https://kmurali-home.github.io/brawlgebra/og-image.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="BRAWLGEBRA — every blow is a problem" />
+<meta name="twitter:description" content="The math fighting game. Free in your browser. Fight your friends online." />
+<meta name="twitter:image" content="https://kmurali-home.github.io/brawlgebra/og-image.jpg" />
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
   html,body {
@@ -58,6 +68,7 @@ const GROUND = 470;                // world y of the floor
 let S = 1;                         // backing-store scale (dpr-aware)
 
 function fitCanvas(){
+  if(window._exportLock) return;   // a marketing export owns the backing store this frame (see exportPack/exportShot)
   const w = cv.clientWidth|0, h = cv.clientHeight|0, d = window.devicePixelRatio||1;
   if(cv.width !== Math.round(w*d) || cv.height !== Math.round(h*d)){
     cv.width = Math.round(w*d); cv.height = Math.round(h*d);
@@ -355,6 +366,8 @@ addEventListener("keydown", e => {
   if(lk==='m'){ musicMuted=!musicMuted; applyVolumes();
     if(AC&&!musicMuted) MUS.next=AC.currentTime+0.05;
     return; }
+  if(k==='Enter' && e.altKey){ toggleFullscreen(); return; }   // Alt+Enter — the fighting-game fullscreen reflex (works in browser and the desktop wrapper)
+  if(k==='F9'){ e.preventDefault(); exportShot(); return; }    // a crisp 1920×1080 PNG of whatever is on screen — Steam screenshots, socials, the presskit
 
   if(game.state==='warmup'){   // BIG-BRAIN BONUS — race the opener
     const w=game.warmup;
@@ -365,7 +378,8 @@ addEventListener("keydown", e => {
     }
     return;
   }
-  if(game.state==='welcome'){   // first-run gate → learn to fight
+  if(game.state==='welcome'){   // first-run gate → pick your math level, then learn to fight
+    if(k>='1'&&k<='3'){ DIFF.set(+k-1); return; }   // the level picker lives HERE so problem #1 is never division a kid didn't ask for
     if(k==='Enter'||k===' '){ game.seenHow=true; store('how',true); startTutorial(); SFX.ui(); }
     else if(lk==='t'||k==='Escape'){ game.seenHow=true; store('how',true); game.state='title'; SFX.ui(); }   // skip
     return;
@@ -380,7 +394,9 @@ addEventListener("keydown", e => {
     if(k==='1') DIFF.set(0); if(k==='2') DIFF.set(1); if(k==='3') DIFF.set(2);
     return;
   }
-  if(game.state==='keyart'){ game.state='title'; const h=document.getElementById('hint'); if(h && !game.cinema) h.style.display=''; SFX.ui(); return; }
+  if(game.state==='keyart'){
+    if(lk==='e'){ exportPack(); SFX.ui(); return; }   // the full Steam capsule pack, one keystroke
+    game.state='title'; const h=document.getElementById('hint'); if(h && !game.cinema) h.style.display=''; SFX.ui(); return; }
   if(game.state==='modes'){   // sub-list of the deeper modes
     const items=MODES_SUB;
     if(lk==='w'||k==='ArrowUp'){ game.modeIdx=(game.modeIdx+items.length-1)%items.length; SFX.ui(); }
@@ -562,6 +578,9 @@ addEventListener("keydown", e => {
     return;
   }
   if(lk==='p' && !game.online && (game.state==='fight'||game.state==='intro')){ game.paused=!game.paused; SFX.ui(); return; }
+  if(game.paused && k==='Escape'){   // QUIT TO TITLE from pause — "couldn't leave a match" is a stock negative-review line for wrapped canvas games
+    game.paused=false; game.tutorial=false; game.cinema=false; game.cinemaSlow=false; endDaily();
+    setMusic('default'); game.state='title'; SFX.ui(); return; }
   // (retired) OP FOCUS (F) — biased the math stream to arm an operator-strike; specials are the per-fighter KIT now, so F does nothing
   if(game.paused) return;
   if(lk==='c' && game.state==='fight'){ game.showCtl=!game.showCtl; store('ctl',game.showCtl); return; }
@@ -687,7 +706,10 @@ cv.addEventListener("mousemove", e=>{
 cv.addEventListener("click", ()=>{
   audio();
   if(game.state==='splash'){ game.state=game.seenHow?'title':'welcome'; return; }
-  if(game.state==='welcome'){ game.seenHow=true; store('how',true); startTutorial(); return; }
+  if(game.state==='welcome'){
+    for(let i=0;i<3;i++){ const r=welcomeDiffRect(i);   // clicking a level chip selects it — it must not fall through to "start"
+      if(mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h){ DIFF.set(i); return; } }
+    game.seenHow=true; store('how',true); startTutorial(); return; }
   if(game.state==='modes'){
     const mr=game.modeRects||[];
     for(let i=0;i<mr.length;i++){ const r=mr[i];
@@ -3090,6 +3112,11 @@ function startKO(loser, pit=false){
   game.pitFinish=pit;
   game.player.attack=null; game.enemy.attack=null; // no posthumous swings
   projs.length=0; hazards.length=0;
+  // THE SLAM FRAME (audit v7 #5): the kill blow gets punctuation — flash-cut, snap zoom onto the loser, double ember burst. (The K.O. card itself already slams in via drawBanners.) This is the frame every clip and screenshot gets built from.
+  flash(0.55,'#f0f6ff'); addTrauma(0.6);
+  cam.z=Math.max(cam.z,1.32); cam.tz=1.18; cam.x=loser.x; cam.tx=(loser.x+winner.x)/2;   // snap in hard, then the 0.06 lerp settles the shot
+  sparks(loser.x, loser.y-90, 26, winner.glow||'#ffd34d', 7);
+  sparks(loser.x, loser.y-90, 18, '#f0f6ff', 4);
   slowmo(900,0.25);
 }
 function failFinisher(){ // time's up — an ordinary KO
@@ -4239,9 +4266,10 @@ function panel(x,y,w,h,r,opts){   // a material UI panel — drop shadow + glass
   ctx.restore();
 }
 function drawCard(){
+  if(game.trailerMode && game.trailer && game.trailer.card && game.trailer.card.mathcard===false) return;   // a trailer shot can hand the frame to its chip
   const cw=400, ch=88;
   const shake = cardFx.shake>0? frnd(-cardFx.shake,cardFx.shake)*0.7 : 0;
-  const cx=W/2+shake, top=H-ch-14+Math.sin(game.frame*0.045)*2;
+  const cx=W/2+shake, top=H-ch-(game.trailerMode?60:14)+Math.sin(game.frame*0.045)*2;   // trailer: lift the card above the 46px letterbox so the typed answer + ⏎ row stay readable in every shot
   const danger=dangerInfo();
   ctx.save();
   const pw = !game.mode2p && game.state==='fight' && !game.player.ko && perfectFoe(game.player); // inside the tight perfect window NOW
@@ -4568,13 +4596,49 @@ function drawKeyArt(){   // a dedicated hero composition for the store capsule /
   drawWordmark(W/2, 116, 1.18);
   txtO('NO ONE HAS SOLVED YOU YET', W/2, 196, 16, '#d8e2ff', {mono:true,sw:3});
   txtO('four sworn Orders · one war over every number', W/2, H-34, 12, 'rgba(205,205,235,0.85)', {mono:true,sw:0});
-  txtO('press any key to return', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
+  txtO('E  export the Steam art pack (8 sizes)  ·  any other key returns', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
+  if(game._exportToast && game.frame-game._exportToast<240) txtO('exported — check your downloads', W/2, H-34, 11, '#46e08a', {mono:true,sw:0});
+}
+// ---- MARKETING EXPORTER (audit v7 #6): E on the KEY ART screen → the full Steam-sized capsule pack · F9 anywhere → a 1920×1080 PNG of the live frame.
+// The game is vector-drawn, so re-rendering at scale is CRISP — no upscale blur. Without these files the $100 page-creation day physically cannot happen.
+function _dlBlob(c,name){ try{ c.toBlob(b=>{ if(!b) return; const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),8000); },'image/png'); }catch(e){} }
+function _renderAt(scale, drawFn){   // re-render into the LIVE canvas at scale× (fitCanvas is locked out for the frame)
+  window._exportLock=true;
+  cv.width=Math.round(W*scale); cv.height=Math.round(H*scale); S=scale;
+  ctx.setTransform(scale,0,0,scale,0,0);
+  try{ drawFn(); }catch(e){}
+}
+function _renderDone(){ window._exportLock=false; fitCanvas(); }
+function exportShot(){   // F9 — Steam screenshots want ≥1920×1080
+  _renderAt(2, render);
+  _dlBlob(cv, 'brawlgebra_shot_1920x1080_'+(Date.now()%100000)+'.png');
+  _renderDone(); game._exportToast=game.frame;
+}
+function exportPack(){   // every Steam art slot + the og:image, center-cropped from the key-art comp with an upper bias so the wordmark survives tall crops
+  const jobs=[['brawlgebra_capsule_main_616x353.png',616,353],['brawlgebra_capsule_main2x_1232x706.png',1232,706],
+    ['brawlgebra_header_460x215.png',460,215],['brawlgebra_capsule_small_231x87.png',231,87],
+    ['brawlgebra_capsule_vertical_748x896.png',748,896],['brawlgebra_library_600x900.png',600,900],
+    ['brawlgebra_hero_3840x1240.png',3840,1240],['og-image_1200x630.png',1200,630]];
+  let i=0;
+  const doOne=()=>{
+    if(i>=jobs.length){ _renderDone(); game._exportToast=game.frame; return; }
+    const job=jobs[i++], tw=job[1], th=job[2], s=Math.max(tw/W, th/H);
+    _renderAt(s, drawKeyArt);
+    const off=document.createElement('canvas'); off.width=tw; off.height=th;
+    off.getContext('2d').drawImage(cv, (cv.width-tw)/2, Math.max(0,(cv.height-th)*0.42), tw, th, 0, 0, tw, th);
+    _dlBlob(off, job[0]);
+    setTimeout(doOne, 260);   // staggered so the browser accepts the download burst
+  };
+  doOne();
 }
 // ===== AUTO-PLAYING TRAILER v4 — the AAA cut. Brawljibra.mp3 is the master clock; ~29 shots in 78.5 seconds.
 // Song map (measured RMS): quiet intro 0-10s · verse 10-31 · one-beat DIP at 31s · build 33-43 · chorus 43-63.5 · THE DROP at 63.5s.
 // Grammar: cold open (4 quick shots) · thesis card · five 3s mechanic shots · dip card · threat + mode chips ·
 // chorus = rumble + combo reel · three accelerating risers · the drop · three stingers (the last one ends a fight) · animated end card.
 const _ta=()=>{ if(game.problem) submitFor(game.player, String(game.problem.ans)); };   // puppet: the player answers correctly
+let _paBuf='';   // the PROOF SHOT types its answer at human speed — digit by digit into the real card — so the trailer demonstrates the hook instead of claiming it
+const _paStart=()=>{ _paBuf=game.problem? String(game.problem.ans):''; ans1=''; };
+const _paType=n=>{ if(_paBuf) ans1=_paBuf.slice(0,n); };
 const TRAILER=[
  // ---- COLD OPEN (0-10s, the quiet intro) ----
  {type:'shot', scene:'black', w:'YOU', c:'#cfe0ff', t:'Does it get easier?', spd:0.3, tAt:24, dur:168, fin:14, music:'minus'},
@@ -4584,17 +4648,18 @@ const TRAILER=[
   script:[{at:4,fn:p=>p.tryDash(1)},{at:14,fn:p=>p.tryAttack('kick')}]},
  // ---- THE THESIS (the verse kicks at 10s) ----
  {type:'card', words:[{t:'EVERY BLOW',at:0},{t:'IS A PROBLEM',at:58}], dur:204, flash:true},
- // ---- FIVE MECHANIC SHOTS (3s each, hard cuts): bank+spend · slip · launcher juggle · tick throw · hunt the broke ----
- {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:180, slow:[88,126], flash:true,
+ // ---- FIVE MECHANIC SHOTS (3s each, hard cuts, each TAGGED): the proof shot · slip · launcher juggle · tick throw · hunt the broke ----
+ {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:180, slow:[58,84], flash:true, tag:{t:'BANKING', s:'the answer becomes AURA — every swing spends it'},
   pose:(p,e)=>{ p.aura=12; },
-  script:[{at:2,fn:()=>_ta()},{at:22,fn:p=>p.tryDash(1)},{at:34,fn:p=>p.tryAttack('kick')},{at:58,fn:p=>p.tryAttack('kick')},{at:86,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'ember', e:'frost', stage:'frost', gap:92, dur:180, slow:[26,52], flash:true,
+  script:[{at:6,fn:()=>_paStart()},{at:20,fn:()=>_paType(1)},{at:34,fn:()=>_paType(2)},{at:48,fn:()=>_paType(3)},{at:60,fn:()=>_ta()},   // the PROOF: problem read, answer typed digit by digit, banked
+          {at:80,fn:p=>p.tryDash(1)},{at:92,fn:p=>p.tryAttack('kick')},{at:116,fn:p=>p.tryAttack('kick')},{at:142,fn:p=>p.trySpecial()}]},
+ {type:'fight', p:'ember', e:'frost', stage:'frost', gap:92, dur:180, slow:[26,52], flash:true, tag:{t:'SLIP', s:'read the height, answer fast, walk through the hit'},
   script:[{at:4,fn:(p,e)=>e.cpuAttack('kick',26)},{at:28,fn:p=>{p.guardStance='low'; _ta();}},{at:54,fn:p=>p.tryAttack('kick')},{at:80,fn:p=>p.tryAttack('punch')},{at:112,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:86, dur:180, slow:[116,154], flash:true,
+ {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:86, dur:180, slow:[116,154], flash:true, tag:{t:'CHAIN', s:'launch, juggle, cancel — the counter keeps honest score'},
   script:[{at:4,fn:p=>p.tryAttack('punch')},{at:28,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:58,fn:p=>p.tryAttack('punch')},{at:88,fn:p=>p.tryAttack('kick')},{at:122,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'mauler', e:'oracle', stage:'proving', gap:80, dur:180, slow:[56,100], flash:true,
+ {type:'fight', p:'mauler', e:'oracle', stage:'proving', gap:80, dur:180, slow:[56,100], flash:true, tag:{t:'THROW', s:'grabs crack a turtled guard'},
   script:[{at:4,fn:p=>p.tryAttack('punch')},{at:26,fn:p=>p.tryAttack('punch')},{at:52,fn:p=>p.tryThrow()},{at:130,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'ember', e:'frost', stage:'pit', gap:120, dur:180, ai:'live', flash:true,
+ {type:'fight', p:'frost', e:'ember', stage:'pit', gap:120, dur:180, ai:'live', flash:true, tag:{t:'BROKE', s:'run them to zero and nothing swings'},
   pose:(p,e)=>{ e.aura=0.5; },
   script:[{at:6,fn:p=>p.tryDash(1)},{at:16,fn:p=>p.tryAttack('kick')},{at:54,fn:p=>p.tryDash(1)},{at:64,fn:p=>p.tryAttack('kick')},{at:100,fn:p=>p.tryDash(1)},{at:110,fn:p=>p.tryAttack('kick')}]},
  // ---- CLOSING THE VERSE ----
@@ -4608,7 +4673,7 @@ const TRAILER=[
   script:[{at:4,fn:p=>p.tryDash(1)},{at:12,fn:p=>p.tryAttack('punch')},{at:36,fn:p=>p.tryAttack('kick')},{at:70,fn:p=>p.trySpecial(1)}]},
  {type:'shot', scene:'monastery', pairW:'ADDISON', focus:'you', zoom:[1.05,1.2], dur:162, fin:10, fout:10, tag:{t:'STORY', s:'a fourteen-chapter war over every number'}},
  // ---- THE CHORUS (43s): friends first, then the combo reel ----
- {type:'fight', mode:'rumble', p:'oracle', stage:'pit', dur:216, flash:true, tag:{t:'FIGHT YOUR FRIENDS', s:'online 1v1 duels · 5-player rumble · same screen'},
+ {type:'fight', mode:'rumble', p:'oracle', stage:'pit', dur:216, flash:true, mathcard:false, tag:{t:'FIGHT YOUR FRIENDS', s:'online 1v1 duels · 5-player rumble · same screen'},
   script:[{at:40,fn:p=>p.trySpecial()},{at:140,fn:p=>p.trySpecial()}]},
  {type:'fight', p:'mauler', e:'frost', stage:'forge', gap:88, dur:204, slow:[98,140], flash:true,
   script:[{at:4,fn:p=>p.tryDash(1)},{at:16,fn:p=>p.tryAttack('punch')},{at:40,fn:p=>p.tryAttack('kick')},{at:66,fn:p=>p.tryAttack('kick')},{at:96,fn:p=>p.trySpecial(2)}]},
@@ -4617,12 +4682,12 @@ const TRAILER=[
  {type:'shot', scene:'equals', w:'YOU', c:'#cfe0ff', pairW:'SOLOMON, the EQUALS', focus:'you', zoom:[1.08,1.26], t:'Every sum has two sides. You only counted one.', sfx:'toll', spd:0.6, dur:192, fin:10, fout:10},
  {type:'fight', p:'ember', e:'mauler', stage:'pit', gap:90, dur:192, slow:[102,144], flash:true,
   script:[{at:4,fn:p=>p.tryDash(1)},{at:14,fn:p=>p.tryAttack('kick')},{at:40,fn:p=>p.tryAttack('punch')},{at:66,fn:p=>p.tryAttack('kick')},{at:100,fn:p=>p.trySpecial()}]},
- // ---- THREE RISERS, ACCELERATING INTO THE DROP ----
- {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:70, hud:false, dur:78, slow:[18,52], flash:true, script:[{at:4,fn:p=>p.trySpecial(1)}]},
- {type:'fight', p:'frost', e:'mauler', stage:'void', gap:70, hud:false, dur:78, slow:[18,52], flash:true, script:[{at:4,fn:p=>p.trySpecial(1)}]},
- {type:'fight', p:'ember', e:'oracle', stage:'pit', gap:66, hud:false, dur:66, slow:[14,46], flash:true, script:[{at:4,fn:p=>p.trySpecial(2)}]},
+ // ---- THREE RISERS, ACCELERATING INTO THE DROP — doubling as the roster reveal ----
+ {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:70, hud:false, dur:78, slow:[18,52], flash:true, tag:{t:'KRISHNA', s:'THE STANDING QUOTIENT'}, script:[{at:4,fn:p=>p.trySpecial(1)}]},
+ {type:'fight', p:'frost', e:'mauler', stage:'void', gap:70, hud:false, dur:78, slow:[18,52], flash:true, tag:{t:'LESSING', s:'THE LAST DIFFERENCE'}, script:[{at:4,fn:p=>p.trySpecial(1)}]},
+ {type:'fight', p:'ember', e:'oracle', stage:'pit', gap:66, hud:false, dur:66, slow:[14,46], flash:true, tag:{t:'ADDISON', s:'THE MEASURED SUM'}, script:[{at:4,fn:p=>p.trySpecial(2)}]},
  // ---- THE DROP (63.5s): Maximilian eats a jab on ARMOR → OVERFLOW → THE BOUNDLESS PRODUCT, long slow-mo ----
- {type:'fight', p:'mauler', e:'ember', stage:'forge', gap:84, hud:false, dur:282, slow:[40,250], flash:true,
+ {type:'fight', p:'mauler', e:'ember', stage:'forge', gap:84, hud:false, dur:282, slow:[40,250], flash:true, tag:{t:'MAXIMILIAN', s:'THE BOUNDLESS PRODUCT'},
   pose:(p,e)=>{ p.aura=68; },
   script:[{at:6,fn:p=>p.tryAttack('kick')},{at:10,fn:(p,e)=>e.cpuAttack('punch',1)},
           {at:56,fn:p=>{ p.aura=Math.max(p.aura, 100); p.trySpecial(2); }}]},   // the jab CONNECTS on armor first; the aura rig means the money shot can never whiff
@@ -4789,7 +4854,8 @@ function drawTrailerEnd(){   // v4 END CARD — the name SLAMS in (ring + dust),
     txtO('EVERY BLOW IS A PROBLEM', W/2, 272, 15, '#aeb8cc',{mono:true,sw:0}); ctx.restore(); }
   if(t>150){ ctx.save(); ctx.globalAlpha=clamp((t-150)/18,0,1);
     txtO('STORY · THE TOWER · GAUNTLET · DAILY FIGHT · ONLINE 1v1 + RUMBLE', W/2, 330, 11, '#7a8298',{mono:true,sw:0});
-    txtO('PLAY IT IN YOUR BROWSER', W/2, 362, 14, '#7ae8ff',{mono:true,sw:0}); ctx.restore(); }
+    txtO(STEAM_LIVE? 'WISHLIST ON STEAM' : 'PLAY IT IN YOUR BROWSER', W/2, 362, 14, '#7ae8ff',{mono:true,sw:0});
+    txtO(FOLLOW_URL.replace(/^https?:\/\//,''), W/2, 386, 12, '#aeb8cc',{mono:true,sw:0}); ctx.restore(); }   // a CTA with no address is a wish, not a call
 }
 function drawTrailerOverlay(){
   ctx.fillStyle='#000'; ctx.fillRect(0,0,W,46); ctx.fillRect(0,H-46,W,46);   // consistent cinematic letterbox
@@ -4845,17 +4911,29 @@ function drawTitle(){
   txtO('W/S navigate · ⏎ select · R records · M music', W/2, 506, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
   txtO('T trailer  ·  V showcase  ·  K key art', W/2, 526, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});
 }
-function drawWelcome(){   // first-run gate: teach before you ask
+function welcomeDiffRect(i){ return {x:W/2-237+i*162, y:398, w:150, h:40}; }
+const DIFF_AGES=['ages 8-10','ages 10-13','ages 13+'];   // parent legibility: the band names the buyer's kid
+function drawWelcome(){   // first-run gate: pick your math level, then teach before you ask
   ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
-  drawWordmark(W/2, 142, 0.66);
-  txtO('Answer, and you can strike. Run dry, and you cannot.', W/2, 200, 15, '#9fdcff', {sw:0});
+  drawWordmark(W/2, 130, 0.66);
+  txtO('Answer, and you can strike. Run dry, and you cannot.', W/2, 186, 15, '#9fdcff', {sw:0});
   const pulse=0.55+Math.sin(game.frame*0.08)*0.45;
-  rr(W/2-230, 268, 460, 96, 16); ctx.fillStyle='rgba(14,10,30,0.94)'; ctx.fill();
+  rr(W/2-230, 244, 460, 92, 16); ctx.fillStyle='rgba(14,10,30,0.94)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5; ctx.stroke();
-  txtO('UNSWORN', W/2, 300, 23, '#ffd34d', {sw:4});
-  txtO('The form takes 60 seconds.', W/2, 330, 15, '#e8ecff', {sw:0});
-  ctx.globalAlpha=pulse; txtO('press ENTER  ·  or click anywhere', W/2, 354, 12, '#ffd34d', {mono:true,sw:0}); ctx.globalAlpha=1;
-  txtO('(already know it? press T to skip)', W/2, 396, 10, 'rgba(160,150,190,0.7)', {mono:true,sw:0});
+  txtO('UNSWORN', W/2, 274, 23, '#ffd34d', {sw:4});
+  txtO('The form takes 60 seconds.', W/2, 302, 15, '#e8ecff', {sw:0});
+  ctx.globalAlpha=pulse; txtO('press ENTER  ·  or click anywhere', W/2, 324, 12, '#ffd34d', {mono:true,sw:0}); ctx.globalAlpha=1;
+  txtO('YOUR MATH', W/2, 382, 12, '#aeb8cc', {mono:true,sw:0});
+  for(let i=0;i<3;i++){   // the level picker — problem #1 should match the kid, not a default
+    const r=welcomeDiffRect(i), sel=DIFF.level===i;
+    const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h;
+    rr(r.x,r.y,r.w,r.h,10);
+    ctx.fillStyle=sel?'rgba(70,40,110,0.92)':'rgba(20,14,36,0.88)'; ctx.fill();
+    ctx.strokeStyle=sel?'#ffd34d':hov?'#8a7bb8':'#3d2658'; ctx.lineWidth=sel?2.2:1.2; ctx.stroke();
+    txtO((i+1)+'  '+DIFF.names[i], r.x+r.w/2, r.y+17, 12, sel?'#ffd34d':'#cabbe0', {mono:true,sw:0});
+    txtO(DIFF.taglines[i].split(' · ')[0].split(',')[0]+' · '+DIFF_AGES[i], r.x+r.w/2, r.y+32, 9, sel?'#e8ecff':'#8a93b8', {mono:true,sw:0});
+  }
+  txtO('(you can change this any time on the title screen · already know it? T skips)', W/2, 470, 10, 'rgba(160,150,190,0.7)', {mono:true,sw:0});
 }
 function drawModes(){
   ctx.fillStyle='rgba(3,2,10,0.55)'; ctx.fillRect(0,0,W,H);
@@ -6095,7 +6173,7 @@ function render(){
     ].forEach((r,i)=>{ const y=282+i*26;
       txtO(r[0], W/2, y, 12.5, '#7ae8ff',{mono:true,sw:0});
       txtO(r[1], W/2, y+13, 10, '#aab4d0',{mono:true,sw:0}); });
-    txtO('P  resume   ·   M  music', W/2, 446, 12, '#8a93b8',{mono:true,sw:0});
+    txtO('P  resume   ·   ESC  quit to title   ·   M  music   ·   Alt+⏎  fullscreen', W/2, 446, 12, '#8a93b8',{mono:true,sw:0});
   }
   if(game.online && net.role==='guest') drawNetHealth();   // tell the guest when it's the network, not them
   if(game.trailerMode) drawTrailerOverlay();   // trailer letterbox + scene cross-fades over everything
@@ -6370,7 +6448,21 @@ function computeScore(){
   return Math.max(0, sc);
 }
 // ---- DAILY CHALLENGE: a date-seeded fight; same math for everyone all day; personal best + day-streak ----
-function dayIndex(){ return Math.floor(Date.now()/86400000); }
+function dayIndex(){   // LOCAL-midnight day counter — the day flips at the kid's midnight, not UTC's (the badge promises "before midnight"; now the code agrees)
+  const d=new Date();
+  return Math.floor((d.getTime() - d.getTimezoneOffset()*60000)/86400000);
+}
+(function(){   // one-time re-anchor: the counter used to be UTC — shift stored day stamps by the same delta so no streak breaks on upgrade
+  try{
+    if(load('dayV2',0)) return;
+    const delta=Math.floor(Date.now()/86400000)-dayIndex();   // +1 / 0 / −1 depending on timezone and hour
+    if(delta){
+      const b=load('dailyBest',null); if(b && b.day>0){ b.day-=delta; store('dailyBest',b); }
+      const s=load('dailyStreak',null); if(s && s.last>0){ s.last-=delta; store('dailyStreak',s); }
+    }
+    store('dayV2',1);
+  }catch(e){}
+})();
 function dailyStart(){
   const seed=dayIndex();
   _mrng=mulberry32(seed); game.dailyN=0; game.daily=true;     // seed the problem stream
@@ -6399,7 +6491,7 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
   const r=game.dailyResult||{}, day=dayIndex();
   const acc=game.stats? Math.round(100*(game.stats.correct||0)/Math.max(1,game.stats.asked||0)) : 0;
   const grid=['🟩','🟩','🟩','🟦','🟦'].map((g,i)=> i<Math.round(acc/20)? '🟩':'⬛').join('');
-  return 'BRAWLGEBRA · Trial #'+day+'\n'+(r.score||0)+' pts · '+acc+'% · ✦'+(r.streak||0)+'-day\n'+grid+'\nbrawlgebra';
+  return 'BRAWLGEBRA · Trial #'+day+'\n'+(r.score||0)+' pts · '+acc+'% · ✦'+(r.streak||0)+'-day\n'+grid+'\n'+FOLLOW_URL+(STEAM_LIVE&&STEAM_URL? '\n'+STEAM_URL:'');   // a share that doesn't link is a dead end
 }
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
@@ -7148,25 +7240,22 @@ function trainSubmit(){
 const net = { ws:null, role:null, seat:-1, room:'', roster:[], status:'offline', err:'', gm:'rumble',
   inEdges:[], pendingSolve:null, guestState:{}, snap:null, snapAt:0, sendAcc:0, bcAcc:0, setW:[0,0],
   name:load('name','PLAYER'), field:'name', input:'', camX:WORLD_W/2, camTz:0.7, lobby:false };
-const PROTO=2;   // netplay protocol version — bump when the snapshot/message shape changes; the server rejects a join whose version != the host's (catches one player on a stale cached build)
+const PROTO=3;   // netplay protocol version — bump when the snapshot/message shape changes; the server rejects a join whose version != the host's (catches one player on a stale cached build). v3: pickup sync (pk) + guest-side hit FX
+const RELAY_HOST='brawlgebra-relay.onrender.com';   // the public relay — static mirrors (GitHub Pages, file:, the desktop wrapper) fall back to it so EVERY shared link can play online
 function netURL(){
-  if(location.protocol==='file:'||!location.host) return 'ws://localhost:8080';
-  return (location.protocol==='https:'?'wss://':'ws://')+location.host;
+  try{ if(new URLSearchParams(location.search).get('relay')==='local') return 'ws://localhost:8080'; }catch(e){}   // dev override
+  const h=location.host;
+  if(!h || location.protocol==='file:' || /github\.io|githubusercontent/.test(h)) return 'wss://'+RELAY_HOST;
+  return (location.protocol==='https:'?'wss://':'ws://')+h;
 }
-function healthURL(){
-  if(location.protocol==='file:'||!location.host) return 'http://localhost:8080/health';
-  return (location.protocol==='https:'?'https://':'http://')+location.host+'/health';
-}
+function healthURL(){ return netURL().replace(/^wss:/,'https:').replace(/^ws:/,'http:')+'/health'; }
 function netPrewarm(){ try{ fetch(healthURL(),{mode:'no-cors',cache:'no-store'}).catch(()=>{}); }catch(e){} }   // wake the free-tier relay early so it's up before a friend joins
 function netSend(o){ try{ if(net.ws && net.ws.readyState===1) net.ws.send(JSON.stringify(o)); }catch(e){} }
 function netConnect(then, _retry){
   net.err=''; net.status='connecting'; let opened=false;
   if(!_retry){ net.connectStart=performance.now(); net.retries=0; netPrewarm(); }   // first attempt: stamp the clock + wake the relay
-  // why a connection might fail — point the player at the fix instead of a blank screen
-  const onPages = location.host && /github\.io|githubusercontent/.test(location.host);
-  const failMsg = onPages
-    ? 'this link (GitHub Pages) can’t host online play — open the RELAY url instead'
-    : 'could not reach the server — check your connection and try again (the first connection can take a minute)';
+  // why a connection might fail — point the player at the fix instead of a blank screen (Pages/file: builds now ride the public relay, so everyone gets the same path)
+  const failMsg = 'could not reach the server — check your connection and try again (the first connection can take a minute)';
   let ws; try{ ws=new WebSocket(netURL()); }catch(e){ net.err=failMsg; net.status='offline'; return; }
   net.ws=ws;
   ws.onopen=()=>{ opened=true; net.status='online'; net.connectStart=0; if(then) then();
@@ -7174,9 +7263,9 @@ function netConnect(then, _retry){
   ws.onclose=()=>{ clearInterval(net.ka);
     if(game.online){ net.status='offline'; netToTitle('disconnected'); return; }
     if(opened) return;
-    // free-tier relays spin down when idle; the FIRST ws usually fails while it wakes — auto-retry within a cold-start window (never on Pages, which can't host WS)
+    // free-tier relays spin down when idle; the FIRST ws usually fails while it wakes — auto-retry within a cold-start window
     const elapsed = performance.now()-(net.connectStart||0);
-    if(!onPages && elapsed < 75000 && (net.retries||0) < 30){
+    if(elapsed < 75000 && (net.retries||0) < 30){
       net.retries=(net.retries||0)+1; netPrewarm();
       clearTimeout(net.retryT); net.retryT=setTimeout(()=>{ if(net.status==='connecting') netConnect(then, true); }, 2200);
     } else { net.status='offline'; net.err=failMsg; }
@@ -7435,6 +7524,7 @@ function hostSnapshot(){
   const d={ f: game.fighters.map(fSnap),
     pj: projs.map(p=>[Math.round(p.x),Math.round(p.y),Math.round(p.vx*10)/10]),
     hz: hazards.map(h=>[Math.round(h.x),h.t|0]),
+    pk: pickups.map(p=>[Math.round(p.x),Math.round(p.y),Math.max(0,PICKUP_TYPES.indexOf(p.type)),p.life|0,Math.round(p.gy||p.y),Math.round((p.ph||0)*10)/10]),   // v7 #11: the guest deserves to SEE the crystals the host is banking
     tm: Math.ceil(game.timer), st: game.state, it: game.introT|0, al: living().length,
     cx: Math.round(cam.x), cz: Math.round(cam.tz*100),
     rk: game.rumbleRank? game.rumbleRank.map(f=>f.seat):null,
@@ -7455,7 +7545,17 @@ function applySnapshot(d){
     f.netX=fs[1]; f.netY=fs[2]; f.facing=fs[3];
     const _nh=fs[4];
     if(_nh>f.hp) f.hpShown=_nh;            // healed / round-reset → snap the bar up
-    else if(_nh<f.hp) f.chipDelay=14;      // took damage → hold the red ghost, then drain (guestTick)
+    else if(_nh<f.hp){ f.chipDelay=14;     // took damage → hold the red ghost, then drain (guestTick)
+      // v7 #11 GUEST FEEL: the host felt this hit — the guest now sees and hears it too (visual+audio only; the host stays authoritative)
+      try{
+        const dmg=Math.round(f.hp-_nh), heavy=dmg>=9, hx=(f.netX!=null?f.netX:f.x), hy=(f.netY!=null?f.netY:f.y);
+        sparks(hx, hy-92, heavy?16:9, '#ffd34d', heavy?6:4);
+        addTrauma(heavy?0.3:0.14);
+        if(fs[9]) SFX.block(); else if(heavy) SFX.heavy(); else SFX.hit();
+        floatText(hx, hy-170, '-'+dmg, f===game.player?'#ff8a8a':'#ffd34d', heavy?22:16);
+        if(_nh<=0 && f.hp>0){ flash(0.4,'#f0f6ff'); addTrauma(0.5); SFX.heavy(); }   // the KO lands like a KO
+      }catch(e){}
+    }
     f.hp=_nh; f.aura=fs[5]; f.auraShown=fs[5];
     f.dizzy=fs[6]; f.hurtT=fs[7]; f.stun=fs[8]; f.blocking=!!fs[9]; f.grounded=!!fs[10];
     f.frozenT=fs[11]; f.streak=fs[12]; f.iframes=fs[13]; f.dodgeT=fs[14]; f.vx=fs[15]; f.landT=fs[16];
@@ -7465,6 +7565,7 @@ function applySnapshot(d){
   }
   projs.length=0; if(d.pj) for(const p of d.pj) projs.push({x:p[0],y:p[1],vx:p[2],life:999,owner:game.player});
   hazards.length=0; if(d.hz) for(const h of d.hz) hazards.push({x:h[0],t:h[1],owner:game.player});
+  if(d.pk){ pickups.length=0; for(const p of d.pk) pickups.push({x:p[0],y:p[1],type:PICKUP_TYPES[p[2]]||PICKUP_TYPES[0],life:p[3],gy:p[4],ph:p[5]}); }   // v7 #11 mirrored pickups (host collects; the next snapshot clears)
   game.timer=d.tm; game.introT=d.it;
   net.camX=d.cx; net.camTz=d.cz/100;
   if(d.du){   // 1v1 duel: map seat-indexed round state into MY perspective
@@ -7551,6 +7652,28 @@ function loop(now){
 try{ const _r=new URLSearchParams(location.search).get('room');
   if(_r){ const code=_r.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
     if(code.length>=3){ enterOnlineLobby('duel'); net.field='code'; net.input=code; } } }catch(e){}
+// ---- the one link every screen points at (shares, title chip, trailer end card, touch gate) ----
+const FOLLOW_URL='https://kmurali-home.github.io/brawlgebra/';
+const STEAM_LIVE=false, STEAM_URL='';   // flip when the Steam page exists — every WISHLIST chip and the trailer CTA switch over in one place
+function toggleFullscreen(){   // browser: Fullscreen API · desktop wrapper: the Tauri window — one key either way (Alt+Enter)
+  try{ if(window.__TAURI__ && __TAURI__.window){ const w=__TAURI__.window.getCurrentWindow(); w.isFullscreen().then(f=>w.setFullscreen(!f)); return; } }catch(e){}
+  try{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }catch(e){}
+}
+(function(){   // touch-only devices get an honest card instead of a dead keyboard-only canvas — kids open shared links on phones
+  try{
+    const touchOnly=(navigator.maxTouchPoints>0 || 'ontouchstart' in window) && !matchMedia('(pointer:fine)').matches;
+    if(!touchOnly) return;
+    const d=document.createElement('div');
+    d.style.cssText='position:fixed;inset:0;z-index:99;background:#06070c;color:#e8ecff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:ui-monospace,Menlo,monospace;text-align:center;padding:24px';
+    d.innerHTML='<div style="font-size:32px;font-weight:800;letter-spacing:2px;color:#f2f5ff">|BRAWLGEBRA|</div>'
+      +'<div style="color:#aeb8cc;font-size:13px;letter-spacing:1px">EVERY BLOW IS A PROBLEM</div>'
+      +'<div style="max-width:420px;line-height:1.6;color:#9fb0c8;font-size:14px">BRAWLGEBRA fights with a <b style="color:#7ae8ff">keyboard</b>. Open this link on a computer — it plays right in the browser, nothing to install.</div>'
+      +'<button id="mkCopy" style="background:#7ae8ff;color:#04050a;border:0;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;font-family:inherit">copy the link</button>'
+      +'<div style="color:#5a6478;font-size:11px">'+FOLLOW_URL+'</div>';
+    document.body.appendChild(d);
+    d.querySelector('#mkCopy').addEventListener('click',()=>{ try{ navigator.clipboard.writeText(FOLLOW_URL).then(()=>{ d.querySelector('#mkCopy').textContent='copied — send it to yourself'; }).catch(()=>{}); }catch(e){} });
+  }catch(e){}
+})();
 requestAnimationFrame(loop);
 </script>
 </body>
