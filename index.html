@@ -4631,70 +4631,73 @@ function exportPack(){   // every Steam art slot + the og:image, center-cropped 
   };
   doOne();
 }
-// ===== AUTO-PLAYING TRAILER v5 — cut to Brawljibra v2 (118.6s). The song is the master clock; 25 shots in 70.5 seconds.
-// Song map (measured RMS, 0.25s res): fast fade-in 0-4 · verse 4-24 (a hit lands AT 24) · quiet breakdown 24.5-29 · build 29.5-37.5 ·
-// DEAD SILENCE 37.5-39.5 · THE DROP at 40.0 · chorus 40-61 (peaks ~61) · post-chorus decay 62-71 (the end card rides it out) · [chorus 2 at 83-104 unused].
-// Grammar: cold open · thesis card · five tagged mechanic shots ENDING ON the 24s hit · the threat speaks in the quiet ·
-// mode chips up the build · ZERO alone in the silence · the drop IS Maximilian · chorus = rumble + combo reel · roster stingers · a K.O. on the peak · end card.
+// ===== AUTO-PLAYING TRAILER v6 — THE HOOK CUT. Built for a STRANGER with a 3-second attention span; the song (Brawljibra v2, 118.6s) is the master clock; 25 shots in 70.5s.
+// Song map (measured RMS): fade-in 0-4 · verse 4-24 (hit AT 24) · quiet 24.5-29 · build 29.5-37.5 · DEAD SILENCE 37.5-39.5 · DROP 40.0 · chorus 40-61 (peak ~61) · decay 62-71.
+// Grammar: frame ONE is a math problem (the scroll-stopper) · answer detonates into violence · the NAME lands at 9.4s ·
+// four plain-speech teaching shots end on the 24s hit · Solomon framed as the STORY MODE villain · roster reveal up the build ·
+// ZERO alone in the silence · MAXIMILIAN'S reveal IS the drop · chorus = friends + modes over the combo reel · a K.O. on the peak · end card.
 const _ta=()=>{ if(game.problem) submitFor(game.player, String(game.problem.ans)); };   // puppet: the player answers correctly
 let _paBuf='';   // the PROOF SHOT types its answer at human speed — digit by digit into the real card — so the trailer demonstrates the hook instead of claiming it
 const _paStart=()=>{ _paBuf=game.problem? String(game.problem.ans):''; ans1=''; };
 const _paType=n=>{ if(_paBuf) ans1=_paBuf.slice(0,n); };
 const TRAILER=[
- // ---- COLD OPEN (0-9.4s, over the fade-in and early verse) ----
- {type:'shot', scene:'black', w:'YOU', c:'#cfe0ff', t:'Does it get easier?', spd:0.32, tAt:18, dur:156, fin:12, music:'minus'},
- {type:'shot', scene:'giraffe', cast:'you', focus:'you', zoom:[1.06,1.3], w:'YOU', c:'#cfe0ff', t:'Being the thing no one can solve?', sfx:'heart', dur:192, fin:12, fout:10},
- {type:'shot', scene:'equals', cast:'them', pairW:'SOLOMON, the EQUALS', focus:'them', zoom:[1.12,1.42], act:'loom', sfx:'dread', dur:132, fin:10, fout:8},
- {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:78, hud:false, dur:84, slow:[22,60], flash:true,
-  script:[{at:4,fn:p=>p.tryDash(1)},{at:14,fn:p=>p.tryAttack('kick')}]},
- // ---- THE THESIS (9.4s, as the verse firms up) ----
- {type:'card', words:[{t:'EVERY BLOW',at:0},{t:'IS A PROBLEM',at:52}], dur:192, flash:true},
- // ---- FIVE TAGGED MECHANIC SHOTS (12.6-24.5s, hard cuts, ending exactly on the 24s hit) ----
- {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:180, slow:[58,84], flash:true, tag:{t:'BANKING', s:'the answer becomes AURA — every swing spends it'},
+ // ---- ACT 1 · THE HOOK (0-9.4s): a math problem is frame one. Three seconds later it's a fight. ----
+ {type:'card', problem:'7 × 8 =', answer:'56', ansAt:[54,72], ringAt:96, dur:132, music:'minus'},
+ {type:'fight', p:'mauler', e:'frost', stage:'forge', gap:82, hud:false, dur:132, slow:[30,84], flash:true, tag:{t:'ANSWERS ARE AMMO', s:'solve it, then spend it'},
+  script:[{at:2,fn:()=>_ta()},{at:22,fn:p=>p.trySpecial(1)}]},
+ {type:'fight', p:'ember', e:'mauler', stage:'pit', gap:80, hud:false, dur:132, slow:[80,120], flash:true,
+  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:24,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:48,fn:p=>p.tryAttack('punch')},{at:84,fn:p=>p.trySpecial()}]},
+ {type:'fight', p:'frost', e:'oracle', stage:'frost', gap:84, hud:false, dur:168, slow:[24,58], flash:true,
+  script:[{at:6,fn:(p,e)=>e.cpuAttack('punch',18)},{at:26,fn:p=>p.tryAttack('punch')},{at:60,fn:p=>p.tryAttack('kick')},{at:104,fn:p=>p.trySpecial(1)}]},
+ // ---- ACT 1b · THE WELCOME (9.4s): the name slams in while the verse swells. Now they know what they're watching. ----
+ {type:'title', dur:192},
+ // ---- ACT 2 · HOW IT WORKS (12.6-24.5s): four beats of plain speech, ending exactly on the 24s hit ----
+ {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:180, slow:[58,84], flash:true, tag:{t:'TYPE THE ANSWER', s:'it becomes AURA. everything costs AURA.'},
   pose:(p,e)=>{ p.aura=12; },
   script:[{at:6,fn:()=>_paStart()},{at:20,fn:()=>_paType(1)},{at:34,fn:()=>_paType(2)},{at:48,fn:()=>_paType(3)},{at:60,fn:()=>_ta()},   // the PROOF: problem read, answer typed digit by digit, banked
           {at:80,fn:p=>p.tryDash(1)},{at:92,fn:p=>p.tryAttack('kick')},{at:116,fn:p=>p.tryAttack('kick')},{at:142,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'ember', e:'frost', stage:'frost', gap:92, dur:132, slow:[26,48], flash:true, tag:{t:'SLIP', s:'read the height, answer fast, walk through the hit'},
+ {type:'fight', p:'ember', e:'frost', stage:'void', gap:92, dur:132, slow:[26,48], flash:true, tag:{t:'ANSWER FAST', s:'and you walk straight through their best hit'},
   script:[{at:4,fn:(p,e)=>e.cpuAttack('kick',26)},{at:28,fn:p=>{p.guardStance='low'; _ta();}},{at:50,fn:p=>p.tryAttack('kick')},{at:74,fn:p=>p.tryAttack('punch')},{at:100,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:86, dur:138, slow:[104,134], flash:true, tag:{t:'CHAIN', s:'launch, juggle, cancel — the counter keeps honest score'},
+ {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:86, dur:138, slow:[104,134], flash:true, tag:{t:'CHAIN IT', s:'launch, juggle, cancel. the counter keeps score.'},
   script:[{at:4,fn:p=>p.tryAttack('punch')},{at:26,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:52,fn:p=>p.tryAttack('punch')},{at:78,fn:p=>p.tryAttack('kick')},{at:108,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'mauler', e:'oracle', stage:'proving', gap:80, dur:132, slow:[50,88], flash:true, tag:{t:'THROW', s:'grabs crack a turtled guard'},
-  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:24,fn:p=>p.tryAttack('punch')},{at:46,fn:p=>p.tryThrow()},{at:100,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'frost', e:'ember', stage:'pit', gap:120, dur:132, ai:'live', flash:true, tag:{t:'BROKE', s:'run them to zero and nothing swings'},
+ {type:'fight', p:'frost', e:'ember', stage:'pit', gap:120, dur:132, ai:'live', flash:true, tag:{t:'RUN THEM DRY', s:'zero AURA means they cannot even swing'},
   pose:(p,e)=>{ e.aura=0.5; },
   script:[{at:6,fn:p=>p.tryDash(1)},{at:16,fn:p=>p.tryAttack('kick')},{at:48,fn:p=>p.tryDash(1)},{at:58,fn:p=>p.tryAttack('kick')},{at:88,fn:p=>p.tryDash(1)},{at:98,fn:p=>p.tryAttack('kick')}]},
- // ---- THE QUIET BREAKDOWN (24.5-31s): the threat speaks while the song holds its breath ----
- {type:'shot', scene:'equals', w:'SOLOMON, the EQUALS', c:'#ff9f2a', focus:'them', zoom:[1.1,1.36], t:'I will reduce you all to one answer. Nothing.', act:'loom', sfx:'dread', spd:0.55, dur:246, fin:10, fout:10, music:'james'},
+ {type:'fight', p:'mauler', e:'oracle', stage:'proving', gap:80, dur:132, slow:[50,88], flash:true, tag:{t:'OR JUST GRAB THEM', s:'grabs go straight through block'},
+  script:[{at:4,fn:p=>p.tryAttack('punch')},{at:24,fn:p=>p.tryAttack('punch')},{at:46,fn:p=>p.tryThrow()},{at:100,fn:p=>p.trySpecial()}]},
+ // ---- ACT 3 · THE WORLD (24.5-31s): the villain speaks in the quiet, framed so a stranger knows exactly what he is ----
+ {type:'shot', scene:'equals', w:'SOLOMON, the EQUALS', c:'#ff9f2a', focus:'them', zoom:[1.1,1.36], t:'I will reduce you all to one answer. Nothing.', act:'loom', sfx:'dread', spd:0.55, dur:246, fin:10, fout:10, music:'james', tag:{t:'STORY MODE', s:'fourteen chapters · the Four Orders · one Final Answer'}},
  {type:'card', words:[{t:'ANSWER IN TIME',at:0},{t:'OR BLEED',at:48}], dur:144, flash:true},   // slams as the build kicks at 29.5s
- // ---- THE BUILD (31-37.5s): the shape of the game, accelerating ----
- {type:'fight', p:'frost', e:'mauler', stage:'frost', gap:104, dur:132, flash:true, tag:{t:'THE TOWER', s:'climb the five Orders'},
-  script:[{at:4,fn:p=>p.tryDash(1)},{at:14,fn:p=>p.tryAttack('kick')},{at:44,fn:p=>p.tryAttack('kick')},{at:74,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'mauler', e:'ember', stage:'forge', gap:96, dur:132, flash:true, tag:{t:'GAUNTLET', s:'survive the streak'},
-  script:[{at:4,fn:p=>p.tryDash(1)},{at:12,fn:p=>p.tryAttack('punch')},{at:36,fn:p=>p.tryAttack('kick')},{at:70,fn:p=>p.trySpecial(1)}]},
- {type:'shot', scene:'monastery', pairW:'ADDISON', focus:'you', zoom:[1.05,1.2], dur:126, fin:8, fout:8, tag:{t:'STORY', s:'a fourteen-chapter war over every number'}},
- // ---- THE SILENCE (37.5-40.0s): ZERO, alone, in the dead air ----
+ // ---- ACT 4 · THE ROSTER (31-37.5s): three fighters flash up the build, each with their signature. The fourth is waiting. ----
+ {type:'fight', p:'oracle', e:'mauler', stage:'schism', gap:70, hud:false, dur:132, slow:[16,52], flash:true, tag:{t:'KRISHNA', s:'THE STANDING QUOTIENT'},
+  script:[{at:6,fn:p=>p.trySpecial(1)}]},
+ {type:'fight', p:'ember', e:'frost', stage:'pit', gap:70, hud:false, dur:132, slow:[16,52], flash:true, tag:{t:'ADDISON', s:'THE MEASURED SUM'},
+  script:[{at:6,fn:p=>p.trySpecial(1)}]},
+ {type:'fight', p:'frost', e:'ember', stage:'frost', gap:70, hud:false, dur:126, slow:[16,52], flash:true, tag:{t:'LESSING', s:'THE LAST DIFFERENCE'},
+  script:[{at:6,fn:p=>p.trySpecial(1)}]},
+ // ---- ACT 5 · THE SILENCE (37.5-40.0s): ZERO, alone, in the dead air… ----
  {type:'card', words:[{t:'EVERYTHING ENDS AT ZERO',at:6}], dur:150},
- // ---- THE DROP (40.0s): Maximilian eats a jab on ARMOR → OVERFLOW → THE BOUNDLESS PRODUCT, long slow-mo ----
+ // ---- …AND THE DROP (40.0s) IS THE FOURTH FIGHTER: armor → OVERFLOW → THE BOUNDLESS PRODUCT, long slow-mo ----
  {type:'fight', p:'mauler', e:'ember', stage:'forge', gap:84, hud:false, dur:270, slow:[40,240], flash:true, tag:{t:'MAXIMILIAN', s:'THE BOUNDLESS PRODUCT'},
   pose:(p,e)=>{ p.aura=68; },
   script:[{at:6,fn:p=>p.tryAttack('kick')},{at:10,fn:(p,e)=>e.cpuAttack('punch',1)},
           {at:56,fn:p=>{ p.aura=Math.max(p.aura, 100); p.trySpecial(2); }}]},   // the jab CONNECTS on armor first; the aura rig means the money shot can never whiff
- // ---- THE CHORUS (44.5-57.7s): friends first, then the combo reel ----
+ // ---- ACT 6 · THE CHORUS (44.5-57.7s): friends first, then the modes ride the combo reel ----
  {type:'fight', mode:'rumble', p:'oracle', stage:'pit', dur:216, flash:true, mathcard:false, tag:{t:'FIGHT YOUR FRIENDS', s:'online 1v1 duels · 5-player rumble · same screen'},
   script:[{at:40,fn:p=>p.trySpecial()},{at:140,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'mauler', e:'frost', stage:'forge', gap:88, dur:192, slow:[98,140], flash:true,
+ {type:'fight', p:'mauler', e:'frost', stage:'void', gap:88, dur:192, slow:[98,140], flash:true, tag:{t:'THE TOWER', s:'climb the five Orders'},
   script:[{at:4,fn:p=>p.tryDash(1)},{at:16,fn:p=>p.tryAttack('punch')},{at:40,fn:p=>p.tryAttack('kick')},{at:66,fn:p=>p.tryAttack('kick')},{at:96,fn:p=>p.trySpecial(2)}]},
- {type:'fight', p:'frost', e:'oracle', stage:'frost', gap:84, dur:192, slow:[22,44], flash:true,
+ {type:'fight', p:'frost', e:'oracle', stage:'schism', gap:84, dur:192, slow:[22,44], flash:true, tag:{t:'GAUNTLET', s:'survive the streak'},
   script:[{at:4,fn:(p,e)=>e.cpuAttack('punch',18)},{at:24,fn:p=>p.tryAttack('punch')},{at:50,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:82,fn:p=>p.tryAttack('punch')},{at:114,fn:p=>p.trySpecial(1)}]},
- {type:'fight', p:'ember', e:'mauler', stage:'pit', gap:90, dur:192, slow:[102,144], flash:true,
+ {type:'fight', p:'ember', e:'mauler', stage:'proving', gap:90, dur:192, slow:[102,144], flash:true, tag:{t:'DAILY FIGHT', s:'one trial a day. keep the streak.'},
   script:[{at:4,fn:p=>p.tryDash(1)},{at:14,fn:p=>p.tryAttack('kick')},{at:40,fn:p=>p.tryAttack('punch')},{at:66,fn:p=>p.tryAttack('kick')},{at:100,fn:p=>p.trySpecial()}]},
- // ---- ROSTER STINGERS CLIMBING THE PEAK (57.7-61.5s) — the last one ENDS a fight, right on the chorus summit ----
- {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:64, hud:false, dur:66, slow:[14,46], flash:true, tag:{t:'KRISHNA', s:'THE STANDING QUOTIENT'}, script:[{at:4,fn:p=>p.trySpecial(1)}]},
- {type:'fight', p:'ember', e:'oracle', stage:'void', gap:64, hud:false, dur:66, slow:[14,46], flash:true, tag:{t:'ADDISON', s:'THE MEASURED SUM'}, script:[{at:4,fn:p=>p.trySpecial(2)}]},
- {type:'fight', p:'frost', e:'ember', stage:'proving', gap:60, hud:false, dur:96, slow:[12,70], flash:true, tag:{t:'LESSING', s:'THE LAST DIFFERENCE'},
+ // ---- STINGERS CLIMBING THE PEAK (57.7-61.5s) — the last one ENDS a fight, right on the chorus summit ----
+ {type:'fight', p:'oracle', e:'ember', stage:'frost', gap:64, hud:false, dur:66, slow:[14,46], flash:true, script:[{at:4,fn:p=>p.trySpecial(1)}]},
+ {type:'fight', p:'ember', e:'oracle', stage:'void', gap:64, hud:false, dur:66, slow:[14,46], flash:true, script:[{at:4,fn:p=>p.trySpecial(2)}]},
+ {type:'fight', p:'frost', e:'ember', stage:'pit', gap:60, hud:false, dur:96, slow:[12,70], flash:true,
   pose:(p,e)=>{ e.hp=8; e.hpShown=8; },
   script:[{at:4,fn:p=>p.trySpecial(1)}]},
- // ---- END CARD (61.5-70.5s): the wordmark slams as the chorus releases; the post-chorus decay carries it out ----
+ // ---- END CARD (61.5-70.5s): the name again (say it twice and they remember it); the post-chorus decay carries it out ----
  {type:'end', dur:540, fout:36, music:'james'},
 ];
 function startShowcase(){   // v9 — V from any menu: two fighters walk in and FIGHT, letterboxed, hands-free (record over it)
@@ -4767,7 +4770,7 @@ function setupTrailerScene(i){
     else { game.player.aiThink=99999; game.enemy.aiThink=99999; game.enemy._noBurst=true; }   // v9 scripted shots: the AIs breathe but the SCRIPT lands the beats — and nobody bursts out of a money shot (v10)
   } else if(S.type==='shot'){ game.cinema=false; game.cinemaSlow=false; game.state='trailershot'; if(S.sfx) playStinger(S.sfx); }
   else if(S.type==='card'){ game.cinema=false; game.cinemaSlow=false; game.state='trailercard'; if(S.sfx) playStinger(S.sfx); }
-  else if(S.type==='end'){ game.cinema=false; game.cinemaSlow=false; game.state='trailerend'; }
+  else if(S.type==='end'||S.type==='title'){ game.cinema=false; game.cinemaSlow=false; game.state='trailerend'; }   // 'title' = the same slam card mid-trailer (the WELCOME beat)
 }
 function trailerDirector(){
   if(game.trailerLoading) return;   // the song decides when we start
@@ -4792,6 +4795,25 @@ function drawTrailercard(){   // v4 KINETIC TYPE — word groups slam in on the 
   const sx=((t*1.4)%(W+700))-W/2-350;
   const lg=ctx.createLinearGradient(sx,0,sx+240,0); lg.addColorStop(0,'rgba(122,232,255,0)'); lg.addColorStop(0.5,'#7ae8ff'); lg.addColorStop(1,'rgba(122,232,255,0)');
   ctx.fillStyle=lg; ctx.fillRect(-W,-H,W*2,H*2); ctx.restore();
+  if(c.problem){   // v6 THE OPENING FRAME — a math problem, huge, in a fighting-game trailer. The answer digits SLAM in; a ring fires on the enter.
+    ctx.font=font(MONO,44);
+    const baseW=ctx.measureText(c.problem+' ').width, ansW=c.answer.length*30;
+    const x0=W/2-(baseW+ansW)/2, y0=H/2+10;
+    const shown=c.problem.slice(0, Math.floor(Math.max(0,t-4)*0.55));
+    if(shown) txtO(shown+' ', x0, y0, 44, '#f2f5ff', {mono:true,align:'left',sw:6});
+    let n=0; (c.ansAt||[]).forEach((at,i)=>{ if(t>=at) n=i+1; });
+    for(let i=0;i<n;i++){
+      const gt=t-c.ansAt[i], k=clamp(gt/6,0,1), s=1+(1-k)*(1-k)*0.7;
+      ctx.save(); ctx.translate(x0+baseW+i*30+15, y0-14); ctx.scale(s,s);
+      txtO(c.answer[i], 0, 14, 46, '#ffd34d', {mono:true,sw:6});
+      ctx.restore();
+    }
+    if(c.ringAt && t>=c.ringAt){ const rt=t-c.ringAt, r=14+rt*11, a=Math.max(0,1-rt/26);   // ⏎ — the answer detonates
+      if(a>0){ ctx.strokeStyle='rgba(122,232,255,'+(a*0.8).toFixed(3)+')'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(x0+baseW+ansW/2, y0-16, r, 0, 7); ctx.stroke(); }
+      if(rt<4){ ctx.fillStyle='rgba(240,246,255,'+(0.4*(1-rt/4)).toFixed(3)+')'; ctx.fillRect(0,0,W,H); } }
+    return;
+  }
   const groups=c.words||[{t:c.text,at:0}], landed=groups.filter(g=>t>=g.at), n=landed.length;
   if(!n) return;
   const y0=H/2-(n-1)*30+10, last=landed[n-1], since=t-last.at;
@@ -4834,24 +4856,26 @@ function drawTrailerShot(){   // v4 cinematic story vignette — Ken Burns push-
     }
   }
 }
-function drawTrailerEnd(){   // v4 END CARD — the name SLAMS in (ring + dust), then the pitch, then the modes; nothing static
-  const tr=game.trailer; if(!tr) return; const t=tr.t;
+function drawTrailerEnd(){   // v4 END CARD — the name SLAMS in (ring + dust), then the pitch, then the modes; nothing static. v6: type 'title' = the same slam mid-trailer, tagline only (the WELCOME card).
+  const tr=game.trailer; if(!tr) return; const t=tr.t, S=tr.card||{};
+  const title=S.type==='title', cy=title?250:206;
   ctx.fillStyle='#04050a'; ctx.fillRect(0,0,W,H);
   if(t<40){ const r=t*16, a=Math.max(0,1-t/40);   // impact ring
-    ctx.strokeStyle='rgba(122,232,255,'+(a*0.5).toFixed(3)+')'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(W/2,206,r,0,7); ctx.stroke(); }
+    ctx.strokeStyle='rgba(122,232,255,'+(a*0.5).toFixed(3)+')'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(W/2,cy,r,0,7); ctx.stroke(); }
   if(t>=4&&t<90) for(let i=0;i<14;i++){   // deterministic dust burst
     const a2=i*0.449+(i%3)*2.1, sp=2.6+(i%5)*0.8, dt=t-4;
-    const x=W/2+Math.cos(a2)*dt*sp, y=206+Math.sin(a2)*dt*sp*0.5+dt*dt*0.02, al=Math.max(0,1-dt/70);
+    const x=W/2+Math.cos(a2)*dt*sp, y=cy+Math.sin(a2)*dt*sp*0.5+dt*dt*0.02, al=Math.max(0,1-dt/70);
     ctx.fillStyle='rgba(196,206,221,'+(al*0.5).toFixed(3)+')'; ctx.fillRect(x,y,2,2); }
   const k=clamp(t/12,0,1), s=1+(1-k)*(1-k)*1.1;   // the slam
-  ctx.save(); ctx.translate(W/2,206); ctx.scale(s,s); ctx.translate(-W/2,-206);
-  drawWordmark(W/2, 206, 1.24); ctx.restore();
+  ctx.save(); ctx.translate(W/2,cy); ctx.scale(s,s); ctx.translate(-W/2,-cy);
+  drawWordmark(W/2, cy, 1.24); ctx.restore();
   if(t<6){ ctx.fillStyle='rgba(240,246,255,'+(0.85*(1-t/6)).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }
-  if(t>84){ ctx.save(); ctx.globalAlpha=clamp((t-84)/18,0,1);
-    txtO('EVERY BLOW IS A PROBLEM', W/2, 272, 15, '#aeb8cc',{mono:true,sw:0}); ctx.restore(); }
+  if(t>54){ ctx.save(); ctx.globalAlpha=clamp((t-54)/16,0,1);
+    txtO('DO MATH. THROW HANDS.', W/2, cy+64, 16, '#aeb8cc',{mono:true,sw:0}); ctx.restore(); }
+  if(title) return;   // the WELCOME card stops here — name + pitch, back to the fight
   if(t>150){ ctx.save(); ctx.globalAlpha=clamp((t-150)/18,0,1);
     txtO('STORY · THE TOWER · GAUNTLET · DAILY FIGHT · ONLINE 1v1 + RUMBLE', W/2, 330, 11, '#7a8298',{mono:true,sw:0});
-    txtO(STEAM_LIVE? 'WISHLIST ON STEAM' : 'PLAY IT IN YOUR BROWSER', W/2, 362, 14, '#7ae8ff',{mono:true,sw:0});
+    txtO(STEAM_LIVE? 'WISHLIST ON STEAM' : 'PLAY IT FREE IN YOUR BROWSER', W/2, 362, 14, '#7ae8ff',{mono:true,sw:0});
     txtO(FOLLOW_URL.replace(/^https?:\/\//,''), W/2, 386, 12, '#aeb8cc',{mono:true,sw:0}); ctx.restore(); }   // a CTA with no address is a wish, not a call
 }
 function drawTrailerOverlay(){
