@@ -2464,7 +2464,8 @@ function drawFighter(f){
     const tc = lv==='high'?'#ff9f2a' : lv==='low'?'#2ea8ff' : '#ff4040';
     const popS = f.attack.pop>0? eoBack(1-f.attack.pop/8):1;
     const by = f.y-182 - Math.abs(Math.sin(game.frame*0.18))*7;
-    ctx.save(); ctx.translate(f.x,by); ctx.scale(popS,popS);
+    const _th=(W/2)/cam.z, _tx=clamp(f.x, cam.x-_th+52, cam.x+_th-52);   // the read must stay whole even at the camera edge
+    ctx.save(); ctx.translate(_tx,by); ctx.scale(popS,popS);
     txtO('!',0,0,30,tc,{sw:5});
     if(lv!=='mid') txtO(lv==='high'?'▲ HIGH':'▼ LOW',0,18,10,tc,{mono:true,sw:0});
     ctx.restore();
@@ -4069,14 +4070,15 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
   ctx.textAlign= side===1?'left':'right';
   const nx = side===1? 40 : W-40;
   ctx.fillText(f.name, nx, 76);
+  const _nw=ctx.measureText(f.name).width;   // pips sit off the MEASURED name — hard-coded 110 landed them inside 'MAXIMILIAN'
   const wins = side===1? game.pWins||0 : game.eWins||0;
   for(let i=0;i<2;i++){
-    const px = side===1? 110+i*16 : W-110-i*16;
+    const px = side===1? 40+_nw+16+i*16 : W-40-_nw-16-i*16;
     ctx.save(); ctx.translate(px,71); ctx.rotate(Math.PI/4);
     ctx.fillStyle = wins>i? (side===1?'#ffd34d':'#ff7a4d') : 'rgba(255,255,255,0.14)';
     ctx.fillRect(-4,-4,8,8); ctx.restore();
   }
-  if(f===game.player && !game.galaxy && !game.cinema){ // CONTROL COLUMN (top-left): the non-obvious keys + your 3-special ladder, lit only by what your AURA can pay for (hidden in cinema/trailer — it's teaching UI, not footage)
+  if(f===game.player && !game.galaxy && !game.cinema && !game.paused){ // CONTROL COLUMN (top-left): the non-obvious keys + your 3-special ladder, lit only by what your AURA can pay for (hidden in cinema/trailer/pause — it's teaching UI, not footage)
     const kit=spKitFor(f.char), bt=bestSpecialTier(f);
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
     let cy=98;
@@ -4462,12 +4464,15 @@ function drawBanners(){
     ctx.restore();
     if(game.mathT<120) txtO('Q.E.D.', W/2, 300, 16, '#ffd34d',{mono:true,sw:3});
   }
-  if(game.banner){ // announcements (PERFECT DODGE etc.)
+  if(game.banner){ // announcements (PERFECT DODGE etc.) — on a scrim pill, width-clamped, so a red banner survives a red sunset
     const b=game.banner, p=clamp(b.t*5,0,1);
     ctx.save(); ctx.translate(W/2,180);
     ctx.scale(eoBack(p),eoBack(p));
     ctx.globalAlpha = b.t<0.65?1:1-(b.t-0.65)/0.35;
-    txtO(b.txt,0,0,38,b.col,{sw:6});
+    ctx.font=font(DISP,38); const _bw=ctx.measureText(b.txt).width;
+    const _bs=_bw>W-160? 30:38, _bw2=_bs===38?_bw:ctx.measureText(b.txt).width*30/38;
+    ctx.fillStyle='rgba(4,5,12,0.55)'; rr(-_bw2/2-18,-34,_bw2+36,46,8); ctx.fill();
+    txtO(b.txt,0,0,_bs,b.col,{sw:8});
     ctx.restore(); ctx.globalAlpha=1;
   }
 }
@@ -4500,7 +4505,7 @@ function drawVS(t){ // round-1 splash — names crash in from the wings
   if(game._glossShow && VS_GLOSS[game.enemy.char.id] && t>0.62)
     txtO('▸ '+VS_GLOSS[game.enemy.char.id], W/2, 344, 12, '#7ae8ff',{mono:true,sw:0,alpha:clamp((t-0.62)*3,0,1)});   // v5 #14 the matchup gloss — the roster's best argument, finally stated
 }
-function diffRect(i){ return {x:W/2-186+i*128, y:466, w:118, h:18}; }
+function diffRect(i){ return {x:W/2-186+i*128, y:478, w:118, h:18}; }
 function startRect(){ return {x:W/2-150, y:446, w:300, h:50}; }
 const TAGS=['Draw. Hold. Erase.',
   'They mastered one operation. You will master four.',
@@ -4543,7 +4548,7 @@ function drawDailyBadge(){     // surfaces the Daily + at-risk streak EXACTLY wh
   const pulse = 0.6+Math.sin(game.frame*0.12)*0.4;
   let line1, col1, line2='';
   if(!playedToday){
-    line1="◆ TODAY'S FIGHT — NOT PLAYED YET"; col1='#22D3EE';
+    line1="◆ TODAY'S FIGHT — NOT PLAYED YET"; col1='#7ae8ff';
     if(st.n<=0) line2='win today to start a streak';
     else if(st.last===day-1) line2='✦ '+st.n+'-DAY STREAK · play before midnight to keep it';
     else if(st.last===day-2) line2 = st.usedFreeze
@@ -4603,16 +4608,19 @@ function drawKeyArt(){   // a dedicated hero composition for the store capsule /
     ctx.globalAlpha=0.10+0.10*Math.sin(game.frame*0.02+i*1.3); ctx.fillStyle=['#46e08a','#7ae8ff','#b48cff','#ff5a6a'][i%4];
     ctx.font=font(DISP, 26+(i%3)*14); ctx.fillText(['+','−','÷','×'][i%4], x, y); }
   ctx.globalAlpha=1; ctx.restore();
-  const fL=cutsceneFighter(PROTAG); fL.facing=1; try{fL.update(false);}catch(e){}     // two heroes leaning into the clash
+  const fL=cutsceneFighter(PROTAG); fL.facing=1; try{fL.update(false);}catch(e){}     // two heroes DRIVING into the clash glow, not standing beside it (art-director pass)
   const fR=cutsceneFighter(ROSTER[0]); fR.facing=-1; try{fR.update(false);}catch(e){}
-  ctx.save(); ctx.translate(W*0.30,H*0.80); ctx.scale(2.5,2.5); drawPose(fL,fL.P,0,0,1,null,-0.08); ctx.restore();
-  ctx.save(); ctx.translate(W*0.70,H*0.80); ctx.scale(2.7,2.7); drawPose(fR,fR.P,0,0,1,null,0.08); ctx.restore();
+  fL.P.lean+=0.15; fL.P.crouch-=4; fR.P.lean+=0.15; fR.P.crouch-=4;   // spine into the fight — the body-acting the cutscenes already use
+  ctx.save(); ctx.translate(W*0.35,H*0.80); ctx.scale(2.6,2.6); drawPose(fL,fL.P,0,0,1,null,-0.22); ctx.restore();
+  ctx.save(); ctx.translate(W*0.66,H*0.80); ctx.scale(2.6,2.6); drawPose(fR,fR.P,0,0,1,null,0.22); ctx.restore();
   gradeFrame(); vignette();
   drawWordmark(W/2, 116, 1.18);
-  txtO('NO ONE HAS SOLVED YOU YET', W/2, 196, 16, '#d8e2ff', {mono:true,sw:3});
+  txtO('NO ONE HAS SOLVED YOU YET', W/2, 152, 13, '#d8e2ff', {mono:true,sw:3});   // tucked into the lockup, off the fighters' heads
   txtO('four sworn Orders · one war over every number', W/2, H-34, 12, 'rgba(205,205,235,0.85)', {mono:true,sw:0});
-  txtO('E  export the Steam art pack (8 sizes)  ·  any other key returns', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
-  if(game._exportToast && game.frame-game._exportToast<240) txtO('exported — check your downloads', W/2, H-34, 11, '#46e08a', {mono:true,sw:0});
+  if(!window._exportLock){   // dev chrome NEVER ships inside the exported store art
+    txtO('E  export the Steam art pack (8 sizes)  ·  any other key returns', W/2, H-14, 9, 'rgba(150,150,180,0.6)', {mono:true,sw:0});
+    if(game._exportToast && game.frame-game._exportToast<240) txtO('exported — check your downloads', W/2, H-52, 11, '#46e08a', {mono:true,sw:0});
+  }
 }
 // ---- MARKETING EXPORTER (audit v7 #6): E on the KEY ART screen → the full Steam-sized capsule pack · F9 anywhere → a 1920×1080 PNG of the live frame.
 // The game is vector-drawn, so re-rendering at scale is CRISP — no upscale blur. Without these files the $100 page-creation day physically cannot happen.
@@ -4667,7 +4675,7 @@ const TRAILER=[
  // ---- ACT 1b · THE NAME (11.2s): now that they believe it, tell them what it's called ----
  {type:'title', dur:144},
  // ---- ACT 2 · HOW IT WORKS (13.6-24.5s): five beats of plain speech, ending exactly on the 24s hit ----
- {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:174, slow:[58,84], flash:true, tag:{t:'TYPE THE ANSWER', s:'it becomes AURA. everything costs AURA.'},
+ {type:'fight', p:'oracle', e:'ember', stage:'schism', gap:96, dur:174, slow:[58,84], flash:true, tag:{t:'TYPE THE ANSWER', s:'it becomes AURA. AURA is ammo.'},
   pose:(p,e)=>{ p.aura=12; },
   script:[{at:6,fn:()=>_paStart()},{at:20,fn:()=>_paType(1)},{at:34,fn:()=>_paType(2)},{at:48,fn:()=>_paType(3)},{at:60,fn:()=>_ta()},   // the PROOF: problem read, answer typed digit by digit, banked
           {at:80,fn:p=>p.tryDash(1)},{at:92,fn:p=>p.tryAttack('kick')},{at:116,fn:p=>p.tryAttack('kick')},{at:142,fn:p=>p.trySpecial()}]},
@@ -4872,7 +4880,7 @@ function drawTrailerShot(){   // v4 cinematic story vignette — Ken Burns push-
     const spd=S.spd||0.55, start=S.tAt==null?10:S.tAt;
     const shown=S.t.slice(0, Math.max(0,Math.floor((t-start)*spd)));
     if(shown){
-      const ty=S.center? H/2+6 : H-96;   // the whisper speaks from the CENTER of the dark, not a lower third
+      const ty=S.center? H/2+6 : (S.tag? H-170 : H-96);   // the whisper speaks from the CENTER; a tagged shot lifts its quote clear of the chip lane
       if(S.w) txtO(S.w==='YOU'?(game.heroName||'YOU').toUpperCase():S.w, W/2, ty-28, 12, S.c||'#cfe0ff',{mono:true,sw:0});
       if(S.center){ const _ww=S.wrapW||W*0.44;   // a narrow column reads like a voice, and the lines break balanced
         ctx.font=font(S.mono?MONO:DISP, S.size||17);
@@ -4912,7 +4920,10 @@ function drawTrailerOverlay(){
     ctx.save(); ctx.globalAlpha=a;
     ctx.fillStyle='#7ae8ff'; ctx.fillRect(bx-14,by-20,4,S.tag.s?40:26);
     txtO(S.tag.t, bx, by, 21, '#f2f5ff', {align:'left',sw:5});
-    if(S.tag.s) txtO(S.tag.s, bx, by+20, 11, '#9fb0c8', {align:'left',mono:true,sw:0});
+    if(S.tag.s){ let sub=S.tag.s; ctx.font=font(MONO,11);   // clamp (fight shots only): a sub may never slide under the centered math card's left edge
+      const maxW = game.state==='fight'? W/2-210-bx : W-2*bx;
+      while(sub.length>8 && ctx.measureText(sub).width>maxW) sub=sub.slice(0,-2);
+      txtO(sub===S.tag.s? sub : sub.replace(/[ ·.]+$/,'')+'…', bx, by+20, 11, '#9fb0c8', {align:'left',mono:true,sw:0}); }
     ctx.restore();
   }
   if(S.flash && tr.t<4){ ctx.fillStyle='rgba(240,246,255,'+(0.55*(1-tr.t/4)).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }   // 4-tick white flash = a HARD cut, not a dissolve
@@ -4932,21 +4943,25 @@ function drawTitle(){
   // rotating line — secondary
   const tag=TAGS[Math.floor(game.frame/260)%TAGS.length];
   txtO(tag, W/2, 260, 11, 'rgba(150,160,185,0.7)', {mono:true, sw:0});
-  // mode menu
+  // mode menu — 28px rhythm + a real type step between selected and idle (art-director pass)
+  ctx.save();   // column scrim: the menu reads on ink, not on whatever stage prop drifts behind it
+  const _ms=ctx.createLinearGradient(0,120,0,470);
+  _ms.addColorStop(0,'rgba(3,2,10,0.72)'); _ms.addColorStop(1,'rgba(3,2,10,0)');
+  ctx.fillStyle=_ms; ctx.fillRect(W/2-300,110,600,370); ctx.restore();
   game.menuRects=[];
   MENU.forEach((m,i)=>{
-    const sel=i===game.menuIdx, y=284+i*22;
-    const r={x:W/2-180,y:y-14,w:360,h:21};
+    const sel=i===game.menuIdx, y=284+i*28;
+    const r={x:W/2-180,y:y-17,w:360,h:26};
     game.menuRects.push(r);
     const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h;
-    if(sel){ rr(r.x,r.y,r.w,r.h,6);
-      ctx.fillStyle='rgba(50,32,80,0.9)'; ctx.fill();
+    if(sel){ rr(r.x,r.y,r.w,r.h,8);
+      ctx.fillStyle='rgba(255,211,77,0.10)'; ctx.fill();
       ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2; ctx.stroke();
-      txtO('▸', r.x+16, y+1, 13, '#ffd34d',{sw:0}); }
-    txtO(m[0], W/2, y+1, 14, sel? '#ffd34d': i===0? '#ffd0d6': hov?'#e8ecff':'#a99cc8', {sw:0});
+      txtO('▸', r.x+16, y+1, 14, '#ffd34d',{sw:0}); }
+    txtO(m[0], W/2, y+2, sel?16:13, sel? '#ffd34d': i===0? '#ffd0d6': hov?'#e8ecff':'#a99cc8', {sw:0});
   });
   if(MENU[game.menuIdx][1])
-    txtO(MENU[game.menuIdx][1], W/2, 432, 10, 'rgba(200,190,230,0.85)',{mono:true,sw:0});
+    txtO(MENU[game.menuIdx][1], W/2, 452, 10, 'rgba(200,190,230,0.85)',{mono:true,sw:0});
   // difficulty chips
   for(let i=0;i<3;i++){
     const r=diffRect(i), sel=DIFF.level===i;
@@ -4956,7 +4971,7 @@ function drawTitle(){
     txtO((i+1)+' '+DIFF.names[i], r.x+r.w/2, r.y+14, 11, sel?'#ffd34d':'#9a8fb8',{mono:true,sw:0});
   }
   txtO('W/S navigate · ⏎ select · R records · M music', W/2, 506, 10, 'rgba(160,150,190,0.75)',{mono:true,sw:0});
-  txtO('T trailer  ·  V showcase  ·  K key art', W/2, 526, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});
+  if(window.DEBUG_HOTKEYS) txtO('T trailer  ·  V showcase  ·  K key art', W/2, 526, 9, 'rgba(150,150,190,0.55)',{mono:true,sw:0});   // capture keys keep WORKING; the printed line is dev chrome (flip window.DEBUG_HOTKEYS=true in the console to show it)
 }
 function welcomeDiffRect(i){ return {x:W/2-237+i*162, y:398, w:150, h:40}; }
 const DIFF_AGES=['ages 8-10','ages 10-13','ages 13+'];   // parent legibility: the band names the buyer's kid
@@ -4984,10 +4999,10 @@ function drawWelcome(){   // first-run gate: pick your math level, then teach be
 }
 function drawModes(){
   ctx.fillStyle='rgba(3,2,10,0.55)'; ctx.fillRect(0,0,W,H);
-  txtO('MORE MODES', W/2, 116, 38, '#efe9ff', {sw:6});
+  txtO('MORE MODES', W/2, 54, 30, '#efe9ff', {sw:6});
   game.modeRects=[];
   MODES_SUB.forEach((m,i)=>{
-    const sel=i===game.modeIdx, y=196+i*54;
+    const sel=i===game.modeIdx, y=150+i*58;
     const r={x:W/2-230,y:y-22,w:460,h:46}; game.modeRects.push(r);
     const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h, on=sel||hov;
     rr(r.x,r.y,r.w,r.h,10);
@@ -5001,23 +5016,24 @@ function drawModes(){
   ctx.strokeStyle='#3d2658'; ctx.lineWidth=1.2; ctx.stroke();
   txtO('‹ BACK   (T)', W/2, 461, 12, '#a99cc8', {mono:true,sw:0});
 }
-const MP_OPTS=[
-  ['⚔  1v1 DUEL  (online)','you vs ONE friend, live — share a link & a 4-letter code'],
-  ['👥  RUMBLE  (online)','up to 5 friends in one brawl — AI fills any empty seats'],
-  ['🕹  RUMBLE  (same screen)','5-fighter free-for-all vs the computer, right here'],
+const MP_OPTS=[   // no emoji — they rasterize differently on every OS (the fastest asset-flip tell); drawn accent bars instead (see drawRumbleChoose)
+  ['1v1 DUEL  (online)','you vs ONE friend, live — share a link & a 4-letter code'],
+  ['RUMBLE  (online)','up to 5 friends in one brawl — AI fills any empty seats'],
+  ['RUMBLE  (same screen)','5-fighter free-for-all vs the computer, right here'],
 ];
 function drawRumbleChoose(){
   ctx.fillStyle='rgba(3,2,10,0.55)'; ctx.fillRect(0,0,W,H);
-  txtO('MULTIPLAYER', W/2, 104, 38, '#efe9ff', {sw:6});
-  txtO('pick how you want to fight', W/2, 140, 12, '#cabbe0', {mono:true,sw:0});
+  txtO('MULTIPLAYER', W/2, 54, 30, '#efe9ff', {sw:6});
+  txtO('pick how you want to fight', W/2, 78, 12, '#cabbe0', {mono:true,sw:0});
   game.rumbleRects=[];
   MP_OPTS.forEach((o,i)=>{
-    const sel=i===(game.mpIdx||0), y=192+i*66;
+    const sel=i===(game.mpIdx||0), y=140+i*66;
     const r={x:W/2-250,y:y-26,w:500,h:54}; game.rumbleRects.push(r);
     const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h, on=sel||hov;
     rr(r.x,r.y,r.w,r.h,10);
     ctx.fillStyle=on?'rgba(50,32,80,0.92)':'rgba(18,14,32,0.85)'; ctx.fill();
     ctx.strokeStyle=on?'#ffd34d':'#3d2658'; ctx.lineWidth=on?2.4:1.2; ctx.stroke();
+    ctx.fillStyle=['#ffd34d','#b48cff','#7ae8ff'][i]; ctx.fillRect(r.x+14, r.y+10, 4, r.h-20);   // the accent-bar language the trailer chips already speak
     txtO(o[0], W/2, y-3, 18, on?'#ffd34d':'#e8ecff', {sw:0});
     txtO(o[1], W/2, y+17, 11, 'rgba(200,190,230,0.85)', {mono:true,sw:0});
   });
@@ -5582,7 +5598,10 @@ function drawDialogue(){
   rr(bx,by,bw,bh,12); ctx.fillStyle='rgba(6,7,14,0.92)'; ctx.fill();
   ctx.lineWidth=2.5; ctx.strokeStyle=line.c; ctx.stroke();
   const speaker = line.w==='YOU' ? (game.heroName||'YOU').toUpperCase() : line.w;
-  txtO(speaker, bx+26, by-1, 17, line.c, {align:'left',sw:4});
+  { ctx.font=font(DISP,17); const nw=ctx.measureText(speaker).width;   // the name rides a TAB that notches the border — no more strikethrough baseline
+    rr(bx+16, by-14, nw+24, 28, 8); ctx.fillStyle='rgba(6,7,14,0.96)'; ctx.fill();
+    ctx.lineWidth=2.5; ctx.strokeStyle=line.c; ctx.stroke();
+    txtO(speaker, bx+28, by+6, 17, line.c, {align:'left',sw:0}); }
   // typewriter reveal across the fixed wrapped lines
   const spd=lineSpeed(line);
   const full=line.t.length, shownN = d.skip? full : Math.min(full, Math.floor(t*spd));
@@ -5687,13 +5706,13 @@ function drawSelect(){
         let nm=(t+1)+'  '+kit[t].name, bf=9.5; ctx.font=font(MONO,bf); ctx.textAlign='center';
         while(ctx.measureText(nm).width>cw-18 && bf>6.5){ bf-=0.5; ctx.font=font(MONO,bf); }
         ctx.fillStyle = t===2? (c.gi||'#ffd34d') : '#cdd6ee';
-        ctx.fillText(nm, x+cw/2, y+250+t*16);
+        ctx.fillText(nm, x+cw/2, y+246+t*14);   // art-director pass: the whole bottom stack now ends INSIDE the 330px card
       } }
     { const st=STYLE_BY_ID[c.id]; if(st){   // play-style chip — the mechanical read a picker needs at a glance
-        rr(x+26, y+300, cw-52, 20, 6); ctx.fillStyle=sel?'rgba(255,211,77,0.16)':'rgba(120,160,220,0.12)'; ctx.fill();
-        txtO(st, x+cw/2, y+314, 10, (c.gi||'#8fd8f8'),{mono:true,sw:0}); } }
-    { const sg=SIG_BY_ID[c.id]; if(sg) txtO('◆ '+sg, x+cw/2, y+332, 8, sel?(c.gi||'#ffd34d'):'#9aa6c8',{mono:true,sw:0}); }   // signature-verb read — what to learn on this fighter
-    { const s2=SIG2_BY_ID[c.id]; if(s2) txtO('◇ '+s2, x+cw/2, y+344, 7.5, sel?'#cdd6ee':'#7a86a8',{mono:true,sw:0}); }   // v6 #9 the exclusive route
+        rr(x+26, y+284, cw-52, 20, 6); ctx.fillStyle=sel?'rgba(255,211,77,0.16)':'rgba(120,160,220,0.12)'; ctx.fill();
+        txtO(st, x+cw/2, y+298, 10, (c.gi||'#8fd8f8'),{mono:true,sw:0}); } }
+    { const sg=SIG_BY_ID[c.id]; if(sg) txtO('◆ '+sg, x+cw/2, y+312, 8.5, sel?(c.gi||'#ffd34d'):'#9aa6c8',{mono:true,sw:0}); }   // signature-verb read — what to learn on this fighter
+    { const s2=SIG2_BY_ID[c.id]; if(s2) txtO('◇ '+s2, x+cw/2, y+324, 8, sel?'#cdd6ee':'#7a86a8',{mono:true,sw:0}); }   // v6 #9 the exclusive route
     // (blurb dropped from the card — the tagline + SPECIALS kit carry identity now, and the 5-card layout is too narrow for it)
     if(!game.mode2p){ // best grade at this difficulty (versus or tower, whichever ranks higher)
       const b1=bests[c.id+'_'+DIFF.level], b2=bests['tower_'+c.id+'_'+DIFF.level];
@@ -5706,9 +5725,9 @@ function drawSelect(){
     if(charLocked(c)){   // an Order, sealed until the campaign is won
       rr(x,y,cw,chh,12); ctx.fillStyle='rgba(4,5,12,0.78)'; ctx.fill();
       ctx.strokeStyle=sel?'#ffd34d':'#3a3354'; ctx.lineWidth=sel?2.5:1.5; ctx.stroke();
-      ctx.save(); ctx.strokeStyle='#8a93b8'; ctx.lineWidth=2.4;   // a small drawn padlock (no emoji)
-      ctx.strokeRect(x+cw/2-11, y+150, 22, 17);
-      ctx.beginPath(); ctx.arc(x+cw/2, y+150, 8, Math.PI, 0); ctx.stroke(); ctx.restore();
+      ctx.save(); ctx.strokeStyle='#8a93b8'; ctx.lineWidth=2.4;   // a small drawn padlock (no emoji) — centered in the dimmed portrait, OFF the fighter's name
+      ctx.strokeRect(x+cw/2-11, y+64, 22, 17);
+      ctx.beginPath(); ctx.arc(x+cw/2, y+64, 8, Math.PI, 0); ctx.stroke(); ctx.restore();
       txtO('SEALED', x+cw/2, y+196, 16, '#cabbe0',{sw:3});
       txtO((game.storyProg||0)+' / '+(ORDER_UNLOCK[c.id]||STORY.length)+' chapters won', x+cw/2, y+218, 9.5, '#8a93b8',{mono:true,sw:0});
       txtO('keep going to unlock', x+cw/2, y+232, 9.5, '#8a93b8',{mono:true,sw:0});
@@ -5767,7 +5786,7 @@ function drawSelect(){
 }
 function drawSettings(){
   ctx.fillStyle='rgba(2,3,8,0.8)'; ctx.fillRect(0,0,W,H);
-  txtO('SETTINGS', W/2, 60, 32, '#efe9ff',{sw:6});
+  txtO('SETTINGS', W/2, 54, 30, '#efe9ff',{sw:6});
   rr(W/2-300,84,600,396,14);
   ctx.fillStyle='rgba(12,15,26,0.95)'; ctx.fill();
   ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
@@ -5876,32 +5895,31 @@ function drawRecords(){
   const p=game.profile||load('profile',freshProfile());
   txtO((game.heroName?'INITIATE '+game.heroName.toUpperCase()+'   ·   ':'')+(p.matches||0)+' matches · '+(p.wins||0)+' wins',
        W/2, 78, 11, '#9aa3c8',{mono:true,sw:0});
-  // left panel — best scores per mode
-  const lx=80, ly=130;
-  rr(lx-22, ly-30, 384, 252, 12); ctx.fillStyle='rgba(12,15,26,0.9)'; ctx.fill(); ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
-  txtO('BEST SCORES', lx+170, ly-10, 13, '#8fd8f8',{sw:0});
+  // ART-DIRECTOR REBUILD: two full-width bands — a panel that cannot contain its content is the loudest "no studio touched this" signal, so the achievement grid is CLIPPED to its panel by construction.
+  // band (a) — best scores: 3 cols × 2 rows
+  rr(58, 100, 844, 84, 12); ctx.fillStyle='rgba(12,15,26,0.92)'; ctx.fill(); ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
+  txtO('BEST SCORES', 80, 122, 13, '#8fd8f8',{align:'left',sw:0});
+  txtO('best streak ×'+(p.bestStreak||0)+' · '+(p.correct||0)+' solved · '+(p.perfects||0)+' perfect dodges', 880, 122, 10, '#8a93b8',{align:'right',mono:true,sw:0});
   const modes=[['overall','OVERALL'],['cpu','PLAY · 1v1'],['gauntlet','GAUNTLET'],['tower','THE TOWER'],['story','STORY'],['rumble','RUMBLE']];   // v8 one name per mode, everywhere
-  let y=ly+22;
-  for(const [k,label] of modes){
-    ctx.font=font(MONO,13); ctx.textAlign='left'; ctx.fillStyle=k==='overall'?'#ffd34d':'#a99cc8'; ctx.fillText(label, lx, y);
-    ctx.textAlign='right'; ctx.fillStyle=k==='overall'?'#ffd34d':'#e8ecff'; ctx.fillText(fmtScore((p.best&&p.best[k])||0), lx+338, y);
-    if(k==='overall'){ y+=8; ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.beginPath(); ctx.moveTo(lx,y-2); ctx.lineTo(lx+338,y-2); ctx.stroke(); }
-    y+=28;
-  }
-  txtO('best streak ×'+(p.bestStreak||0)+'  ·  '+(p.correct||0)+' solved  ·  '+(p.perfects||0)+' perfect dodges', lx+170, y+6, 10, '#8a93b8',{mono:true,sw:0});
-  // right panel — achievement checklist
-  const rx=W/2+44, ry=130, ach=achievements(), got=ach.filter(a=>a.done).length;
-  rr(rx-22, ry-30, 420, 320, 12); ctx.fillStyle='rgba(12,15,26,0.9)'; ctx.fill(); ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
-  txtO('ACHIEVEMENTS   '+got+' / '+ach.length, rx+188, ry-10, 13, '#8fd8f8',{sw:0});
-  let ay=ry+20;
-  for(const a of ach){
-    txtO(a.done?'✓':'○', rx, ay, 14, a.done?'#46e08a':'#5a5470',{align:'left',sw:0});
-    txtO(a.name, rx+26, ay, 13, a.done?'#e8ecff':'#8a93b8',{align:'left',sw:0});
-    if(a.reward) txtO(a.reward, rx+376, ay, 9, a.done?'#46e08a':'#ffd34d',{align:'right',mono:true,sw:0});
-    ctx.font=font(MONO,9.5); ctx.textAlign='left'; ctx.fillStyle='#6a7090'; ctx.fillText(a.desc, rx+26, ay+15);
-    ay+=39;
-  }
-  txtO('Esc / T  ·  back to title', W/2, H-28, 11, '#8a93b8',{mono:true,sw:0});
+  modes.forEach(([k,label],i)=>{
+    const cx0=80+(i%3)*292, cy=146+Math.floor(i/3)*26;
+    ctx.font=font(MONO,12); ctx.textAlign='left'; ctx.fillStyle=k==='overall'?'#ffd34d':'#a99cc8'; ctx.fillText(label, cx0, cy);
+    ctx.textAlign='right'; ctx.fillStyle=k==='overall'?'#ffd34d':'#e8ecff'; ctx.fillText(fmtScore((p.best&&p.best[k])||0), cx0+250, cy);
+  });
+  // band (b) — achievements: clipped 2×6 grid
+  const ach=achievements(), got=ach.filter(a=>a.done).length;
+  rr(58, 196, 844, 308, 12); ctx.fillStyle='rgba(12,15,26,0.92)'; ctx.fill(); ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
+  txtO('ACHIEVEMENTS   '+got+' / '+ach.length, 80, 222, 13, '#8fd8f8',{align:'left',sw:0});
+  ctx.save(); rr(58, 196, 844, 308, 12); ctx.clip();   // content can NEVER bleed past the border again
+  ach.forEach((a,i)=>{
+    const ax=80+Math.floor(i/6)*430, ay=248+(i%6)*42;
+    txtO(a.done?'✓':'○', ax, ay, 14, a.done?'#46e08a':'#5a5470',{align:'left',sw:0});
+    txtO(a.name, ax+26, ay, 12, a.done?'#e8ecff':'#8a93b8',{align:'left',sw:0});
+    if(a.reward) txtO(a.reward, ax+380, ay, 9, a.done?'#46e08a':'#ffd34d',{align:'right',mono:true,sw:0});
+    ctx.font=font(MONO,9.5); ctx.textAlign='left'; ctx.fillStyle='#6a7090'; ctx.fillText(a.desc, ax+26, ay+14);
+  });
+  ctx.restore();
+  txtO('Esc / T  ·  back to title', W/2, H-20, 11, '#8a93b8',{mono:true,sw:0});
 }
 function drawScoreRow(y){               // prominent SCORE + NEW BEST inside the report panel
   if(game.lastScore==null) return;
@@ -5994,7 +6012,7 @@ function drawMatchEnd(){
   }
   const won=game.playerWon;
   letterBanner(game.daily?'DAILY FIGHT': game.towerDone?'TOWER COMPLETE': won?'VICTORY': (game.mode==='tower'?'TOWER FAILED':'DEFEAT'),
-               130, game.daily||game.towerDone?50:58, game.daily?'#22D3EE': won?'#46e08a':'#ff4d5e', 1);
+               130, game.daily||game.towerDone?50:58, game.daily?'#7ae8ff': won?'#46e08a':'#ff4d5e', 1);
   if(game.daily && game.dailyResult){
     const r=game.dailyResult;
     if(r.practice)
@@ -6185,11 +6203,14 @@ function render(){
   else {
     const tNoHud = game.trailerMode && game.trailer && game.trailer.card && game.trailer.card.hud===false;   // v4 trailer stingers run CLEAN — pure cinema, no HUD
     if(!tNoHud){
+    if(game.trailerMode) { ctx.save(); ctx.translate(0,52); }   // art-director pass: the 46px letterbox was DECAPITATING the bars/timer in every trailer shot — the top HUD rides below it
     if(game.mode==='rumble'){ drawRumbleHUD(); }
-    else { hpBar(game.player,1); hpBar(game.enemy,-1); drawTimer(); drawMinimap(); drawComboMeter(); drawDangerSolve(); drawBurstChallenge(); }
+    else { hpBar(game.player,1); hpBar(game.enemy,-1); drawTimer(); drawMinimap(); drawComboMeter(); }
+    if(game.trailerMode) ctx.restore();
+    if(game.mode!=='rumble'){ drawDangerSolve(); drawBurstChallenge(); }
     drawHudFloats();
     if(game.mode==='story'){ drawTaunt(); drawRuleBanner(); }
-    if(game.state==='fight'){
+    if(game.state==='fight' && !game.paused){   // paused = the pause menu OWNS the frame; the fight text layers stand down
       if(game.galaxy) drawGalaxyHUD();   // GALAXY fight = no math card; show your unlocked combos instead
       else { if(!(game.mode==='rumble'&&game.player.ko)) drawCard();
         if(!game.cinema && (game.rushMeter||0)>=RUSH_MAX && !game.mode2p && !game.player.ko){ const pz=0.55+Math.sin(game.frame*0.3)*0.45; ctx.save(); ctx.globalAlpha=pz; txtO('FOCUS FULL — press R for ONSLAUGHT', W/2, H-142, 14, '#ffd34d', {sw:3}); ctx.restore(); } }
@@ -6210,7 +6231,7 @@ function render(){
     drawBanners();
   }
   if(game.paused){
-    ctx.fillStyle='rgba(3,2,10,0.72)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(3,2,10,0.92)'; ctx.fillRect(0,0,W,H);   // the pause menu OWNS the frame (was 0.72 — two full UIs superimposed read as a bug)
     txtO('PAUSED', W/2, 96, 38, '#efe9ff',{sw:7});
     const kp=keyLabel(KEYS.punch), kk=keyLabel(KEYS.kick), ks=keyLabel(KEYS.special);
     ['← → move   ·   double-tap = dash (the first backdash dodges hits — repeats cost 4 AURA)',
@@ -6218,17 +6239,17 @@ function render(){
      kp+' punch · '+kk+' kick · '+kp+'+'+kk+' throw · '+ks+' special — every swing spends AURA up front'
     ].forEach((s,i)=> txtO(s, W/2, 150+i*26, 12, '#b8c0da',{mono:true,sw:0}));
     // THINGS TO TRY — the execution layer most players never find (v8 pristine pass: six rows, all code-true)
-    txtO('THINGS TO TRY', W/2, 254, 14, '#ffd34d',{sw:0});
+    txtO('THINGS TO TRY', W/2, 248, 14, '#ffd34d',{sw:0});
     [['CHAIN', 'land a hit, then '+kk+' / '+ks+' inside the CHAIN ▸ flash — the moves link'],
      ['BURST', 'caught in a combo? type the red digit = FREE escape (once per round) · or '+ks+' = 40 AURA'],
      ['SLIP', 'a tinted ! marks a strike — guard its height (↓ for blue ▼, back for orange ▲), then answer the quick problem to SLIP it'],
      ['CHARGED', 'answer while your combo is running — your next blow lands ×1.7'],
      ['TICK THROW', 'they keep blocking? jab their guard, then '+kp+'+'+kk+' — a THROW grabs straight through block'],
      ['GAMBIT', 'some problems offer a wager — G doubles the pay, but a wrong answer wipes your bank']
-    ].forEach((r,i)=>{ const y=282+i*26;
+    ].forEach((r,i)=>{ const y=276+i*30;   // 30px pitch: the desc line gets real air instead of a 3px gap
       txtO(r[0], W/2, y, 12.5, '#7ae8ff',{mono:true,sw:0});
-      txtO(r[1], W/2, y+13, 10, '#aab4d0',{mono:true,sw:0}); });
-    txtO('P  resume   ·   ESC  quit to title   ·   M  music   ·   Alt+⏎  fullscreen', W/2, 446, 12, '#8a93b8',{mono:true,sw:0});
+      txtO(r[1], W/2, y+14, 10, '#aab4d0',{mono:true,sw:0}); });
+    txtO('P  resume   ·   ESC  quit to title   ·   M  music   ·   Alt+⏎  fullscreen', W/2, 474, 12, '#8a93b8',{mono:true,sw:0});
   }
   if(game.online && net.role==='guest') drawNetHealth();   // tell the guest when it's the network, not them
   if(game.trailerMode) drawTrailerOverlay();   // trailer letterbox + scene cross-fades over everything
