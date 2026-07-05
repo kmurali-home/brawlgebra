@@ -1169,6 +1169,7 @@ function drawTip(){
   ctx.restore();
 }
 function drawFloaters(){
+  if(game.trailerMode) return;   // v7 CINEMA PURITY — the ENTIRE trailer suppresses the combat-log floater blizzard (damage numbers, CHAIN ▸ / DASH ▸ / +10 AURA / COUNTERED! / LAUNCH! / JUST! / ∑ solving / NEED AURA / CLANG). The tag chips + mathfx + the action itself carry every beat; floaters only ever collided. (drawFloaters runs in the ARENA pass, upstream of the HUD gate, so it needs its own guard.)
   const _fhalf=(W/2)/cam.z;   // clamp every floater into view — coaching prompts and damage numbers must never clip at the camera edge
   for(const f of floaters){
     const s = eoBack(Math.min(1,f.t*4));
@@ -2361,7 +2362,7 @@ function drawFighter(f){
     const p=0.5+0.5*Math.sin(game.frame*0.45);
     ctx.save(); ctx.globalAlpha=0.28+0.34*p; ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2;
     ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 28, 72, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
-    if(f===game.enemy && !game.mode2p) txtO('▸ OPEN', f.x, f.y-180, 11, '#ffd34d', {mono:true,sw:0});
+    if(f===game.enemy && !game.mode2p && !game.trailerMode) txtO('▸ OPEN', f.x, f.y-180, 11, '#ffd34d', {mono:true,sw:0});
   }
   // v5 #3 tier-charge glyph — a held D walks the pips T1 -> T2 -> T3; readable by BOTH sides (a charge is an interruptible intent)
   if(f===game.player && (f._dHoldAt||0)>0 && !f.ko){
@@ -2380,12 +2381,12 @@ function drawFighter(f){
     ctx.beginPath(); ctx.ellipse(f.x, f.y-70, 26, 70, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
   }
   // block-stance readout — the high/low is unreadable without knowing your own guard height
-  if(f===game.player && f.blocking && !game.mode2p){
+  if(f===game.player && f.blocking && !game.mode2p && !game.trailerMode){
     const hi=f.guardStance==='high';
     txtO(hi?'HIGH GUARD':'LOW GUARD', f.x, f.y-168, 9.5, hi?'#8fd8f8':'#ffd34d', {mono:true,sw:0});
   }
   // v5 #7 the corner is a NAMED place — both sides can read the spatial stakes (label clamps into view: a cornered fighter hugs the camera edge by definition)
-  if(game.state==='fight' && !f.ko && inCorner(f) && game.frame%2===0){
+  if(game.state==='fight' && !f.ko && !game.trailerMode && inCorner(f) && game.frame%2===0){
     const _ch=(W/2)/cam.z;
     txtO('CORNERED', clamp(f.x, cam.x-_ch+72, cam.x+_ch-72), f.y-246, 9, '#ff8a8a', {mono:true,sw:0});
   }
@@ -2396,7 +2397,7 @@ function drawFighter(f){
     ctx.beginPath(); ctx.arc(f.x, f.y-88, 42, -Math.PI/2, -Math.PI/2+Math.PI*2*k); ctx.stroke();
     ctx.globalAlpha=0.35; ctx.beginPath(); ctx.arc(f.x, f.y-88, 42, 0, Math.PI*2); ctx.stroke();
     ctx.restore(); ctx.globalAlpha=1;
-    txtO('∑', f.x, f.y-196, 15, '#7ae8ff', {mono:true,sw:0});
+    if(!game.trailerMode) txtO('∑', f.x, f.y-196, 15, '#7ae8ff', {mono:true,sw:0});
   }
   // ground glow + shadow (cast onto whatever surface is underfoot)
   const fy = f.floorY||GROUND;
@@ -2456,12 +2457,12 @@ function drawFighter(f){
     }
     ctx.globalAlpha=1;
   }
-  if(f===game.player && game.state==='fight' && game.playerHidden){
+  if(f===game.player && game.state==='fight' && game.playerHidden && !game.trailerMode){
     txtO('HIDDEN', f.x, f.y-184, 12, '#9fdcff',
       {mono:true, sw:3, alpha:0.65+Math.sin(game.frame*0.1)*0.2});
   }
-  // telegraph "!" — v5 #12 TINTED BY HEIGHT: the tell teaches the read (orange=stand-block HIGH, blue=crouch LOW, red=MID)
-  if(f.attack && (f.attack.ph==='tel') ){
+  // telegraph "!" — v5 #12 TINTED BY HEIGHT: the tell teaches the read (orange=stand-block HIGH, blue=crouch LOW, red=MID). Off in the trailer: the '▲ HIGH'/'▼ LOW' label collided with the tag chips, and the cinematic reads the incoming hit from the pose, not a coaching mark.
+  if(f.attack && (f.attack.ph==='tel') && !game.trailerMode){
     const lv=(f.attack.def&&f.attack.def.guardLevel)||'mid';
     const tc = lv==='high'?'#ff9f2a' : lv==='low'?'#2ea8ff' : '#ff4040';
     const popS = f.attack.pop>0? eoBack(1-f.attack.pop/8):1;
@@ -4513,7 +4514,7 @@ function drawBanners(){
     ctx.restore();
     if(game.mathT<120) txtO('Q.E.D.', W/2, 300, 16, '#ffd34d',{mono:true,sw:3});
   }
-  if(game.banner && !(game.trailerMode && game.state==='ko')){ // announcements (PERFECT DODGE etc.) — scrim pill, width-clamped; in a trailer K.O. shot the K.O. card owns the frame alone
+  if(game.banner && !game.trailerMode){ // announcements (PERFECT DODGE / special-move names etc.) — scrim pill, width-clamped. v7: ENTIRELY off in the trailer — the tag chip + mathfx do all the naming; a 'THE DOUBLING' banner colliding with the neon equation was the last text-clutter leak.
     const b=game.banner, p=clamp(b.t*5,0,1);
     ctx.save(); ctx.translate(W/2, game.trailerMode?118:180);   // trailer: the banner rides just under the letterbox, OUT of the floater lane over the fighters
     ctx.scale(eoBack(p),eoBack(p));
@@ -4731,7 +4732,7 @@ const TRAILER=[
   pose:(p,e)=>{ p.aura=12; },
   script:[{at:6,fn:()=>_paStart()},{at:20,fn:()=>_paType(1)},{at:34,fn:()=>_paType(2)},{at:48,fn:()=>_paType(3)},{at:60,fn:()=>_ta()},   // the PROOF: problem read, answer typed digit by digit, banked
           {at:80,fn:p=>p.tryDash(1)},{at:92,fn:p=>p.tryAttack('kick')},{at:116,fn:p=>p.tryAttack('kick')},{at:142,fn:p=>p.trySpecial()}]},
- {type:'fight', p:'ember', e:'frost', stage:'void', gap:92, dur:120, slow:[24,46], flash:true, tag:{t:'ANSWER FAST', s:'and you walk straight through their best hit'},
+ {type:'fight', p:'ember', e:'frost', stage:'void', gap:92, dur:120, slow:[24,46], flash:true, tag:{t:'ANSWER FAST', s:'walk right through their best hit'},
   script:[{at:4,fn:(p,e)=>e.cpuAttack('kick',24)},{at:26,fn:p=>{p.guardStance='low'; _ta();}},{at:46,fn:p=>p.tryAttack('kick')},{at:68,fn:p=>p.tryAttack('punch')},{at:92,fn:p=>p.trySpecial()}]},
  {type:'fight', p:'oracle', e:'mauler', stage:'void', gap:86, dur:120, slow:[92,118], flash:true, tag:{t:'CHAIN IT', s:'launch, juggle, cancel. the counter keeps score.'},
   script:[{at:4,fn:p=>p.tryAttack('punch')},{at:24,fn:p=>{keys[KEYS.jump]=true; p.tryAttack('kick'); keys[KEYS.jump]=false;}},{at:48,fn:p=>p.tryAttack('punch')},{at:70,fn:p=>p.tryAttack('kick')},{at:96,fn:p=>p.trySpecial()}]},
@@ -4993,8 +4994,9 @@ function drawTrailerOverlay(){
     ctx.save(); ctx.globalAlpha=a;
     ctx.fillStyle='#7ae8ff'; ctx.fillRect(bx-14,by-20,4,S.tag.s?40:26);
     txtO(S.tag.t, bx, by, 21, '#f2f5ff', {align:'left',sw:5});
-    if(S.tag.s){ let sub=S.tag.s; ctx.font=font(MONO,11);   // clamp (fight shots only): a sub may never slide under the centered math card's left edge
-      const maxW = game.state==='fight'? W/2-210-bx : W-2*bx;
+    if(S.tag.s){ let sub=S.tag.s; ctx.font=font(MONO,11);   // clamp: a sub may never slide under the centered math card — but a mathcard:false shot (rumble) has no card, so it gets the full width
+      const noCard = S.hud===false || S.mathcard===false;
+      const maxW = (game.state==='fight' && !noCard)? W/2-210-bx : W-2*bx;
       while(sub.length>8 && ctx.measureText(sub).width>maxW) sub=sub.slice(0,-2);
       txtO(sub===S.tag.s? sub : sub.replace(/[ ·.]+$/,'')+'…', bx, by+20, 11, '#9fb0c8', {align:'left',mono:true,sw:0}); }
     ctx.restore();
@@ -6280,7 +6282,7 @@ function render(){
     if(game.mode==='rumble'){ drawRumbleHUD(); }
     else { hpBar(game.player,1); hpBar(game.enemy,-1); drawTimer(); drawMinimap(); drawComboMeter(); }
     if(game.trailerMode) ctx.restore();
-    if(game.mode!=='rumble'){ drawDangerSolve(); drawBurstChallenge(); }
+    if(game.mode!=='rumble' && !game.trailerMode){ drawDangerSolve(); drawBurstChallenge(); }   // trailer: the bottom math card carries the beat — the redundant mid-screen NOW pill is suppressed (one label, not two)
     drawHudFloats();
     if(game.mode==='story'){ drawTaunt(); drawRuleBanner(); }
     if(game.state==='fight' && !game.paused){   // paused = the pause menu OWNS the frame; the fight text layers stand down
