@@ -1101,6 +1101,8 @@ function floatText(x,y,txt,col,size=22){
     if(weakest.size<=size){ const i=floaters.indexOf(weakest); if(i>=0) floaters.splice(i,1); }
     else return;
   }
+  for(let _g=0;_g<5;_g++){ const _hit=floaters.find(o=>o.t<0.9 && Math.abs(o.x-x)<84 && Math.abs(o.y-y)<30); if(!_hit) break; y=_hit.y+32; }   // v9.4 same-anchor floaters STACK like a combat log — the move name and the spend number never overprint
+
   floaters.push({x,y,txt,col,size,t:0});
 }
 const hudFloats=[]; // screen-space economy ticker (anchored at the aura bars)
@@ -1173,7 +1175,7 @@ function drawFloaters(){
     ctx.save(); ctx.font=font(DISP,f.size);
     const _fw=Math.min(ctx.measureText(String(f.txt)).width/2+8, _fhalf-4);
     const _fx=clamp(f.x, cam.x-_fhalf+_fw+16, cam.x+_fhalf-_fw-16);   // +16: screen-shake margin so a corner floater stays whole mid-shake
-    ctx.translate(_fx, f.y+(game.trailerMode?54:0)); ctx.scale(s,s);   // trailer LANE SEPARATION: numbers at the chest, chips own the head, the banner owns the top
+    ctx.translate(_fx, f.y); ctx.scale(s,s);   // (chest-lane experiment reverted: it pushed numbers into the lifted math card's band; fast-die + stacking + the high banner carry the trailer)
     ctx.globalAlpha = f.t<0.6?1:1-(f.t-0.6)/0.4;
     txtO(f.txt,0,0,f.size,f.col,{sw:Math.max(3,f.size/7)});
     ctx.restore();
@@ -2632,7 +2634,7 @@ function controlCPU(c){
   // ── REACTION ENGINE — the foe RESPONDS to your real frames after a difficulty-scaled delay, then acts reliably.
   //    Learnable & conditionable: a fast enough attack beats its block; spacing so it whiffs the punish; baiting its block with a feint. NOT a coin-flip. ──
   let opening=null;
-  if(!p.grounded && p.vy>0.4 && dist<122 && c.grounded) opening='antiair';                 // jump-in falling into range
+  if(!p.grounded && p.vy>0.4 && dist<150 && c.grounded) opening='antiair';                 // jump-in OR neutral hop falling into range (v9.4: 122->150, hoppers get swatted)
   else if(pRec && dist<(DIFF.level>=1?200:128) && c.grounded) opening='punish';             // committed/whiffed in range = free punish (v6 #1: at tier 1+ the dash-S extends the punish envelope — whiffing at 'safe' range isn't)
   else if(pWind && dist<142 && c.grounded && c.blockHold<=0) opening='block';               // your startup → put up a guard
   if(opening){
