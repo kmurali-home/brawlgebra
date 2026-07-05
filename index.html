@@ -1161,11 +1161,13 @@ function drawTip(){
   ctx.save(); ctx.globalAlpha=a;
   ctx.font=font(MONO,12);
   const tw=ctx.measureText(game.tip.txt).width;
-  rr(W/2-tw/2-16, 92, tw+32, 26, 13);
+  let cx=W/2;   // audit #13: the top-left control column lives at x≈16-210 — nudge the tip's box right so its left edge never collides with the cost digits, then clamp so it can't leave the frame
+  if(!game.mode2p && !game.galaxy && !game.cinema){ const boxL=cx-tw/2-16; if(boxL<214) cx=214+tw/2+16; if(cx+tw/2+16>W-16) cx=W-16-tw/2-16; }
+  rr(cx-tw/2-16, 92, tw+32, 26, 13);
   ctx.fillStyle='rgba(8,10,20,0.9)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=1.5; ctx.stroke();
   ctx.fillStyle='#ffe9a0'; ctx.textAlign='center';
-  ctx.fillText(game.tip.txt, W/2, 110);
+  ctx.fillText(game.tip.txt, cx, 110);
   ctx.restore();
 }
 function drawFloaters(){
@@ -1607,6 +1609,7 @@ class Fighter {
     this.bufferedInput=null; this.missWobble=0; this.slideT=0; this.overclock=0; this.thinkT=0;  // input buffer · miss-wobble · knockback slide-tail · solve-speed buff · CPU think-beat
     this.focusT=0; this.pendingSolve=null;   // #4 FOCUS channel — the player's visible, baitable refuel beat (mirror of the CPU's thinkT)
     this.overflowT=0; this._carry=0; this._stuRef=0; this._ssUsed=false; this._route=null; this._routeAt=0; this._tick=null; this._pressed=false; this._wakePlan=null; this._ascCue=false; this._dHoldAt=0; this._lastDash=false; this._noBurst=false;   // v3 #8 signature-verb state + v4 CPU-parity state + v5 #3 tier-charge + v6 #9 node budgets + v10 trailer-shot burst gate
+    this._engAt=null; this._spWhiff=0; this._aWhiff=0; this._meleeUntil=0; this._pbUntil=0; this._bkT=0; this._hopT=0; this._hopGnd=null; this._hopAt=0; this._airWas=false; this._seekT=0; this._seekBan=0; this._solveCd=0; this._spMark=false; this._aMark=false; this._lastQuick=false; this._mvT=0; this.okiPlan=null; this.reactT=0; this.reactKind=null; this.read={block:0,punish:0,dodge:0};   // v9 CPU-brain state — MUST reset per round or round 2+ inherits round-1's engagement clock and opens with a wrong spuriously-aggressive burst (audit regression #8)
     this.downed=0; this.knockingDown=false;   // KNOCKDOWN/okizeme: downed timer + a pending-knockdown flag set by launchers/throws
     this.guardMax=100; this.guard=100; this.guardCrush=0; this.guardRestT=0; this._bdashAt=-999;  // drainable guard — sustained pressure cracks a turtle; v5 #5 guard-rest clock + backdash pricing stamp
     this.dodgeCd=0; this.fnCharge=null; this.fnChargeT=0; this.bank={};  // solve-dodge cooldown + math-armed Function Strike bank
@@ -4674,7 +4677,7 @@ function drawKeyArt(){   // a dedicated hero composition for the store capsule /
 }
 // ---- MARKETING EXPORTER (audit v7 #6): E on the KEY ART screen → the full Steam-sized capsule pack · F9 anywhere → a 1920×1080 PNG of the live frame.
 // The game is vector-drawn, so re-rendering at scale is CRISP — no upscale blur. Without these files the $100 page-creation day physically cannot happen.
-function _dlBlob(c,name){ try{ c.toBlob(b=>{ if(!b) return; const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),8000); },'image/png'); }catch(e){} }
+function _dlBlob(c,name){ const jpg=/\.jpe?g$/i.test(name); try{ c.toBlob(b=>{ if(!b) return; const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),8000); }, jpg?'image/jpeg':'image/png', jpg?0.85:undefined); }catch(e){} }   // .jpg names encode as JPEG (the og-image must match the og:image meta exactly)
 function _renderAt(scale, drawFn){   // re-render into the LIVE canvas at scale× (fitCanvas is locked out for the frame)
   window._exportLock=true;
   cv.width=Math.round(W*scale); cv.height=Math.round(H*scale); S=scale;
@@ -4691,7 +4694,7 @@ function exportPack(){   // every Steam art slot + the og:image, center-cropped 
   const jobs=[['brawlgebra_capsule_main_616x353.png',616,353],['brawlgebra_capsule_main2x_1232x706.png',1232,706],
     ['brawlgebra_header_460x215.png',460,215],['brawlgebra_capsule_small_231x87.png',231,87],
     ['brawlgebra_capsule_vertical_748x896.png',748,896],['brawlgebra_library_600x900.png',600,900],
-    ['brawlgebra_hero_3840x1240.png',3840,1240],['og-image_1200x630.png',1200,630]];
+    ['brawlgebra_hero_3840x1240.png',3840,1240],['og-image.jpg',1200,630]];   // og-image.jpg — the EXACT name the og:image/twitter:image meta references (index.html head), so a re-export drops straight into place
   let i=0;
   const doOne=()=>{
     if(i>=jobs.length){ _renderDone(); game._exportToast=game.frame; return; }
@@ -6282,7 +6285,7 @@ function render(){
     if(game.mode==='rumble'){ drawRumbleHUD(); }
     else { hpBar(game.player,1); hpBar(game.enemy,-1); drawTimer(); drawMinimap(); drawComboMeter(); }
     if(game.trailerMode) ctx.restore();
-    if(game.mode!=='rumble' && !game.trailerMode){ drawDangerSolve(); drawBurstChallenge(); }   // trailer: the bottom math card carries the beat — the redundant mid-screen NOW pill is suppressed (one label, not two)
+    if(game.mode!=='rumble' && !game.trailerMode){ drawBurstChallenge(); }   // audit #3: the NOW window is now ONE canonical prompt — the bottom card ('NOW — MATCH THE HEIGHT + ANSWER', drawCard) plus a single one-shot 'ANSWER — NOW' floater. The redundant over-fighter drawDangerSolve pill (a third copy of the same equation) is retired. drawBurstChallenge stays — the combo-escape digit is a distinct mechanic the card never shows.
     drawHudFloats();
     if(game.mode==='story'){ drawTaunt(); drawRuleBanner(); }
     if(game.state==='fight' && !game.paused){   // paused = the pause menu OWNS the frame; the fight text layers stand down
