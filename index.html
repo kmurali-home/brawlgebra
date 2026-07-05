@@ -2467,7 +2467,8 @@ function drawFighter(f){
   // telegraph "!" — v5 #12 TINTED BY HEIGHT: the tell teaches the read (orange=stand-block HIGH, blue=crouch LOW, red=MID). Off in the trailer: the '▲ HIGH'/'▼ LOW' label collided with the tag chips, and the cinematic reads the incoming hit from the pose, not a coaching mark.
   if(f.attack && (f.attack.ph==='tel') && !game.trailerMode){
     const lv=(f.attack.def&&f.attack.def.guardLevel)||'mid';
-    const tc = lv==='high'?'#ff9f2a' : lv==='low'?'#2ea8ff' : '#ff4040';
+    // audit #10 — the unreactable fast poke gets a DISTINCT WHITE '!' (vs the guard-height tints): the player learns "white = too fast to solve, just guard/backdash it" instead of trying to answer a problem that isn't there and branding the hit 'cheap'.
+    const tc = f.attack.quick? '#ffffff' : (lv==='high'?'#ff9f2a' : lv==='low'?'#2ea8ff' : '#ff4040');
     const popS = f.attack.pop>0? eoBack(1-f.attack.pop/8):1;
     const by = f.y-182 - Math.abs(Math.sin(game.frame*0.18))*7;
     const _th=(W/2)/cam.z, _tx=clamp(f.x, cam.x-_th+52, cam.x+_th-52);   // the read must stay whole even at the camera edge
@@ -2863,7 +2864,7 @@ function resolveHits(att,def){
     // clean hit
     if(punish){ att.addAura(14 + (inCorner(def)?6:0)); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window (v5 #7: a CORNER punish pays +6 more — the wall compounds won exchanges)
       floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
-    if(punish || (att.attack&&att.attack.just)){ hitstop=Math.max(hitstop,12); SFX.counter(); ring(cx,cy,'#ff5a5a',34,3); }   // v4/v5 COUNTER-TIER CRUNCH — a whiff-punish or JUST hit freezes harder AND has its own exclusive crack + red ring
+    if(punish || (att.attack&&att.attack.just)){ hitstop=Math.max(hitstop,18); SFX.counter(); ring(cx,cy,'#ff5a5a',34,3); }   // v4/v5 COUNTER-TIER CRUNCH — a whiff-punish or JUST hit freezes HARDEST (audit #12: 12->18, top of the weight ladder) + its own exclusive crack + red ring
     def._jitT=Math.max(def._jitT||0, Math.max(4,hitstop));   // v5 #15 the defender vibrates through the freeze (render-side)
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6+((att.attack&&att.attack.just)?4:0)); }  // landing hits charges FOCUS (+JUST credit only on a clean hit)
@@ -2898,8 +2899,10 @@ function resolveHits(att,def){
     if(gcombo){ const big=gcombo>=3; flash(0.22,'#ffd9f0'); addTrauma(0.45+gcombo*0.06); ring(cx,cy, big?'#ff7ac0':'#ffd34d', 70+gcombo*16, 7); slowmo(240,0.4);
       floatText(def.x,def.y-212, '✦ COMBO ×'+gcombo, big?'#ff7ac0':'#ffd34d', 22+Math.min(8,gcombo*2));
       if(att.attack && att.attack.galaxyLaunch){ def.vy=-13; def.grounded=false; def.stun=Math.max(def.stun,34); def.dizzy=Math.max(def.dizzy,80); def.knockingDown=true; } }  // bigger combos launch
-    hitstop=Math.max(hitstop, hb.heavy?11:8);   // v6 baseline crunch — every clean blow passes the eyes-closed test (counter tier still out-freezes at 12)
-    addTrauma(hb.heavy?0.45:0.25);
+    // audit #12 HITSTOP LADDER — a jab and a launcher must NOT freeze the same; weight now has a felt hierarchy (light 5 · heavy 12 · launcher 14 · special 16 · counter/JUST 18 above)
+    const _hs = hb.type==='special'? 16 : (att.attack&&att.attack.launcher)? 14 : hb.heavy? 12 : 5;
+    hitstop=Math.max(hitstop, _hs);
+    addTrauma(hb.heavy?0.45:0.22);
     cam.kickX = dir*(hb.heavy?5:2.5);
     ring(cx,cy, hb.heavy?'#ffd34d':'#fff', hb.heavy?54:34, hb.heavy?5:3);
     flash(hb.heavy?0.16:0.08, hb.heavy?'#ffd9a0':'#fff');
@@ -2908,9 +2911,11 @@ function resolveHits(att,def){
     sparks(cx,cy, hb.heavy?4:2, '#fff', 4.2, dir);
     dust(cx,cy+8, hb.heavy?4:2, 2);
     if(hb.type==='special'){
-      slowmo(260,0.35); flash(0.3,'#ffe9b0'); addTrauma(0.6);
-      ring(cx,cy,'#ffd34d',90,7);
-      floatText(def.x,def.y-188,'CRITICAL!','#ffd34d',26);
+      // audit #11 — the big 260ms/0.35× crawl is reserved for the moments that EARN it (a KO-adjacent hit or a tier-3 special); a routine special is a snappier ~130ms/0.55× punch so a special-fishing HARD zoner can't turn the fight into a stutter.
+      const bigCrawl = def.hp<=30 || (att.attack.tier||0)>=2;
+      slowmo(bigCrawl?260:130, bigCrawl?0.35:0.55); flash(bigCrawl?0.3:0.2,'#ffe9b0'); addTrauma(bigCrawl?0.6:0.4);
+      ring(cx,cy,'#ffd34d',bigCrawl?90:70,7);
+      if(bigCrawl) floatText(def.x,def.y-188,'CRITICAL!','#ffd34d',26);
       if((att.attack.kind||'dash')==='dash') for(let i=0;i<11;i++) ember(def.x+frnd(-22,22), def.y-frnd(20,116), att.accent); // INFERNO DASH scorch
     }
     if(def.hp<=0) lethal(def, hb.type==='special');
