@@ -1114,7 +1114,7 @@ function spendFx(f,cost){
 }
 function updateFx(){ // fixed-timestep cosmetic timers — respect pause & refresh rate
   for(let i=floaters.length-1;i>=0;i--){
-    const f=floaters[i]; f.t+=0.016; f.y-=0.7;
+    const f=floaters[i]; f.t+=0.016*(game.trailerMode?2.2:1); f.y-=0.7;   // trailer: numbers live ~0.45s — they pop and die in their own lane instead of drifting through labels
     if(f.t>=1) floaters.splice(i,1);
   }
   for(let i=hudFloats.length-1;i>=0;i--){
@@ -1173,7 +1173,7 @@ function drawFloaters(){
     ctx.save(); ctx.font=font(DISP,f.size);
     const _fw=Math.min(ctx.measureText(String(f.txt)).width/2+8, _fhalf-4);
     const _fx=clamp(f.x, cam.x-_fhalf+_fw+16, cam.x+_fhalf-_fw-16);   // +16: screen-shake margin so a corner floater stays whole mid-shake
-    ctx.translate(_fx,f.y); ctx.scale(s,s);
+    ctx.translate(_fx, f.y+(game.trailerMode?54:0)); ctx.scale(s,s);   // trailer LANE SEPARATION: numbers at the chest, chips own the head, the banner owns the top
     ctx.globalAlpha = f.t<0.6?1:1-(f.t-0.6)/0.4;
     txtO(f.txt,0,0,f.size,f.col,{sw:Math.max(3,f.size/7)});
     ctx.restore();
@@ -4149,7 +4149,7 @@ function drawDangerSolve(){   // FUSION FIX: during the ⚡NOW window, float the
   ctx.font=font(MONO,18); const w=ctx.measureText(txt).width+24;
   const sx = clamp(W/2 + (p.x-cam.x)*cam.z, w/2+12, W-w/2-12);   // the NOW card follows the fighter but never leaves the screen (cornered = exactly when you need it whole)
   const pulse=0.55+Math.sin(game.frame*0.45)*0.45;
-  ctx.globalAlpha=pulse; txtO('◆ NOW — ANSWER', sx, sy-32, 13, '#ffd34d', {sw:0,mono:true}); ctx.globalAlpha=1;
+  if(!game.trailerMode){ ctx.globalAlpha=pulse; txtO('◆ NOW — ANSWER', sx, sy-32, 13, '#ffd34d', {sw:0,mono:true}); ctx.globalAlpha=1; }   // trailer: the pill alone (the header collided with head-lane chips)
   rr(sx-w/2, sy-24, w, 27, 7); ctx.fillStyle='rgba(8,10,20,0.85)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2; ctx.stroke();
   txtO(txt, sx, sy-5, 18, '#fff', {mono:true,sw:0});
@@ -4424,7 +4424,7 @@ function slamText(text,y,size,col,p){
   ctx.restore(); ctx.globalAlpha=1;
 }
 function drawBanners(){
-  if(game.state==='intro' && game.introT>55){
+  if(game.state==='intro' && game.introT>55 && !game.trailerMode){   // round CEREMONY never rides into a trailer cut — shots begin in medias res
     if(game.mode==='rumble') letterBanner('RUMBLE', 230, 64, '#ffd34d', (120-game.introT)/40);
     else if(game.round===1) drawVS((120-game.introT)/40);
     else letterBanner('ROUND '+game.round, 250, 56, '#efe9ff', (120-game.introT)/40);
@@ -4434,7 +4434,7 @@ function drawBanners(){
     }
   }
   const sinceFight = game.fightAt? game.frame-game.fightAt : 999;
-  if((game.state==='intro'&&game.introT<=55) || (game.state==='fight'&&sinceFight<24))
+  if(((game.state==='intro'&&game.introT<=55) || (game.state==='fight'&&sinceFight<24)) && !game.trailerMode)
     slamText('FIGHT!',252,84,'#ffd34d', game.state==='intro'? (55-game.introT)/12 : 1);
   if(game.state==='ko'){
     if(game.koTimer>55){
@@ -4464,9 +4464,9 @@ function drawBanners(){
     ctx.restore();
     if(game.mathT<120) txtO('Q.E.D.', W/2, 300, 16, '#ffd34d',{mono:true,sw:3});
   }
-  if(game.banner){ // announcements (PERFECT DODGE etc.) — on a scrim pill, width-clamped, so a red banner survives a red sunset
+  if(game.banner && !(game.trailerMode && game.state==='ko')){ // announcements (PERFECT DODGE etc.) — scrim pill, width-clamped; in a trailer K.O. shot the K.O. card owns the frame alone
     const b=game.banner, p=clamp(b.t*5,0,1);
-    ctx.save(); ctx.translate(W/2,180);
+    ctx.save(); ctx.translate(W/2, game.trailerMode?118:180);   // trailer: the banner rides just under the letterbox, OUT of the floater lane over the fighters
     ctx.scale(eoBack(p),eoBack(p));
     ctx.globalAlpha = b.t<0.65?1:1-(b.t-0.65)/0.35;
     ctx.font=font(DISP,38); const _bw=ctx.measureText(b.txt).width;
@@ -4908,7 +4908,7 @@ function drawTrailerEnd(){   // v4 END CARD — the name SLAMS in (ring + dust),
   drawWordmark(W/2, cy, 1.24); ctx.restore();
   if(t<6){ ctx.fillStyle='rgba(240,246,255,'+(0.85*(1-t/6)).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }
   if(t>54){ ctx.save(); ctx.globalAlpha=clamp((t-54)/16,0,1);
-    txtO('DO MATH. THROW HANDS.', W/2, cy+64, 16, '#aeb8cc',{mono:true,sw:0}); ctx.restore(); }
+    txtO('UNLOCK YOUR MIND.', W/2, cy+64, 16, '#aeb8cc',{mono:true,sw:0}); ctx.restore(); }   // the lens, stated once — not a joke
   if(title) return;   // the WELCOME card stops here — name + pitch, back to the fight
   if(t>150){ ctx.save(); ctx.globalAlpha=clamp((t-150)/18,0,1);
     txtO('STORY · THE TOWER · GAUNTLET · DAILY FIGHT · ONLINE 1v1 + RUMBLE', W/2, 330, 11, '#7a8298',{mono:true,sw:0});
