@@ -4726,7 +4726,7 @@ const _paStart=()=>{ _paBuf=game.problem? String(game.problem.ans):''; ans1=''; 
 const _paType=n=>{ if(_paBuf) ans1=_paBuf.slice(0,n); };
 const TRAILER=[
  // ---- ACT 1 · THE PROMISE (0-9.0s): speak straight to the kid in the dark, reframe their life, then PROVE it ----
- {type:'shot', scene:'black', center:true, mono:true, size:16, spd:0.5, tAt:14, dur:216, fin:10, music:'minus',
+ {type:'shot', scene:'black', center:true, size:19, spd:0.55, tAt:14, dur:216, fin:10, music:'minus',
   t:'What if I told you your mind was the most powerful force on the planet?'},
  {type:'card', words:[{t:'MOST PEOPLE NEVER FIND OUT.',at:0},{t:'YOU’RE ABOUT TO.',at:66}], dur:192, flash:true},
  // THE UNLOCK SHOT — one continuous take: the equation burns in as neon over the arena, the answer slams in gold, and the detonation IS the special. The math never gets a flashcard screen.
@@ -4944,10 +4944,14 @@ function drawTrailerShot(){   // v4 cinematic story vignette — Ken Burns push-
     if(shown){
       const ty=S.center? H/2+6 : (S.tag? H-170 : H-96);   // the whisper speaks from the CENTER; a tagged shot lifts its quote clear of the chip lane
       if(S.w) txtO(S.w==='YOU'?(game.heroName||'YOU').toUpperCase():S.w, W/2, ty-28, 12, S.c||'#cfe0ff',{mono:true,sw:0});
-      if(S.center){ const _ww=S.wrapW||W*0.44;   // a narrow column reads like a voice, and the lines break balanced
-        ctx.font=font(S.mono?MONO:DISP, S.size||17);
-        ctx.fillStyle='#e8ecff'; ctx.textAlign='center';
-        wrapText(shown, W/2, ty-(wrapText(shown,0,0,_ww,(S.size||17)*1.5,true)-1)*(S.size||17)*0.75, _ww, (S.size||17)*1.5); }
+      if(S.center){ const _ww=S.wrapW||W*0.52, sz=S.size||19;   // audit — a AAA title card, not a terminal line: DISP face, larger, a soft voice-in-the-dark glow
+        ctx.save();
+        ctx.font=font(S.mono?MONO:DISP, sz);
+        ctx.fillStyle='#eef3ff'; ctx.textAlign='center';
+        ctx.shadowColor='rgba(122,232,255,0.45)'; ctx.shadowBlur=16;
+        const lines=wrapText(shown,0,0,_ww,sz*1.5,true);
+        wrapText(shown, W/2, ty-(lines-1)*sz*0.72, _ww, sz*1.5);
+        ctx.restore(); }
       else txtO(shown, W/2, ty, S.size||17, '#e8ecff', {sw:4});
     }
   }
