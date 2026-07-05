@@ -2559,10 +2559,27 @@ function controlCPU(c){
   } else c._wakePlan=null;
   if(!c.canAct()) return;
   const dist = Math.abs(p.x-c.x), dir = p.x>c.x?1:-1;
-  // v8 ENGAGEMENT CLOCK — the opponent is never allowed to circle for seconds. If it hasn't swung or been point-blank in ~3.7s, it COMES TO YOU: cadence forced to approach, decision gap cut, and even a zoner's band collapses to strike range until contact is made.
-  if(c._engAt==null || c.attack || dist<120) c._engAt=game.frame;
-  const starving = game.frame-c._engAt > 220;
-  if(starving && c.aiThink>24) c.aiThink=24;
+  // v9 ENGAGEMENT CLOCK — ATTACK-based. v8 counted proximity as engagement, so the CPU could hover at 120px (or shop for pickups) forever without swinging — an idle player on HARD took 3 attacks in 45s. Now only a real SWING resets the clock; a starving CPU abandons shopping, collapses its band, and when it reaches range it MUST attack.
+  if(c._engAt==null || c.attack) c._engAt=game.frame;
+  const starving = c.aiThink<9000 && game.frame-c._engAt > (DIFF.level>=2? 140 : DIFF.level===1? 200 : 300);   // HARD owes you a fight every ~2.3s (aiThink<9000: script-frozen trailer actors are exempt — the director owns their beats)
+  // v9.2 WHIFF AWARENESS — two specials in a row that drew no blood (a pillar ate the sigils, you're camping cover) and the zoner stops shelling the wall: 6s of walk-in melee.
+  if(c.attack && c.attack.type==='special' && !c._spMark){ c._spMark=true; c._spHp=p.hp; }
+  if(!c.attack && c._spMark){ c._spMark=false;
+    if(p.hp>=c._spHp){ if(((c._spWhiff=(c._spWhiff||0)+1))>=2){ c._meleeUntil=game.frame+360; c._spWhiff=0; } } else c._spWhiff=0; }
+  const forceMelee = game.frame<(c._meleeUntil||0);
+  // v9.3 POINT-BLANK MODE — three whiffed attacks of ANY kind (the pillar is eating strikes too) and it stops fencing the furniture: walk to touching range, then swing.
+  if(c.attack && !c._aMark){ c._aMark=true; c._aHp=p.hp; }
+  if(!c.attack && c._aMark){ c._aMark=false;
+    if(p.hp>=c._aHp){ if(((c._aWhiff=(c._aWhiff||0)+1))>=3){ c._pbUntil=game.frame+300; c._aWhiff=0; } } else c._aWhiff=0; }
+  const pointBlank = game.frame<(c._pbUntil||0);
+  if(starving && c.aiThink>18) c.aiThink=18;
+  // v9 JUMP-LOOP BREAKER — 3 airborne launches inside 2.5s without landing a swing = pathing theater (pillar hops, platform-pickup whiffs). Ground it and dash through instead.
+  if(!c.grounded && c._airWas!==true){ c._airWas=true; c._hopT=(game.frame-(c._hopAt||0)<150)? (c._hopT||0)+1 : 1; c._hopAt=game.frame; }
+  else if(c.grounded) c._airWas=false;
+  if(c.attack) c._hopT=0;
+  const noHop = (c._hopT||0)>=3;
+  if(noHop && c.grounded && c._hopGnd==null && c.aiThink<9000){ c._hopGnd=game.frame+120; c._seek=null; if(c.dashCd<=0) c.tryDash(dir); }   // break the loop with a dash toward the fight (never on script-frozen trailer actors)
+  if(c._hopGnd!=null && game.frame>c._hopGnd){ c._hopGnd=null; c._hopT=0; }
   if(c._tick){ if(game.frame>=c._tick){ c._tick=null; if(dist<72 && c.aura>=6){ c.tryThrow(); return; } } else { c.moveX=dir; return; } }   // v4 (b) walk the booked TICK THROW in — teched by A+S, jumped, or backdashed
   // #4 PUNISH-THE-REFUEL — a player banking mid-fight (FOCUS channel) is an opening the foe HUNTS, exactly as you can rush its ∑ solve. Bank at range or behind cover; bank in its face and eat the counter.
   if((p.focusT||0)>0 && c.grounded){
@@ -2593,10 +2610,16 @@ function controlCPU(c){
     return;
   } else if((p.downed||0)<=0) c.okiPlan=null;
   // MATH-ECONOMY MIRROR — the foe's power comes from SOLVING, not a passive drip. When it can't afford a special and it's safe, it stops to solve — a real opening you can rush and interrupt.
-  if(c.aura < Math.round(ATK.punch.cost*c.char.costMul) && c.thinkT<=0 && dist<=140 && c.grounded && !c.attack){   // v7 FIX: BROKE and in your face with nothing to swing — it BACKS OUT to count (was: stood there doing literally nothing). The starvation story now reads on screen: break him, chase him.
-    c.moveX = -dir*0.30*cfg.speed; hopCover(c); return;
-  }
-  if(c.aura<58 && dist>140 && !(p.attack&&p.attack.ph!=='rec') && c.grounded && c.aiThink>8 && c.aiThink<9000 && !starving && game.frame>(c._solveCd||0) && Math.random()<(c.aura<6?0.25:0.07)){ c._solveCd=game.frame+300; c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }   // v7: a BROKE foe counts fast · v8: at most one stall per 5s, and NEVER while it owes you a fight (the chain-stall read as 'the AI is frozen')
+  // v9 THE REFUEL LADDER — the CPU has NO passive drip (by design since v5): solving IS its ammo line, so a BROKE foe treats the ∑ solve as priority one, starving or not.
+  // (v8 deadlock: broke → can't swing → 'starving' → starving forbade solving → statue. An idle player on HARD took 1 attack in 45s.)
+  const _pCost=Math.round(ATK.punch.cost*c.char.costMul), _broke=c.aura<_pCost;
+  if(_broke && c.thinkT<=0 && c.grounded && !c.attack && c.aiThink<9000){
+    c._bkT=(c._bkT||0)+1;
+    if(dist<=150 && c._bkT<=90){ c.moveX = -dir*0.34*cfg.speed; return; }   // try to make counting space first (still interruptible — chase him!)
+    c._bkT=0;   // space made — or 1.5s of retreating bought nothing (you're walking him down): he PLANTS and counts under pressure. Hit him to interrupt; block-walking no longer stalls the fight forever.
+    c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return;
+  } else if(!_broke) c._bkT=0;
+  if(c.aura<58 && dist>140 && !(p.attack&&p.attack.ph!=='rec') && c.grounded && c.aiThink>8 && c.aiThink<9000 && !starving && game.frame>(c._solveCd||0) && Math.random()<0.07){ c._solveCd=game.frame+300; c.thinkT=Math.round(22+cfg.react*1.3); c.moveX=0; floatText(c.x,c.y-178,'∑ solving…','#9fb0c8',12); return; }   // comfort top-up stays throttled: once per 5s, never while owing a fight
   c.aiThink--;
   // READS — the foe builds a picture of YOUR defensive habit and decays it (recency). Its offense then adapts (below), so the attacker becomes readable + counter-conditionable.
   const rd = c.read || (c.read={block:0,punish:0,dodge:0});
@@ -2632,27 +2655,50 @@ function controlCPU(c){
       if(canAfford(type)){ c.cpuAttack(type,Math.round((type==='punch'?24:32)*Math.max(0.5,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }
   }
   if(c.blockHold>0) return;
+  // v9.1 STARVING = ACT NOW, but IN CHARACTER and IN REACH. (v9 forced normals at ≤170px: punch reach is 64 — HARD Krishna threw 44 whiffs for ZERO damage and never fired a sigil.)
+  if(starving && c.grounded && !c.attack){
+    const _rangedP = (c.char.spKind==='spear'||c.char.spKind==='sigil') && !forceMelee;
+    if(_rangedP && dist>=150 && dist<520 && c.aura>=SPEC_TIERS[0].cost){   // the zoner's forced action IS his weapon
+      c.cpuAttack('special', Math.round(70*cfg.telMul)); SFX.charge(); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
+    if(p.wantBlock && dist<=72 && c.aura>=6){ if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }   // a turtle's forced pressure is the GRAB — block does not stall the clock
+    let t2 = dist>88?'kick':'punch'; if(Math.round(ATK[t2].cost*c.char.costMul)>c.aura) t2='punch';
+    const _rch=(ATK[t2].reach||64)+34;
+    if(dist<=(pointBlank?66:_rch) && Math.round(ATK[t2].cost*c.char.costMul)<=c.aura){   // in real reach → swing (point-blank mode holds fire until TOUCHING)
+      c.cpuAttack(t2, Math.round((t2==='punch'?26:36)*Math.max(0.55,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
+    if(pointBlank && dist>66){ c.moveX=dir*0.5*cfg.speed; hopCover(c); return; }   // close the last meters before swinging again
+    if(dist<=320 && c.dashCd<=0){   // out of reach → the dash-in converts distance into a lunging strike (the same verb the player has)
+      c.tryDash(dir); if(Math.round(ATK.kick.cost*c.char.costMul)<=c.aura) c.tryAttack('kick');
+      c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
+  }
   const hidden = isConcealed(p,c);
-  // scavenge: contest pickups when hungry and closer than the player
+  // scavenge — BOUNDED (v9): shopping never outranks the fight. It was returning BEFORE the attack code every frame, so vs an idle player the CPU shopped forever (3 attacks in 45s on HARD). Now: never while starving, never across the map, a 2.5s budget then a 5s ban, and no platform-hop attempts while the jump-loop breaker is armed.
   let seek=null;
-  for(const pk of pickups){
-    const d=Math.abs(pk.x-c.x);
-    if(d<560 && d<Math.abs(pk.x-p.x)
-       && (c.aura<46 || pk.type.k==='surge' || (pk.type.k==='shard'&&c.hp<70)))
-      if(!seek || d<Math.abs(seek.x-c.x)) seek=pk;
+  if(!starving && dist<=400 && game.frame>(c._seekBan||0)){
+    for(const pk of pickups){
+      const d=Math.abs(pk.x-c.x);
+      if(d<420 && d<Math.abs(pk.x-p.x)
+         && (c.aura<46 || pk.type.k==='surge' || (pk.type.k==='shard'&&c.hp<70))
+         && !((pk.gy||GROUND)<GROUND-40 && noHop))
+        if(!seek || d<Math.abs(seek.x-c.x)) seek=pk;
+    }
   }
   if(seek){
-    c.moveX=(seek.x>c.x?1:-1)*0.24*cfg.speed; hopCover(c);
-    if((seek.gy||GROUND)<GROUND-40 && Math.abs(seek.x-c.x)<90 && c.grounded){ c.vy=-12.4; c.grounded=false; }
-    return;
-  }
+    c._seekT=(c._seekT||0)+1;
+    if(c._seekT>150){ c._seekT=0; c._seekBan=game.frame+300; }   // failed shopping trip — back to the fight
+    else {
+      c.moveX=(seek.x>c.x?1:-1)*0.24*cfg.speed; if(!noHop) hopCover(c);
+      if((seek.gy||GROUND)<GROUND-40 && Math.abs(seek.x-c.x)<48 && c.grounded && !noHop){ c.vy=-12.4; c.grounded=false; }
+      return;
+    }
+  } else c._seekT=0;
   if(hidden){ c.moveX = dir*0.10*cfg.speed; hopCover(c); return; }  // lost sight — stalk slowly toward you (aura is earned by solving, not by hiding)
   // spacing — each archetype fights its OWN preferred range + advance/retreat tempo (the game-plan that makes the matchup FELT)
   const P = cpuProfile(c);
   let rMin=P.rng[0], rMax=P.rng[1];
   const lowHp = P.retHp>0 && c.hp < c.char.hp*(P.retHp/100);      // a glass-cannon bails when hurt
   if(lowHp){ rMin+=140; rMax+=220; }
-  if(starving){ rMin=Math.min(rMin,70); rMax=Math.min(rMax,140); }   // v8 engagement clock: even the zoner's band collapses to strike range until it makes contact
+  if(starving||forceMelee){ rMin=Math.min(rMin,70); rMax=Math.min(rMax,140); }   // v8 engagement clock (+v9.2 whiff-aware melee mode): the band collapses to strike range until contact lands
+  if(pointBlank){ rMin=0; rMax=Math.min(rMax,58); }   // v9.3 nothing is landing at range — get to TOUCHING distance (no pillar fits between at 58px)
   // v6 #1 CPU MOVEMENT PARITY — the opponent plays neutral with your verbs: a 3-state approach cadence instead of fractional creep, real dash-ins that convert to dash-S, and paid backdashes out of pressure.
   if(!c._mvT || game.frame>=c._mvT){ c._mvT=game.frame+rnd(30,60); const r=Math.random(); c._mvS = r<0.45?'in' : r<0.8?'hold' : 'out'; }
   if(starving) c._mvS='in';   // no footsies theater while it owes you a fight
@@ -2684,11 +2730,11 @@ function controlCPU(c){
   }
   if(c.aiThink<=0 && Math.random()<0.2) c._lastQuick=false;   // the no-repeat flag decays — a gap always follows a fast poke
   // THROW the turtle — when point-blank and you're guarding, this fighter occasionally grabs (you must throw-tech: A+S)
-  if(dist<50 && c.grounded && p.wantBlock && c.aiThink<=0 && Math.random()<P.thr && c.aura>=6){
+  if(dist<=76 && c.grounded && p.wantBlock && c.aiThink<=0 && Math.random()<Math.max(P.thr,0.3) && c.aura>=6){   // v9.2 the turtle-cracker actually reaches turtles now
     if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0]+10,cfg.cool[1]+20); return; }
   }
   // JUMP-IN overhead — occasionally hop in so your new HIGH/LOW cuts both ways (a jump-in must be stand-blocked)
-  if(c.grounded && dist>80 && dist<210 && c.aiThink<=0 && Math.random()<P.jmp){
+  if(c.grounded && dist>80 && dist<210 && c.aiThink<=0 && !noHop && Math.random()<P.jmp){
     c.vy=-12.4; c.grounded=false; c.moveX=dir*0.5*cfg.speed; c._jumpInAt=game.frame; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]);
   }
   if(!c.grounded && c.vy>1.2 && (game.frame-(c._jumpInAt||-99))<40 && dist<95 && !c.attack && canAfford('kick')){ c.cpuAttack('kick', 6); c._jumpInAt=-99; }  // airkick on the way down = the overhead
@@ -2709,7 +2755,7 @@ function controlCPU(c){
     if(canAfford(type)){ c.cpuAttack(type, type==='punch'?18:26); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]); return; }
   }
   // ranged personas open fire from distance (lance/sigil kits)
-  const ranged = c.char.spKind==='spear'||c.char.spKind==='sigil';
+  const ranged = (c.char.spKind==='spear'||c.char.spKind==='sigil') && !forceMelee;
   if(ranged && c.aiThink<=0 && dist>=150 && dist<520 && c.aura>=SPEC_TIERS[0].cost){   // v6 FIX: gate on the REAL cheapest tier (25), not the retired 60-cost model — the zoner can actually play keepaway now
     c.cpuAttack('special', Math.round(80*cfg.telMul)); SFX.charge(); c.aiThink = rnd(cfg.cool[0]+30, cfg.cool[1]+40);
   }
@@ -2741,6 +2787,7 @@ function controlCPU(c){
 }
 function hopCover(c){ // jump cover that blocks the path
   if(!c.grounded || !c.moveX) return;
+  if(c._hopGnd!=null) return;   // v9 jump-loop breaker armed — stay grounded, the dash handles the pillar
   for(const pl of PILLARS){
     const dxp=pl.x-c.x;
     if(Math.sign(dxp)===Math.sign(c.moveX) && Math.abs(dxp)<62){
