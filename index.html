@@ -4137,24 +4137,23 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
     ctx.fillRect(-4,-4,8,8); ctx.restore();
   }
   if(f===game.player && !game.galaxy && !game.cinema && !game.paused){ // CONTROL COLUMN (top-left): the non-obvious keys + your 3-special ladder, lit only by what your AURA can pay for (hidden in cinema/trailer/pause — it's teaching UI, not footage)
+    // audit #14 — was ~10 stacked mono rows ('programmer HUD'). Now a compact legend: ONE move-cost line + the genuinely-useful special ladder (which tier your AURA fires right now).
     const kit=spKitFor(f.char), bt=bestSpecialTier(f);
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-    let cy=98;
-    const row=(key,label,cost,lit,keyCol)=>{
-      ctx.font=font(MONO,11); ctx.globalAlpha=lit?1:0.4;
-      ctx.fillStyle=keyCol||(lit?'#9fdcff':'#7a83a8'); ctx.fillText(key,40,cy);
-      ctx.fillStyle=lit?'#e8ecff':'rgba(150,140,180,0.5)'; ctx.fillText(label,62,cy);
-      if(cost!=null){ ctx.fillStyle=lit?'#7ae8ff':'rgba(120,114,150,0.4)'; ctx.fillText(cost+'',150,cy); }
-      ctx.globalAlpha=1; cy+=15;
+    const kp=keyLabel(KEYS.punch), kk=keyLabel(KEYS.kick), kbk=keyLabel(KEYS.block);
+    let x=40; ctx.font=font(MONO,11);
+    const cell=(key,cost,aff,keyCol)=>{   // key + AURA cost, dimmed when you can't afford it — the economy reads in one glance
+      ctx.globalAlpha=aff?1:0.5;
+      ctx.fillStyle=keyCol||'#9fdcff'; ctx.fillText(key,x,98); x+=ctx.measureText(key).width+2;
+      if(cost!=null){ ctx.fillStyle=aff?'#7ae8ff':'rgba(120,114,150,0.5)'; const c='·'+cost; ctx.fillText(c,x,98); x+=ctx.measureText(c).width; }
+      x+=13; ctx.globalAlpha=1;
     };
-    row(keyLabel(KEYS.punch),  'PUNCH',  ATK.punch.cost, f.aura>=ATK.punch.cost);
-    row(keyLabel(KEYS.kick),   'KICK',   ATK.kick.cost,  f.aura>=ATK.kick.cost);
-    row(keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick), 'THROW', 6, f.aura>=6);   // v8 the throw finally appears in the persistent legend
-    row(keyLabel(KEYS.special),'SPECIAL',null,           bt>=0, '#ffd34d');
-    row(keyLabel(KEYS.block),  'BLOCK',  null,           true,  '#cabbe0');
-    cy+=6;
-    ctx.font=font(MONO,8.5); ctx.fillStyle='rgba(150,140,180,0.55)';
-    ctx.fillText(keyLabel(KEYS.special)+' FIRES THE ▶ TIER — THE STRONGEST YOU CAN AFFORD · HOLD = PICK', 40, cy); cy+=14;
+    cell(kp,ATK.punch.cost,f.aura>=ATK.punch.cost);
+    cell(kk,ATK.kick.cost,f.aura>=ATK.kick.cost);
+    cell(kp+'+'+kk,6,f.aura>=6);
+    cell(kbk,null,true,'#cabbe0');
+    ctx.font=font(MONO,8); ctx.fillStyle='rgba(150,140,180,0.6)'; ctx.fillText(keyLabel(KEYS.special)+' SPECIAL — hold to pick tier', 40, 116);
+    let cy=132;
     for(let t=0;t<3;t++){   // the ladder — ◆ affordable · dim too-costly · ▶ the one SPECIAL fires right now
       const sp=kit[t], cost=SPEC_TIERS[t].cost, lit=f.aura>=cost, fires=(t===bt);
       ctx.globalAlpha=lit?1:0.4;
