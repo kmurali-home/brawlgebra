@@ -4606,7 +4606,9 @@ function drawDailyBadge(){     // surfaces the Daily + at-risk streak EXACTLY wh
   const pulse = 0.6+Math.sin(game.frame*0.12)*0.4;
   let line1, col1, line2='';
   if(!playedToday){
-    line1="◆ TODAY'S FIGHT — NOT PLAYED YET"; col1='#7ae8ff';
+    const champ=ROSTER[dayIndex()%ROSTER.length];   // audit #6 — a NAMED, beatable target that changes daily beats a bland 'not played yet'
+    const pool=[...ROSTER, BASE_CHAR].filter(c=>c.id!==champ.id), foe=pool[dayIndex()%pool.length];
+    line1="◆ TODAY: "+champ.name+" vs "+foe.name; col1='#7ae8ff';
     if(st.n<=0) line2='win today to start a streak';
     else if(st.last===day-1) line2='✦ '+st.n+'-DAY STREAK · play before midnight to keep it';
     else if(st.last===day-2) line2 = st.usedFreeze
@@ -6811,8 +6813,9 @@ function checkUnlocks(){
   const grant=(k,msg)=>{ if(!u[k]){ u[k]=true; newly.push(msg); } };
   if(game.towerDone || game.storyProg>=STORY.length) grant('solomon','SOLOMON — now playable in every mode');
   if((p.wins||0)>=10)                  grant('robeGold','GOLD robe — for the INITIATE forge');
-  if((st.n||0)>=3)                     grant('robeCyan','AZURE robe — 3-day daily streak');
-  if((st.n||0)>=7)                     grant('robeViolet','VIOLET robe — 7-day daily streak');
+  // audit #7 — streak milestones now pay real CONTENT (a fighter), not just a robe recolor a 12yo won't chase. Parallel to the story-gate, so it never cheapens the campaign.
+  if((st.n||0)>=3){ grant('robeCyan','AZURE robe — 3-day daily streak'); grant('streakOrder','ADDISON joins you early — 3-day streak!'); }
+  if((st.n||0)>=7){ grant('robeViolet','VIOLET robe — 7-day daily streak'); grant('solomon','SOLOMON — unlocked by a 7-day streak!'); }
   if(allFourMastered())                grant('scholar','SCHOLAR — all four functions mastered');
   if((p.matches||0)>=50)               grant('veteran','VETERAN — 50 matches fought');
   if((p.best&&p.best.overall||0)>=12000) grant('virtuoso','VIRTUOSO — a 12,000-point match');
@@ -6825,7 +6828,10 @@ function playableRoster(){   // the Initiate is always yours; the four Orders ar
 }
 // ARCADE-LADDER unlock: each Order opens as you clear campaign chapters (front-loaded so a fresh player has fighters fast), instead of all-at-once at the very end
 const ORDER_UNLOCK={ ember:1, frost:3, oracle:5, mauler:8 };   // storyProg (chapters won) needed to unlock each Order — Addison first, Maximilian the warlord last
-function charLocked(c){ return ROSTER.includes(c) && (game.storyProg||0) < (ORDER_UNLOCK[c.id]||STORY.length); }   // an Order, before you've won enough of the campaign to earn it
+function charLocked(c){
+  if(c.id==='ember' && game.unlocks && game.unlocks.streakOrder) return false;   // audit #7 — a 3-day daily streak hands you Addison early (a parallel earn to the campaign gate)
+  return ROSTER.includes(c) && (game.storyProg||0) < (ORDER_UNLOCK[c.id]||STORY.length);   // an Order, before you've won enough of the campaign to earn it
+}
 // the achievement checklist shown on the RECORDS screen — the "what's left to chase" list
 function achievements(){
   const p=game.profile||load('profile',freshProfile());
