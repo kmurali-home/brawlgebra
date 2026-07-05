@@ -5058,17 +5058,27 @@ function drawTitle(){
 }
 function welcomeDiffRect(i){ return {x:W/2-237+i*162, y:398, w:150, h:40}; }
 const DIFF_AGES=['ages 8-10','ages 10-13','ages 13+'];   // parent legibility: the band names the buyer's kid
-function drawWelcome(){   // first-run gate: pick your math level, then teach before you ask
-  ctx.fillStyle='rgba(3,2,10,0.66)'; ctx.fillRect(0,0,W,H);
-  drawWordmark(W/2, 130, 0.66);
-  txtO('Answer, and you can strike. Run dry, and you cannot.', W/2, 186, 15, '#9fdcff', {sw:0});
+function drawWelcome(){   // audit #4: the first screen must look like a FIGHTING GAME, not a math form — neon clash backdrop + spectacle-first copy; the level picker is a demoted footer
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0a0820'); g.addColorStop(0.6,'#140b24'); g.addColorStop(1,'#1c0a12');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.globalCompositeOperation='lighter';   // operator-glow behind two clashing heroes
+  for(const [x,col] of [[W*0.32,'#7ae8ff'],[W*0.68,'#ff5a6a']]){ const rg=ctx.createRadialGradient(x,H*0.64,10,x,H*0.64,200); rg.addColorStop(0,hexA(col,0.20)); rg.addColorStop(1,hexA(col,0)); ctx.fillStyle=rg; ctx.fillRect(x-220,H*0.3,440,H*0.62); }
+  ctx.restore();
+  try{ const fL=cutsceneFighter(PROTAG); fL.facing=1; fL.update(false); fL.P.lean+=0.15; fL.P.crouch-=3;
+    const fR=cutsceneFighter(ROSTER[0]); fR.facing=-1; fR.update(false); fR.P.lean+=0.15; fR.P.crouch-=3;
+    ctx.save(); ctx.translate(W*0.32,H*0.92); ctx.scale(2.3,2.3); drawPose(fL,fL.P,0,0,0.9,null,-0.2); ctx.restore();
+    ctx.save(); ctx.translate(W*0.68,H*0.92); ctx.scale(2.3,2.3); drawPose(fR,fR.P,0,0,0.9,null,0.2); ctx.restore();
+  }catch(e){}
+  ctx.fillStyle='rgba(3,2,10,0.5)'; ctx.fillRect(0,0,W,H);   // scrim so the copy reads over the clash
+  drawWordmark(W/2, 120, 0.72);
+  txtO('Solve to strike. Answer fast, and their best hit passes right through you.', W/2, 172, 14, '#9fdcff', {sw:2});
   const pulse=0.55+Math.sin(game.frame*0.08)*0.45;
-  rr(W/2-230, 244, 460, 92, 16); ctx.fillStyle='rgba(14,10,30,0.94)'; ctx.fill();
+  rr(W/2-230, 214, 460, 86, 16); ctx.fillStyle='rgba(10,8,22,0.92)'; ctx.fill();
   ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2.5; ctx.stroke();
-  txtO('UNSWORN', W/2, 274, 23, '#ffd34d', {sw:4});
-  txtO('The form takes 60 seconds.', W/2, 302, 15, '#e8ecff', {sw:0});
-  ctx.globalAlpha=pulse; txtO('press ENTER  ·  or click anywhere', W/2, 324, 12, '#ffd34d', {mono:true,sw:0}); ctx.globalAlpha=1;
-  txtO('YOUR MATH', W/2, 382, 12, '#aeb8cc', {mono:true,sw:0});
+  txtO('LEARN THE FIGHT', W/2, 246, 22, '#ffd34d', {sw:4});
+  txtO('60 seconds in the ring — then you are in.', W/2, 272, 13, '#e8ecff', {sw:0});
+  ctx.globalAlpha=pulse; txtO('press ENTER  ·  or click anywhere', W/2, 291, 11, '#ffd34d', {mono:true,sw:0}); ctx.globalAlpha=1;
+  txtO('YOUR LEVEL', W/2, 372, 12, '#aeb8cc', {mono:true,sw:0});
   for(let i=0;i<3;i++){   // the level picker — problem #1 should match the kid, not a default
     const r=welcomeDiffRect(i), sel=DIFF.level===i;
     const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h;
@@ -6654,9 +6664,9 @@ function dailyShareString(){     // Wordle-style shareable result (no spoilers: 
 }
 // ---- FIRST-RUN TUTORIAL: a 60-second guided bout where you actually PERFORM the fusion once ----
 const DUMMY_CHAR=Object.assign({},BASE_CHAR,{id:'dummy',name:'TRAINING DUMMY',gi:'#5f6b7e',trim:'#aab2c4',sigil:null,hp:300,dmg:0.4,build:{torso:24,head:'plain'}});
-const TUTOR_STEPS=[   // v9 — every element of the fight, one idea at a time, each gated on DOING it (see tutorTick)
-  'Your AURA is empty — you cannot strike. Answer the problem below (type it, press ⏎) to fill the bar.',
-  'Now strike. '+keyLabel(KEYS.punch)+' punches. Every blow spends AURA, so keep answering to keep swinging.',
+const TUTOR_STEPS=[   // v10 (audit #5) — the FIRST beat is a connecting punch, not a math box; math arrives as what KEEPS the fun going, not the toll before it
+  'Press '+keyLabel(KEYS.punch)+' — hit him. That is your PUNCH.',
+  'Out of AURA — now you cannot swing. Every blow spends it. Answer the problem below (type it, press ⏎) to refuel and keep fighting.',
   'Land a punch. The moment it hits, CHAIN ▸ flashes — press '+keyLabel(KEYS.kick)+' before it fades and the kick chains on. That is a COMBO.',
   'Now DEFEND. He is winding up — the ! over his head says where it lands. Blue ▼: hold ↓ to guard LOW. Red: hold ↓ or hold back, either guard works. Block two strikes.',
   'Better than blocking: a ! also deals you a quick 1-digit problem. Answer it before the blow lands and you SLIP straight through it and stagger him.',
@@ -6684,12 +6694,17 @@ function startTutorial(){
 function tutorTick(){
   const P=game.player, E=game.enemy;
   E.aura=999; game.timer=99; P.hp=Math.max(P.hp,55); E.hp=Math.max(E.hp,140);  // nobody can KO during the lesson
-  if(game.tutorStep>=1 && game.tutorStep<=2) P.aura=Math.max(P.aura,42);   // gas for the punch+combo lessons — but NOT step 0 (the empty bar IS the lesson)
+  if(game.tutorStep===0) P.aura=Math.max(P.aura,42);          // audit #5: the VERY FIRST beat is a connecting punch — gas it so it lands with weight
+  else if(game.tutorStep===1) P.aura=0;                        // …then the empty bar IS the lesson: math is what refuels the fun
+  else if(game.tutorStep===2) P.aura=Math.max(P.aura,42);      // gas for the COMBO lesson
   const dist=Math.abs(P.x-E.x);
-  if(game.tutorStep===0){
-    if((game.stats.correct||0)>=1){ game.tutorStep=1; game.tutorT=0; announce('AURA UP!','#7ae8ff'); }
-  } else if(game.tutorStep===1){
-    if(P.attack){ game.tutorStep=2; game.tutorT=0; }   // any strike counts
+  if(game.tutorStep===0){                                      // PUNCH FIRST — hit him before any math box appears
+    if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }                 // keep the dummy in punch range
+    game.tutorT++;
+    if(P.attack || game.tutorT>900){ game.tutorStep=1; game.tutorT=0; announce('OUT OF AURA','#ff8a8a'); }   // he swung → drop the bar and reveal the cost (soft-lock guard: never strand)
+  } else if(game.tutorStep===1){                               // MATH REFUELS — now the empty bar teaches why you answer
+    game.tutorT++;
+    if((game.stats.correct||0)>=1 || game.tutorT>1200){ game.tutorStep=2; game.tutorT=0; announce('AURA UP!','#7ae8ff'); }
   } else if(game.tutorStep===2){                       // CANCEL — land a punch, then cancel into a kick
     if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }          // keep the dummy in melee range
     game.tutorT++;
