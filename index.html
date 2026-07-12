@@ -434,7 +434,7 @@ addEventListener("keydown", e => {
       if(lk==='a'||k==='ArrowLeft'){ lobbyPickChar(game.charIdx+3); return; }
       if(lk==='d'||k==='ArrowRight'){ lobbyPickChar(game.charIdx+1); return; }
       if(/^[1-4]$/.test(k)){ lobbyPickChar(+k-1); return; }
-      if(lk==='g' && net.role==='host'){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); return; }
+      if(lk==='g' && net.role==='host'){ game.stageIdx=(game.stageIdx+1)%STAGES.length; game._stagePin=true; store('stage',game.stageIdx); SFX.ui(); return; }
       if(lk==='b' && net.role==='host'){ game.warmupOn=!game.warmupOn; store('warmupOn',game.warmupOn); SFX.ui(); return; }   // BIG-BRAIN BONUS toggle
       if((k==='Enter'||k===' ') && net.role==='host'){ lobbyStart(); return; }
       if((lk==='r'||k==='Enter'||k===' ') && net.role==='guest'){ lobbyReady(); return; }   // guest readies up
@@ -564,7 +564,7 @@ addEventListener("keydown", e => {
     else if(lk==='d'||k==='ArrowRight'){ game.charIdx=(game.charIdx+1)%nSel; SFX.ui(); }
     else if(/^[1-6]$/.test(k) && +k<=nSel){ game.charIdx=+k-1; SFX.ui(); }
     else if(lk==='e' && (game.mode==='cpu'||game.mode==='gauntlet'||game.practice)){ cycleArcade(); SFX.ui(); }
-    else if(lk==='g'){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); }
+    else if(lk==='g'){ game.stageIdx=(game.stageIdx+1)%STAGES.length; game._stagePin=true; store('stage',game.stageIdx); SFX.ui(); }
     else if(k==='Enter'||k===' ') confirmPick();
     else if(lk==='t'||k==='Escape') game.state='title';
     return;
@@ -754,7 +754,7 @@ cv.addEventListener("click", ()=>{
     }
     const sr=game.stageRect;
     if(sr && mouse.x>sr.x&&mouse.x<sr.x+sr.w&&mouse.y>sr.y&&mouse.y<sr.y+sr.h){
-      game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); return;
+      game.stageIdx=(game.stageIdx+1)%STAGES.length; game._stagePin=true; store('stage',game.stageIdx); SFX.ui(); return;
     }
     const rs=game.selRects||[];
     for(let i=0;i<rs.length;i++){ const r=rs[i];
@@ -799,7 +799,7 @@ cv.addEventListener("click", ()=>{
       if(hit(rs.copy)){ copyRoomLink(); return; }
       if(net.role==='guest' && hit(rs.ready)){ lobbyReady(); return; }
       if(net.role==='host' && hit(rs.start)){ lobbyStart(); return; }
-      if(net.role==='host' && hit(rs.stage)){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); return; }
+      if(net.role==='host' && hit(rs.stage)){ game.stageIdx=(game.stageIdx+1)%STAGES.length; game._stagePin=true; store('stage',game.stageIdx); SFX.ui(); return; }
       if(net.role==='host' && hit(rs.warmup)){ game.warmupOn=!game.warmupOn; store('warmupOn',game.warmupOn); SFX.ui(); return; }
       if(hit(rs.leave)){ lobbyLeave(); return; }
     } else if(net.field==='code'){
@@ -820,7 +820,8 @@ function matchendAdvance(){ // one routing for Enter AND click
   game.newUnlocks=null;
   if(game.towerDone){ game.towerDone=false; game.state='title'; }
   else if(game.gOver){ game.gOver=false; game.gWins=0; game.enemy.setCharacter(gauntletFoe()); startMatch(); }
-  else startMatch(); // rematch / retry this tower rung
+  else { if(game.mode==='cpu' && !game.daily && !game.online && !game.mode2p && !game.practice && !game.galaxy && !game._stagePin) game.stageIdx=(game.stageIdx+1)%STAGES.length;   // the grind mode stops looking identical every match
+    startMatch(); } // rematch / retry this tower rung
 }
 
 //----------------------------------------------------------------------
@@ -3450,7 +3451,8 @@ function finishKO(){
       if(game.galaxy && game.playerWon && !game.practice){   // GALAXY: rank up — next match's math + combos get harder
         game.galaxyLevel=clamp((game.galaxyLevel||1)+1,1,5); store('galaxyLevel',game.galaxyLevel); game.galaxyLevelUp=true;
       }
-      if(!game.mode2p && !game.online){ game.grade=computeGrade(); if(game.playerWon) saveBest(''); recordScore(); }   // online duels don't touch solo records
+      if(!game.mode2p && !game.online){ game.grade=computeGrade(); if(game.playerWon) saveBest(''); recordScore();
+        if(!game.playerWon) game.foeHpLeft=Math.round(100*game.enemy.hp/Math.max(1,game.enemy.char.hp)); }   // near-miss framing for the loss screen
     }
   } else startRound();
 }
@@ -5077,7 +5079,7 @@ function drawTitle(){
   ctx.fillStyle=_ms; ctx.fillRect(W/2-300,110,600,370); ctx.restore();
   game.menuRects=[];
   MENU.forEach((m,i)=>{
-    const sel=i===game.menuIdx, y=284+i*28;
+    const sel=i===game.menuIdx, y=280+i*26;
     const r={x:W/2-180,y:y-17,w:360,h:26};
     game.menuRects.push(r);
     const hov=mouse.x>r.x&&mouse.x<r.x+r.w&&mouse.y>r.y&&mouse.y<r.y+r.h;
@@ -5088,7 +5090,7 @@ function drawTitle(){
     txtO(m[0], W/2, y+2, sel?16:13, sel? '#ffd34d': i===0? '#ffd0d6': hov?'#e8ecff':'#a99cc8', {sw:0});
   });
   if(MENU[game.menuIdx][1])
-    txtO(MENU[game.menuIdx][1], W/2, 452, 10, 'rgba(200,190,230,0.85)',{mono:true,sw:0});
+    txtO(MENU[game.menuIdx][1], W/2, 450, 10, 'rgba(200,190,230,0.85)',{mono:true,sw:0});
   // difficulty chips
   for(let i=0;i<3;i++){
     const r=diffRect(i), sel=DIFF.level===i;
@@ -5184,6 +5186,7 @@ function drawRumbleChoose(){
   rr(game.backRect.x,game.backRect.y,140,32,8); ctx.fillStyle='rgba(18,14,32,0.85)'; ctx.fill();
   ctx.strokeStyle='#3d2658'; ctx.lineWidth=1.2; ctx.stroke();
   txtO('‹ BACK   (T)', W/2, 425, 12, '#a99cc8', {mono:true,sw:0});
+  if(net.status!=='online') txtO('online arena wakes on first connect — can take ~30s. LOCAL RUMBLE plays instantly.', W/2, 464, 10, '#9aa3c8',{mono:true,sw:0});   // the free-tier cold start stops reading as a hang
   txtO('W/S choose · ⏎ go · T back', W/2, 482, 10, 'rgba(160,150,190,0.75)', {mono:true,sw:0});
 }
 function pipRow(label,n,col,x,y,w){
@@ -5751,7 +5754,8 @@ function drawDialogue(){
   let rem=shownN, yy=by+padT;
   ctx.font=font(MONO,15); ctx.textAlign='left'; ctx.fillStyle='#e8ecff';
   for(const ln of wrapped){ if(rem<=0&&!d.skip&&shownN<full) break; ctx.fillText(d.skip?ln:ln.slice(0,Math.max(0,rem)), bx+26, yy); rem-=ln.length+1; yy+=lh; }
-  if(!game.trailerMode) txtO((d.i+1)+' / '+d.lines.length, bx+bw-30, by+bh-12, 10, '#6a7090',{mono:true,sw:0});
+  if(!game.trailerMode){ txtO((d.i+1)+' / '+d.lines.length, bx+bw-30, by+bh-12, 10, '#6a7090',{mono:true,sw:0});
+    txtO('Esc skips the scene', bx+30, by+bh-12, 9.5, 'rgba(140,145,180,0.7)',{mono:true,sw:0,align:'left'}); }
   const ready = d.skip || t >= full/spd + (line.hold||0);    // HOLD: after the line finishes, sit in silence (figure still breathing) before the prompt
   if(shownN>=full && ready && !game.trailerMode){ const blink=(game.frame/26|0)%2; txtO(blink?'▼  ENTER':'   ENTER', bx+bw-92, by+bh-12, 11, '#ffd34d',{mono:true,sw:0}); }
 }
@@ -6163,9 +6167,15 @@ function drawMatchEnd(){
     else
       txtO("TODAY'S BEST  "+fmtScore(r.best)+"     ·     ✦ "+r.streak+'-DAY STREAK'+(r.streak>1?'  🔥':'')+'     ·     new seed tomorrow', W/2, 162, 12, '#8eeaff',{mono:true,sw:0});
     txtO(game.dailyShared?'result copied ✓':'press  X  to copy your result', W/2, 444, 10, game.dailyShared?'#7ee0b0':'rgba(180,170,210,0.8)',{mono:true,sw:0});
+    { const _dc=ROSTER[dayIndex()%ROSTER.length];   // the daily just let them TASTE a locked fighter — say how to keep them
+      if(typeof charLocked==='function' && charLocked(_dc)) txtO('liked '+_dc.name+'? win STORY ch.'+(ORDER_UNLOCK[_dc.id]||'?')+' — or a 3-day streak — and they join your roster', W/2, 468, 10, '#ffd34d',{mono:true,sw:0}); }
   }
   else if(game.mode==='tower'&&!won)
     txtO('RUNG '+(game.towerIdx+1)+' OF '+game.ladder.length+'  —  ⏎ to retry this rival', W/2, 165, 12, '#ffd34d',{mono:true,sw:0});
+  else if(!won && (game.foeHpLeft||0)>0 && game.foeHpLeft<=25)
+    txtO('they had '+game.foeHpLeft+'% left — one more solve finishes that', W/2, 165, 12, '#8eeaff',{mono:true,sw:0});
+  if(!won && !game.daily && !game.mode2p && !game.online && (game.storyProg||0)<1)
+    txtO('NEXT: STORY — win the Prologue and ADDISON joins your roster', W/2, 470, 11, '#ffd34d',{mono:true,sw:0});
   rr(W/2-230,170,460,288,16);
   ctx.fillStyle='rgba(10,8,24,0.9)'; ctx.fill();
   ctx.strokeStyle='#3d2658'; ctx.lineWidth=2; ctx.stroke();
@@ -6514,7 +6524,8 @@ const ROSTER=[
 [...ROSTER, PROTAG, BASE_CHAR, SOLOMON_CHAR, BOSS_CHAR].forEach(c=>{ c.regen=0; });   // keep CPU honesty (no passive aura drip) but RESTORE per-fighter economy identity — costMul/gainMul/auraMax/streakMul now take effect. v6 FIX: SOLOMON_CHAR/BOSS_CHAR are copies made BEFORE this pass and had leaked a free 0.04/f regen onto the marquee unlock — the one sacred economy rule now has zero exceptions.
 const MENU=[   // v8 pristine pass — one label per mode, every description parseable on first read
   ['PLAY','1v1 against the machine. Pick your fighter and combat style — STANDARD or RITE OF SILENCE — on the next screen.'],
-  ['MODES','THE TOWER · GAUNTLET · STORY · SPARRING'],
+  ['STORY','the campaign — win chapters and the four Orders join your roster'],
+  ['MODES','THE TOWER · GAUNTLET · SPARRING'],
   ['DAILY FIGHT','the same fight for everyone today — one scored try, and your streak rides on it'],
   ['MULTIPLAYER','face other players online — a 1v1 duel, or a five-fighter rumble (AI fills any empty seats)'],
   ['HOW TO FIGHT',''],
@@ -7404,6 +7415,8 @@ function startStoryChapter(ci){
   game.enemy.setCharacter(ch.opp==='boss'? BOSS_CHAR : ROSTER[ch.opp]);
   const _hpMul=1 + 0.15*Math.max(0,_mod) + 0.4*_ngp, _dmgMul=1 + 0.10*Math.max(0,_mod) + 0.2*_ngp;   // HARD and/or NG+ give the foe a meatier, bitier body so fights aren't a race the player always wins
   if(_hpMul!==1 || _dmgMul!==1){ const c=game.enemy.char; game.enemy.char=Object.assign({},c,{hp:Math.round(c.hp*_hpMul), dmg:+(c.dmg*_dmgMul).toFixed(2)}); }
+  if(game._lostCh===ci && game.seenHow){ game._lostCh=null; startMatch(); return; }   // straight back into the fight you just lost — the intro was already read
+  game._lostCh=null;
   game.dlg={lines:ch.intro, i:0, after:'fight', scene:sceneFor(ch.theme)};
   game.state='dialogue';
 }
@@ -7431,6 +7444,7 @@ function resolveStoryChapter(){
     game.dlg={lines:outroLines, i:0, after:'reward', scene:sceneFor(ch.theme)};
     game.state='dialogue';
   } else {
+    game._lostCh=game.storyCh;   // RETRY of the just-lost chapter skips the intro — re-reading 9 boxes per attempt turned a wall into a quit
     const lost = ch && ch.lose ? ch.lose : 'The equation said no. But an equation can always be tried again.';
     game.dlg={lines:[{w:'NARRATOR',c:N,t:lost, slow:0.78, hold:30}], i:0, after:'storymap', scene:sceneFor(ch?ch.theme:'div')};
     game.state='dialogue';
