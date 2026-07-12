@@ -2702,17 +2702,20 @@ function controlCPU(c){
   // v9.1 STARVING = ACT NOW, but IN CHARACTER and IN REACH. (v9 forced normals at ≤170px: punch reach is 64 — HARD Krishna threw 44 whiffs for ZERO damage and never fired a sigil.)
   if(starving && c.grounded && !c.attack){
     const _rangedP = (c.char.spKind==='spear'||c.char.spKind==='sigil') && !forceMelee;
-    if(_rangedP && dist>=150 && dist<520 && c.aura>=SPEC_TIERS[0].cost){   // the zoner's forced action IS his weapon
+    const _fleeing = (p.vx>1.5&&p.x>c.x)||(p.vx<-1.5&&p.x<c.x);   // KITE-BREAKER — a runner sprinting away made zoners whiff specials into empty air forever (0-33 dmg over 40s: kite to the timer = a win). A fleeing target is CHASED, not fenced.
+    if(_rangedP && !_fleeing && dist>=150 && dist<520 && c.aura>=SPEC_TIERS[0].cost){   // the zoner's forced action IS his weapon
       c.cpuAttack('special', Math.round(70*cfg.telMul)); SFX.charge(); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
+    if(_fleeing && dist>240 && c.grounded && c.dashCd<=0){ c.tryDash(dir); c.moveX=dir; return; }   // dash after them — repeated dashes out-pace a runner
     if(DIFF.level>0 && p.wantBlock && dist<=72 && c.aura>=12){ if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }   // a turtle's forced pressure is the GRAB — block does not stall the clock
     let t2 = dist>88?'kick':'punch'; if(Math.round(ATK[t2].cost*c.char.costMul)>c.aura) t2='punch';
     const _rch=(ATK[t2].reach||64)+34;
     if(dist<=(pointBlank?66:_rch) && Math.round(ATK[t2].cost*c.char.costMul)<=c.aura){   // in real reach → swing (point-blank mode holds fire until TOUCHING)
       c.cpuAttack(t2, Math.round((t2==='punch'?26:36)*Math.max(0.55,cfg.telMul))); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
     if(pointBlank && dist>66){ c.moveX=dir*0.5*cfg.speed; hopCover(c); return; }   // close the last meters before swinging again
-    if(dist<=320 && c.dashCd<=0){   // out of reach → the dash-in converts distance into a lunging strike (the same verb the player has)
+    if(dist<=320 && c.dashCd<=0){   // out of reach -> the dash-in converts distance into a lunging strike (the same verb the player has)
       c.tryDash(dir); if(Math.round(ATK.kick.cost*c.char.costMul)<=c.aura) c.tryAttack('kick');
       c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
+    if(dist>320 && c.grounded && c.dashCd<=0){ c.tryDash(dir); c.moveX=dir; return; }   // starving at ANY range = close the gap at dash speed
   }
   const hidden = isConcealed(p,c);
   // scavenge — BOUNDED (v9): shopping never outranks the fight. It was returning BEFORE the attack code every frame, so vs an idle player the CPU shopped forever (3 attacks in 45s on HARD). Now: never while starving, never across the map, a 2.5s budget then a 5s ban, and no platform-hop attempts while the jump-loop breaker is armed.
