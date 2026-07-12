@@ -3442,6 +3442,10 @@ function finishKO(){
         game.grade=computeGrade();
         if(game.playerWon){ game.towerDone=true; saveBest('tower_'); }
         recordScore();
+        if(game.playerWon){ const _pid=game.player.char.id, _seen=load('towerEnds',{}), _ep=TOWER_ENDINGS[_pid];
+          if(_ep && !_seen[_pid]){ _seen[_pid]=true; store('towerEnds',_seen);
+            game.dlg={lines:_ep.lines, i:0, after:'towerend', scene:_ep.scene};
+            game.state='dialogue'; } }   // their ending plays ONCE, then the TOWER COMPLETE report as usual
       }
     } else {
       game.state='matchend';
@@ -6057,6 +6061,8 @@ function drawRecords(){
   const ach=achievements(), got=ach.filter(a=>a.done).length;
   rr(58, 196, 844, 308, 12); ctx.fillStyle='rgba(12,15,26,0.92)'; ctx.fill(); ctx.strokeStyle='#2c3548'; ctx.lineWidth=1.5; ctx.stroke();
   txtO('ACHIEVEMENTS   '+got+' / '+ach.length, 80, 222, 13, '#8fd8f8',{align:'left',sw:0});
+  { const _te=load('towerEnds',{}), _ten=Object.keys(_te).length;
+    txtO('TOWER ENDINGS  '+_ten+' / 6 — finish the Tower as each fighter', 880, 222, 10, _ten?'#ffd34d':'#8a93b8',{align:'right',mono:true,sw:0}); }
   ctx.save(); rr(58, 196, 844, 308, 12); ctx.clip();   // content can NEVER bleed past the border again
   ach.forEach((a,i)=>{
     const ax=80+Math.floor(i/6)*430, ay=248+(i%6)*42;
@@ -6587,6 +6593,41 @@ function buildLadder(pid){
   const others=ROSTER.filter(c=>c.id!==pid).sort((a,b)=>a.mathNeed-b.mathNeed);
   return [...others, BOSS_CHAR];
 }
+// TOWER ENDINGS — finish the Tower AS a fighter and their story closes (once per fighter; the classic arcade epilogue kids already understand)
+const _NC='#9fb0c8';
+const TOWER_ENDINGS={
+  initiate:{scene:'equals', lines:[
+    {w:'NARRATOR',c:_NC,t:'The Tower keeps no trophies. It keeps records. At the top there is only a ledger, open to a blank page.', slow:0.8, hold:26},
+    {w:'YOU',c:'#d8e0f0',t:'No one left to solve for.', slow:0.85, hold:30, quiet:true},
+    {w:'NARRATOR',c:_NC,t:'The unsolved-for wrote one line and left the pen. Whoever climbs next will find their name already carried.', slow:0.8, hold:40},
+  ]},
+  ember:{scene:'monastery', lines:[
+    {w:'ADDISON of the PLUS',c:'#46e08a',t:'Everyone on the way up paid the fair price. I counted it twice. That part was easy.', slow:0.8, hold:24},
+    {w:'ADDISON of the PLUS',c:'#46e08a',t:'My father used to say a sum is a promise you keep in public. He never kept one.', slow:0.78, hold:28},
+    {w:'ADDISON of the PLUS',c:'#46e08a',t:'So I went home and added his debts. Then I paid them. Not for him — for the people still holding the receipts.', slow:0.78, hold:32},
+    {w:'NARRATOR',c:_NC,t:'The Measured Sum came down the Tower lighter than she climbed it.', slow:0.82, hold:40},
+  ]},
+  frost:{scene:'difference', lines:[
+    {w:'LESSING the MINUS',c:'#7ae8ff',t:'I counted what the climb took. Six rivals. Nineteen minutes. Nothing I will miss.', slow:0.8, hold:26},
+    {w:'LESSING the MINUS',c:'#7ae8ff',t:'For the first time I can remember, the difference came out positive.', slow:0.78, hold:30},
+    {w:'NARRATOR',c:_NC,t:'The Last Difference took the stairs down and, for once, did not look back to check what was missing.', slow:0.82, hold:40},
+  ]},
+  oracle:{scene:'schism', lines:[
+    {w:'KRISHNA of the DIVIDE',c:'#b48cff',t:'Divide one tower by everyone who wanted it. Look at what each of them is owed.', slow:0.8, hold:26},
+    {w:'KRISHNA of the DIVIDE',c:'#b48cff',t:'I kept the remainder. I always keep the remainder. Someone has to stand where the numbers refuse to come out even.', slow:0.78, hold:30},
+    {w:'NARRATOR',c:_NC,t:'The Standing Quotient set the crown on the top step, in plain view, divided by whoever needs it next.', slow:0.82, hold:40},
+  ]},
+  mauler:{scene:'overflow', lines:[
+    {w:'MAXIMILIAN of the TIMES',c:'#ff5a6a',t:'One tower. I assumed it would multiply into more towers. It has not.', slow:0.8, hold:26},
+    {w:'MAXIMILIAN of the TIMES',c:'#ff5a6a',t:'A product is only boundless while something is left to multiply. Remember that. It is the only warning I give anyone.', slow:0.78, hold:30},
+    {w:'NARRATOR',c:_NC,t:'The Boundless Product stood at the summit a long time, hungry, counting horizons.', slow:0.82, hold:40},
+  ]},
+  james:{scene:'equals', lines:[
+    {w:'SOLOMON the EQUALS',c:'#ff4d5e',t:'Every fight up this tower ended exactly the way I said it would.', slow:0.8, hold:26},
+    {w:'SOLOMON the EQUALS',c:'#ff4d5e',t:'That is the burden of the equals sign. Being right is not the same as being finished.', slow:0.78, hold:30},
+    {w:'NARRATOR',c:_NC,t:'At the top, the Final Answer waited for a question worth the climb. The wind brought none. He is waiting still.', slow:0.84, hold:44},
+  ]},
+};
 // ENDLESS variety: every few rungs a MUTATOR remixes the next fight, so the gauntlet isn't a pure stat-ramp
 const MUTATORS=[
   {key:'fast',  name:'⚡ QUICKENING', desc:'the foe moves and strikes faster'},
@@ -7463,6 +7504,7 @@ function dlgAdvance(){
       else startMatch();
     }
     else if(after==='reward'){ game.state='reward'; }
+    else if(after==='towerend'){ game.state='matchend'; }
     else { setMusic('default'); game.state='story'; }
   }
 }
