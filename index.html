@@ -562,7 +562,7 @@ addEventListener("keydown", e => {
     const nSel=playableRoster().length;             // 4, or 5 once SOLOMON is unlocked
     if(lk==='a'||k==='ArrowLeft'){ game.charIdx=(game.charIdx+nSel-1)%nSel; SFX.ui(); }
     else if(lk==='d'||k==='ArrowRight'){ game.charIdx=(game.charIdx+1)%nSel; SFX.ui(); }
-    else if(/^[1-5]$/.test(k) && +k<=nSel){ game.charIdx=+k-1; SFX.ui(); }
+    else if(/^[1-6]$/.test(k) && +k<=nSel){ game.charIdx=+k-1; SFX.ui(); }
     else if(lk==='e' && (game.mode==='cpu'||game.mode==='gauntlet'||game.practice)){ cycleArcade(); SFX.ui(); }
     else if(lk==='g'){ game.stageIdx=(game.stageIdx+1)%STAGES.length; store('stage',game.stageIdx); SFX.ui(); }
     else if(k==='Enter'||k===' ') confirmPick();
@@ -1335,7 +1335,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
       o.vy=-6.5; o.grounded=false; o.streak=0; o.combo=0; o.knockingDown=true;
       { const d=(o.x<f.x?-1:1); o.vx=d*3.2*(((d<0&&o.x<WORLD_W/2)||(d>0&&o.x>WORLD_W/2))?1.3:1); }   // v5 #7 throws CARRY toward the near wall too
       floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.5); SFX.heavy(); hitstop=Math.max(hitstop,13); o._jitT=13; flash(0.1,'#ffd0b0');   // the turtle-cracker lands ABOVE a heavy on the weight ladder (tech stays snappy at 4 by contrast)
-      if(f.char.id==='mauler'){ f.overflowT=240; f.addAura(30); floatText(f.x,f.y-206,'OVERFLOW','#ffcf6a',17); ring(f.x,f.y-86,'#ffcf6a',56,4); }   // SIGNATURE · MAXIMILIAN — the grab feeds the BOUNDLESS PRODUCT (cap 70->100 for ~4s: T3 is earnable NOW)
+      if(f.char.id==='mauler'){ f.overflowT=240; f.addAura(14); floatText(f.x,f.y-206,'OVERFLOW','#ffcf6a',17); ring(f.x,f.y-86,'#ffcf6a',56,4); }   // SIGNATURE · MAXIMILIAN — the grab feeds the BOUNDLESS PRODUCT (payout 30->14 ≈ one solve: the grab loop can no longer replace the math economy entirely)
       if((game.throwTechShown||0)<3 && o===game.player){ game.throwTechShown=(game.throwTechShown||0)+1; tip('tech','THROW TECH — press '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' the instant you are grabbed.'); }   // v8 the lesson fires when the grab LANDS on you
       if(f===game.player) game.stats.dmg+=dmg;
       if(o.hp<=0 && typeof lethal==='function') lethal(o, true);
@@ -1516,7 +1516,7 @@ const ATK = { // cost = aura spent UP FRONT on every swing; solving math is the 
 };
 // SPECIAL KITS — fighters differ ONLY by their 3-special kit. TIER = power (identical dmg+cost for every fighter); CHARACTER = flavor (look/feel).
 // Pressing SPECIAL fires the highest tier your AURA can afford. Per-special tunings shape the act window; `kind`+flags drive the visual primitive.
-const SPEC_TIERS=[ {dmg:14, cost:25}, {dmg:24, cost:50}, {dmg:40, cost:90} ];   // T1 opener / T2 converter / T3 verdict — same numbers on all five fighters
+const SPEC_TIERS=[ {dmg:14, cost:25}, {dmg:30, cost:50}, {dmg:62, cost:90} ];   // T1 opener / T2 converter / T3 VERDICT — superlinear (0.56/0.60/0.69 dmg-per-aura) so saving up is finally rational; was 0.56/0.48/0.44, an inverted curve where T1-spam was always correct
 const SP_KITS={
   initiate:[ {name:'FIRST STEP',  kind:'dash'},                  {name:'STRAIGHTEDGE',  kind:'spear', reach:150, fast:true},{name:'QUOD ERAT',             kind:'beam'} ],
   mauler:  [ {name:'THE FACTOR',  kind:'slam',  guard:true},     {name:'THE DOUBLING',  kind:'wave'},                       {name:'THE BOUNDLESS PRODUCT', kind:'slam', launch:true, big:true} ],
@@ -1722,7 +1722,7 @@ class Fighter {
     const thrCancel = this.attack && this.grounded && this.canCancelInto('throw');   // v6 #9 MAXIMILIAN's K>throw command-ender rides the confirm window; v6 #6 everyone's TICK rides the blocked window
     const tick = !!(thrCancel && this.attack.blockCancel);
     if((this.attack && !thrCancel)||!this.grounded) return false;
-    if(!game.galaxy && !this.spend(6)){ if(this===game.player) tip('nothrow','No AURA to throw — but you can still TECH one ('+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' when grabbed).'); return false; }
+    if(!game.galaxy && !this.spend(12)){ if(this===game.player) tip('nothrow','No AURA to throw — but you can still TECH one ('+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' when grabbed).'); return false; }   // cost 6->12: at 6/14dmg unblockable+oki the grab was 2x the value of every other verb
     const tdef=Object.assign({wind:7, act:2, rec:22, dmg:14, reach:52}, (VERB_OV[this.char.id]||{}).throw||{});   // v6 #8 per-fighter throw
     this.attack={type:'throw', kind:'throw', ph:'wind', t:tdef.wind, def:tdef, tel:0, fuse:tdef.wind, tick};   // v6 #6 tick throws are tagged (x0.8)
     this.hitThisSwing=false; SFX.whoosh();
@@ -1747,9 +1747,9 @@ class Fighter {
     return true;
   }
   cpuAttack(type, telFrames){
-    let def, kind, sp=null;
+    let def, kind, sp=null, tier=null;
     if(type==='special'){
-      const tier=bestSpecialTier(this); if(tier<0) return;
+      tier=bestSpecialTier(this); if(tier<0) return;
       sp=spKitFor(this.char)[tier];
       const cost=SPEC_TIERS[tier].cost; this.aura-=cost; this.auraChipT=18; spendFx(this,cost);
       kind=sp.kind;
@@ -1762,7 +1762,7 @@ class Fighter {
       def = ov? Object.assign({},ATK[type],ov) : ATK[type];
       if(!this.spend(ATK[type].cost,true)) return; // CPU pays up front too; its innate regen keeps it swinging
     }
-    this.attack={type, kind, ph:'tel', t:telFrames, def, tel:telFrames, fuse:telFrames+def.wind, pop:8};
+    this.attack={type, kind, tier, ph:'tel', t:telFrames, def, tel:telFrames, fuse:telFrames+def.wind, pop:8};   // tier rides along — CPU T3s earn the same crawl/VERDICT the player's do
     if(sp){ Object.assign(this.attack, {spName:sp.name, guard:sp.guard, launch:sp.launch, big:sp.big, freeze:sp.freeze, rise:sp.rise, slow:sp.slow, fast:sp.fast, spCol:(this.char.gi||this.accent)}); }
     this.hitThisSwing=false;
   }
@@ -1864,11 +1864,17 @@ class Fighter {
       return 'armor';
     }
     if(this.thinkT>0){ this.thinkT=0; floatText(this.x,this.y-150,'MISCOUNT!','#ff8a8a',13); }   // a landed hit breaks a solve-in-progress — the foe earns no aura for it
-    if(this.focusT>0){ this.focusT=0; this.pendingSolve=null; floatText(this.x,this.y-166,'BANK LOST — NO REFUND','#ff8a8a',14); }   // #4 a hit mid-channel eats the banked answer (v8: FOCUS now names the R meter only)
+    if(this.focusT>0){ const hadSolve=!!this.pendingSolve; this.focusT=0; this.pendingSolve=null;
+      if(hadSolve){ const part=Math.round(9*(this.char.gainMul||1)); this.addAura(part); floatText(this.x,this.y-166,'HIT — KEPT '+part+' OF IT','#ffd34d',13); }   // the answer WAS right: total confiscation made the math feel like it lied. Keep ~40%; the hit still costs hp/position/combo.
+      else floatText(this.x,this.y-166,'BANK LOST','#ff8a8a',14); }
     lvl = lvl||'mid';
     const stanceOK = lvl==='mid' || (lvl==='low' && (this.guardStance||'low')==='low') || (lvl==='high' && this.guardStance==='high');   // right guard for the height? wrong guess = the block whiffs
     if(this.blocking && stanceOK && !this.ko && !unblock){
-      this.guard = Math.max(0, (this.guard||0) - (heavy?34:18)*(this.blockstunT>0?1.6:1)*(typeof inCorner==='function'&&inCorner(this)?1.4:1));   // every blocked hit chips your guard — v5 #5 in-string hits drain 1.6x; v5 #7 corner blocks drain 1.4x (the wall is a clock)
+      const sharp = !this.isCPU && lvl!=='mid' && game.frame-(this._stanceAt||-9999)<=10 && this.guard>0;   // SHARP GUARD — you READ the height and switched stance within 10f: zero chip, zero guard drain. Defense's honest lane finally pays.
+      if(sharp){ this.blockstunT=(heavy?12:9); this.vx=dir*3;
+        floatText(this.x,this.y-176,'SHARP!','#7ae8ff',15); sparks(this.x-dir*20,this.y-86,5,'#7ae8ff',4); SFX.block();
+        return 'block'; }
+      this.guard = Math.max(0, (this.guard||0) - (heavy?34:18)*(this.blockstunT>0?1.6:1)*(typeof inCorner==='function'&&inCorner(this)?1.4:1)*((DIFF.level===0&&!this.isCPU)?0.5:1));   // every blocked hit chips your guard — v5 #5 in-string hits drain 1.6x; v5 #7 corner blocks drain 1.4x (the wall is a clock)
       this.guardRestT=45;   // v5 #5 GUARD CLOCK — no regen for ~0.75s after any blocked contact: turtling has a visible cost curve now
       if(this.guard<=0){   // GUARD CRUSH — the turtle cracks: this hit lands clean + you can't re-block for a beat
         this.guardCrush=64; this.blocking=false;
@@ -1953,7 +1959,7 @@ class Fighter {
     if(this.chipDelay>0) this.chipDelay--;
     else this.hpShown += (this.hp-this.hpShown)*0.07;
     if(this.hpShown<this.hp) this.hpShown=this.hp;
-    if(game.state==='fight' && this.aura>0 && !this.ko) this.aura -= this.aura*0.0016;   // #2 anti-hoard leak: a banked bar slowly bleeds (proportional — a full/special-ready bank leaks fastest, a broke player barely) so "bank to full then commit" fails; you must fence/solve to stay funded
+    if(game.state==='fight' && this.aura>0 && !this.ko && (this._dHoldAt||0)<=0) this.aura -= this.aura*0.0016;   // leak pauses while HOLDING D to pick a tier — charging the verdict is not taxed   // #2 anti-hoard leak: a banked bar slowly bleeds (proportional — a full/special-ready bank leaks fastest, a broke player barely) so "bank to full then commit" fails; you must fence/solve to stay funded
     if(game.state==='fight' && !this.ko){   // v5 #13 BROKE! — hitting zero is a NAMED state (and a win condition to inflict): the first solve back pays ×1.5
       if(this.aura<=0.5 && !this._broke){ this._broke=true; this._brokeBonus=true; floatText(this.x,this.y-178,'BROKE','#ff5a5a',17); ring(this.x,this.y-86,'#ff5a5a',40,3); SFX.fizzle(); }
       else if(this._broke && this.aura>12) this._broke=false;
@@ -2519,7 +2525,7 @@ function controlPlayer(p){
                   || projs.some(pr=>pr.owner && pr.owner!==p && Math.abs(pr.x-p.x)<260)
                   || hazards.some(h=>Math.abs(h.x-p.x)<130);
   p.wantBlock = !!(_down || (_back && threatLive));
-  if(_down) p.guardStance='low'; else if(_back && threatLive) p.guardStance='high';   // ↓ = LOW guard (blocks low+mid); hold BACK vs a live threat = HIGH guard (blocks high+mid). Guess wrong and the hit lands — or out-solve it in the ⚡NOW window.
+  if(_down){ if(p.guardStance!=='low'){ p.guardStance='low'; p._stanceAt=game.frame; } } else if(_back && threatLive){ if(p.guardStance!=='high'){ p.guardStance='high'; p._stanceAt=game.frame; } }   // ↓ = LOW guard (blocks low+mid); hold BACK vs a live threat = HIGH guard (blocks high+mid). Guess wrong and the hit lands — or out-solve it in the ⚡NOW window.
 }
 function controlP2(f){
   f.moveX = 0;
@@ -2541,7 +2547,7 @@ function cpuProfile(c){ return CPU_PROFILE[(c&&c.char&&c.char.id)] || CPU_PROFIL
 function controlCPU(c){
   const p = c.opp, cfg = DIFF.cpu();
   if(!p){ c.moveX=0; return; }
-  c.dmgMul = cfg.dmgMul*c.char.dmg; // persona power × difficulty
+  c.dmgMul = cfg.dmgMul*c.char.dmg*Math.pow(0.9,Math.min(3,(!game.mode2p&&!game.online&&game.lossStreak)||0)); // persona power × difficulty × MERCY — 2-3 straight losses quietly soften the foe ~10-27% (resets on a win; never in 2P/online)
   c.moveX = 0; c.wantBlock = c.blockHold>0;
   // COMBO ESCAPE — once you've chained it a few hits, the foe breaks out after a difficulty-scaled window (learnable: you learn how long YOUR combo lasts before it bursts)
   if((c.comboedHits||0)>=2 && c.stun>0 && !c._noBurst){
@@ -2557,9 +2563,10 @@ function controlCPU(c){
   {
     const pThrow = p.attack && p.attack.type==='throw' && (p.attack.ph==='wind'||p.attack.ph==='act') && Math.abs(p.x-c.x)<84;
     if(pThrow && !c._sawThrow){ c._sawThrow=true;
-      let techP = c._justTeched? 0 : Math.min(0.7, 0.2+0.25*(DIFF.level||0));   // just-teched one? this one lands — throw twice is a real read
+      if(c._justTeched && game.frame-(c._techedAt||0)>90) c._justTeched=false;   // the tech memory FADES (~1.5s) — 'if they tech, grab again' is a bias, not a guaranteed exploit
+      let techP = c._justTeched? 0.25 : Math.min(0.7, 0.2+0.25*(DIFF.level||0));   // just-teched one? this one PROBABLY lands — throw twice is a read, never a certainty
       const rr=c.read||{}; if(DIFF.level>=1 && !c._justTeched && (rr.thr||0)>2.5) techP=Math.min(0.85, techP+0.08*((rr.thr)-2.5));   // v6 #10 CONDITIONING — a throw-happy player gets TECHED (hard 15% floor: throws never die)
-      if(Math.random()<techP){ c.throwTechAt=game.frame; c._justTeched=true; } else c._justTeched=false;
+      if(Math.random()<techP){ c.throwTechAt=game.frame; c._justTeched=true; c._techedAt=game.frame; } else c._justTeched=false;
     } else if(!pThrow) c._sawThrow=false;
   }
   // v4 CPU PARITY — the CPU plays the systems the player does (pre-canAct: these run mid-attack / mid-knockdown)
@@ -2593,7 +2600,7 @@ function controlCPU(c){
   const dist = Math.abs(p.x-c.x), dir = p.x>c.x?1:-1;
   // v9 ENGAGEMENT CLOCK — ATTACK-based. v8 counted proximity as engagement, so the CPU could hover at 120px (or shop for pickups) forever without swinging — an idle player on HARD took 3 attacks in 45s. Now only a real SWING resets the clock; a starving CPU abandons shopping, collapses its band, and when it reaches range it MUST attack.
   if(c._engAt==null || c.attack) c._engAt=game.frame;
-  const starving = c.aiThink<9000 && game.frame-c._engAt > (DIFF.level>=2? 140 : DIFF.level===1? 200 : 300);   // HARD owes you a fight every ~2.3s (aiThink<9000: script-frozen trailer actors are exempt — the director owns their beats)
+  const starving = c.aiThink<9000 && game.frame-c._engAt > (DIFF.level>=2? 140 : DIFF.level===1? 200 : 480);   // EASY owes a fight every 8s, not 5 — room for a kid to breathe and watch   // HARD owes you a fight every ~2.3s (aiThink<9000: script-frozen trailer actors are exempt — the director owns their beats)
   // v9.2 WHIFF AWARENESS — two specials in a row that drew no blood (a pillar ate the sigils, you're camping cover) and the zoner stops shelling the wall: 6s of walk-in melee.
   if(c.attack && c.attack.type==='special' && !c._spMark){ c._spMark=true; c._spHp=p.hp; }
   if(!c.attack && c._spMark){ c._spMark=false;
@@ -2612,7 +2619,7 @@ function controlCPU(c){
   const noHop = (c._hopT||0)>=3;
   if(noHop && c.grounded && c._hopGnd==null && c.aiThink<9000){ c._hopGnd=game.frame+120; c._seek=null; if(c.dashCd<=0) c.tryDash(dir); }   // break the loop with a dash toward the fight (never on script-frozen trailer actors)
   if(c._hopGnd!=null && game.frame>c._hopGnd){ c._hopGnd=null; c._hopT=0; }
-  if(c._tick){ if(game.frame>=c._tick){ c._tick=null; if(dist<72 && c.aura>=6){ c.tryThrow(); return; } } else { c.moveX=dir; return; } }   // v4 (b) walk the booked TICK THROW in — teched by A+S, jumped, or backdashed
+  if(c._tick){ if(game.frame>=c._tick){ c._tick=null; if(dist<72 && c.aura>=12){ c.tryThrow(); return; } } else { c.moveX=dir; return; } }   // v4 (b) walk the booked TICK THROW in — teched by A+S, jumped, or backdashed
   // #4 PUNISH-THE-REFUEL — a player banking mid-fight (FOCUS channel) is an opening the foe HUNTS, exactly as you can rush its ∑ solve. Bank at range or behind cover; bank in its face and eat the counter.
   if((p.focusT||0)>0 && c.grounded){
     if(dist<138){ const t=dist>92?'kick':'punch';
@@ -2622,18 +2629,19 @@ function controlCPU(c){
   // #5 OKIZEME — a downed player is a SCHEDULED mix-up, not a breather: walk to point-blank, loom through the invuln (readable menace), then commit ONE read per knockdown — a wakeup-timed meaty STRIKE, a post-getup THROW (beats a wakeup block; v3: cannot OTG, so it must land after you rise), or just the loom. Your answers: block the strike, tech/jump the throw, or D = REVERSAL (which the bait beats).
   if((p.downed||0)>0 && c.grounded && !c.attack && c.stun<=0){
     if(!c.okiPlan){ const thr=cpuProfile(c).thr||0.2;
-      c.okiPlan = Math.random()<thr*1.6? 'throw' : (Math.random()<0.62? 'strike' : 'loom'); }   // one committed read per knockdown (loom keeps oki from being oppressive)
+      c.okiPlan = DIFF.level===0? (Math.random()<0.3? 'strike' : 'loom')
+                : (Math.random()<thr*1.6? 'throw' : (Math.random()<0.62? 'strike' : 'loom')); }   // one committed read per knockdown; EASY never throws on wakeup and mostly just LOOMS — the knockdown loop was EASY's hidden killer
     if(dist>96){ c.moveX=dir; return; }                       // close in while you're down
     if(p.downed>12){ c.moveX=0; return; }                     // looming — the wait IS the tell
     if(c.canAct()){
       if(c.okiPlan==='throw'){
-        if(p.downed<=2 && c.aura>=6){ c.tryThrow(); c.okiPlan=null; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); }   // starts as you rise -> grabs AFTER the invuln (teched/jumped, never OTG)
+        if(p.downed<=2 && c.aura>=12){ c.tryThrow(); c.okiPlan=null; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); }   // starts as you rise -> grabs AFTER the invuln (teched/jumped, never OTG)
         else c.moveX=0;
         return;
       }
       if(c.okiPlan==='strike'){
         const t=dist>80?'kick':'punch';
-        if(Math.round(ATK[t].cost*c.char.costMul)<=c.aura) c.cpuAttack(t, 12);   // tel 12 + windup lands on the vulnerable wakeup — blockable, reversal-able
+        if(Math.round(ATK[t].cost*c.char.costMul)<=c.aura) c.cpuAttack(t, Math.round(12*Math.max(1,cfg.telMul)));   // tel 12 + windup lands on the vulnerable wakeup — blockable, reversal-able
         c.okiPlan=null; c.aiThink=rnd(cfg.cool[0],cfg.cool[1]);
         return;
       }
@@ -2668,9 +2676,12 @@ function controlCPU(c){
   else if(pRec && dist<(DIFF.level>=1?200:128) && c.grounded) opening='punish';             // committed/whiffed in range = free punish (v6 #1: at tier 1+ the dash-S extends the punish envelope — whiffing at 'safe' range isn't)
   else if(pWind && dist<142 && c.grounded && c.blockHold<=0) opening='block';               // your startup → put up a guard
   if(opening){
-    if(c.reactKind!==opening){ c.reactKind=opening; c.reactT = (opening==='antiair'? Math.max(2,cfg.react-4) : cfg.react); }
+    if(c.reactKind!==opening){ c.reactKind=opening; c.reactT = (opening==='antiair'? Math.max(2,cfg.react-4) : opening==='block'? Math.max(3,cfg.react-7) : cfg.react); }   // block reacts FASTEST — before this, punch(5f wind) outran every tier's block clock: CPU defense vs tight offense was spacing theater
     else if(c.reactT>0) c.reactT--;
   } else { c.reactKind=null; c.reactT=0; }
+  if(dist<110 && c._proxAt==null){ c._proxAt=game.frame;   // PROXIMITY GUARD — entering point-blank rolls ONE proactive guard per approach (diff-scaled): walk-up pressure meets a wall sometimes, not never
+    if(p.aura>=10 && c.grounded && !c.attack && c.blockHold<=0 && Math.random()<0.1+0.12*(DIFF.level||0)){ c.blockHold=rnd(14,24); c.wantBlock=true; c.guardStance=Math.random()<0.5?'high':'low'; } }
+  else if(dist>=130) c._proxAt=null;
   if(c.reactKind && c.reactT<=0 && c.grounded){
     const k=c.reactKind; c.reactKind=null;
     if(k==='block'){ c.blockHold=rnd(16,28); c.wantBlock=true;
@@ -2692,7 +2703,7 @@ function controlCPU(c){
     const _rangedP = (c.char.spKind==='spear'||c.char.spKind==='sigil') && !forceMelee;
     if(_rangedP && dist>=150 && dist<520 && c.aura>=SPEC_TIERS[0].cost){   // the zoner's forced action IS his weapon
       c.cpuAttack('special', Math.round(70*cfg.telMul)); SFX.charge(); c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; }
-    if(p.wantBlock && dist<=72 && c.aura>=6){ if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }   // a turtle's forced pressure is the GRAB — block does not stall the clock
+    if(DIFF.level>0 && p.wantBlock && dist<=72 && c.aura>=12){ if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0],cfg.cool[1]); return; } }   // a turtle's forced pressure is the GRAB — block does not stall the clock
     let t2 = dist>88?'kick':'punch'; if(Math.round(ATK[t2].cost*c.char.costMul)>c.aura) t2='punch';
     const _rch=(ATK[t2].reach||64)+34;
     if(dist<=(pointBlank?66:_rch) && Math.round(ATK[t2].cost*c.char.costMul)<=c.aura){   // in real reach → swing (point-blank mode holds fire until TOUCHING)
@@ -2762,7 +2773,7 @@ function controlCPU(c){
   }
   if(c.aiThink<=0 && Math.random()<0.2) c._lastQuick=false;   // the no-repeat flag decays — a gap always follows a fast poke
   // THROW the turtle — when point-blank and you're guarding, this fighter occasionally grabs (you must throw-tech: A+S)
-  if(dist<=76 && c.grounded && p.wantBlock && c.aiThink<=0 && Math.random()<Math.max(P.thr,0.3) && c.aura>=6){   // v9.2 the turtle-cracker actually reaches turtles now
+  if(dist<=76 && c.grounded && p.wantBlock && c.aiThink<=0 && Math.random()<Math.max(P.thr,[0.06,0.18,0.3][Math.min(2,DIFF.level||0)]) && c.aura>=12){   // v9.2 the turtle-cracker actually reaches turtles now
     if(c.tryThrow()){ c.aiThink=rnd(cfg.cool[0]+10,cfg.cool[1]+20); return; }
   }
   // JUMP-IN overhead — occasionally hop in so your new HIGH/LOW cuts both ways (a jump-in must be stand-blocked)
@@ -2782,7 +2793,7 @@ function controlCPU(c){
     c.moveX = -dir*0.34*cfg.speed; hopCover(c); return;
   }
   // HARD pressure — if you just spent a solve-dodge, a fast strike beats the cooldown: you must BLOCK (a deterministic punish on the dodge window)
-  if(DIFF.level>=2 && dist<140 && c.aiThink<=0 && p.dodgeCd>12 && c.grounded){
+  if(DIFF.level>=2 && dist<140 && c.aiThink<=0 && p.dodgeCd>12 && Math.random()<0.6 && c.grounded){   // 60% roll — the CPU pressures the post-slip window it SAW, it does not read the invisible cooldown timer
     let type = (c.char.dmg||1)>=1.08?'kick':'punch'; if(!canAfford(type)) type='punch';
     if(canAfford(type)){ c.cpuAttack(type, type==='punch'?18:26); c.aiThink = rnd(cfg.cool[0], cfg.cool[1]); return; }
   }
@@ -2939,6 +2950,7 @@ function resolveHits(att,def){
       // audit #11 — the big 260ms/0.35× crawl is reserved for the moments that EARN it (a KO-adjacent hit or a tier-3 special); a routine special is a snappier ~130ms/0.55× punch so a special-fishing HARD zoner can't turn the fight into a stutter.
       const bigCrawl = def.hp<=30 || (att.attack.tier||0)>=2;
       SFX.detonate(); duckHit();   // the connect gets its own explosion AND punches through the music bed
+      if((att.attack.tier||0)>=2 && !def.ko && !def.knockingDown){ def.knockingDown=true; def.grounded=false; def.vy=Math.min(def.vy||0,-7); def.stun=Math.max(def.stun||0,30); floatText(def.x,def.y-212,'THE VERDICT','#ffd34d',18); }   // a landed 90-aura T3 ALWAYS floors them — the clip moment the whole economy saves toward
       slowmo(bigCrawl?260:130, bigCrawl?0.35:0.55); flash(bigCrawl?0.3:0.2,'#ffe9b0'); addTrauma(bigCrawl?0.6:0.4);
       ring(cx,cy,'#ffd34d',bigCrawl?90:70,7);
       if(bigCrawl) floatText(def.x,def.y-188,'CRITICAL!','#ffd34d',26);
@@ -2972,7 +2984,7 @@ function framesToHit(o){ // frames until o's current attack hitbox goes live (�
   return Infinity;
 }
 const PERFECT_WIN=26;   // max window; the ACTUAL window scales with each attack's telegraph (tight on fast strikes)
-function perfectWin(o){ return clamp(Math.round((o.attack && o.attack.fuse || 40)*0.42), 10, PERFECT_WIN); }
+function perfectWin(o){ const e=DIFF.level===0; return clamp(Math.round((o.attack && o.attack.fuse || 40)*(e?0.7:0.42)), e?16:10, e?42:PERFECT_WIN); }   // EASY gets a humanly-typeable NOW window (8-10yo choice reaction ~0.5s); teens keep the tight read
 function perfectFoe(f){  // the foe whose strike is inside its tight perfect-dodge window, or null
   const foes=(game.mode==='rumble'&&game.fighters)? game.fighters.filter(x=>x!==f&&!x.ko&&!x.gone):[f.opp];
   for(const o of foes){ if(o && o.attack && !o.attack.quick && Math.abs(o.x-f.x)<190 && framesToHit(o)<=perfectWin(o)) return o; }   // quick pokes open no perfect window (too fast to solve-react — block them)
@@ -3410,12 +3422,12 @@ function finishKO(){
       if(game.gWins>load('gauntlet',0)) store('gauntlet',game.gWins);
       game.gMut = game.gWins>=2 ? MUTATORS[rnd(0,MUTATORS.length-1)] : null;   // remix the next rung
       game.state='interlude'; game.interKind='gauntlet';
-    } else { game.playerWon=false; game.gOver=true; game.state='matchend'; recordScore();
+    } else { game.playerWon=false; game.gOver=true; game.state='matchend'; recordScore(); if(!game.mode2p&&!game.online) game.lossStreak=(game.lossStreak||0)+1;
       const board=load('gBoard',[]); board.push({score:game.lastScore||0, streak:game.gWins});   // persist this run to the top-5 board
       board.sort((a,b)=>b.score-a.score); store('gBoard', board.slice(0,5)); }
     return;
   }
-  if(playerWon){ game.pWins++; if(game.player.hp>=game.player.char.hp) announceFlawless(); }
+  if(playerWon){ game.pWins++; game.lossStreak=0; if(game.player.hp>=game.player.char.hp) announceFlawless(); }
   else game.eWins++;
   const winTgt=game.galaxy?1:2;   // GALAXY is one decisive round
   if(game.pWins>=winTgt||game.eWins>=winTgt){
@@ -3612,7 +3624,7 @@ function step(){
       const pf=perfectFoe(p);
       if(pf){
         if(pf.attack!==game.relockAtk){ game.relockAtk=pf.attack;
-          if(ans1!==''){ ans1=''; cardFx.shake=Math.max(cardFx.shake||0,9); }
+          if(ans1!=='' && DIFF.level>0){ ans1=''; cardFx.shake=Math.max(cardFx.shake||0,9); }   // EASY keeps the typed answer — the wipe punished the one lane an 8yo can use
           if(!game.daily){ const a=rnd(3,9), b=rnd(1,a-1); game.problem={text:a+'−'+b, ans:a-b, op:'−', micro:true}; game.problemAt=game.frame; }   // v5 #4 AGE-HONEST NOW LANE — the reactive read is ALWAYS a 1-digit micro-problem (a median 12yo can use the fork); the full-heat problem stays the safe/bank lane
           cardFx.flash=Math.max(cardFx.flash||0,11); cardFx.col='#ffd34d';
           floatText(p.x,p.y-200,'ANSWER — NOW','#ffd34d',18);
@@ -4176,7 +4188,7 @@ function hpBar(f, side){ // side: 1 = left, -1 = right
     };
     cell(kp,ATK.punch.cost,f.aura>=ATK.punch.cost);
     cell(kk,ATK.kick.cost,f.aura>=ATK.kick.cost);
-    cell(kp+'+'+kk,6,f.aura>=6);
+    cell(kp+'+'+kk,12,f.aura>=12);
     cell(kbk,null,true,'#cabbe0');
     ctx.font=font(MONO,8); ctx.fillStyle='rgba(150,140,180,0.6)'; ctx.fillText(keyLabel(KEYS.special)+' SPECIAL — hold to pick tier', 40, 116);
     let cy=132;
@@ -6170,12 +6182,13 @@ function drawMatchEnd(){
     txtO('BY OPERATION    '+opTxt, W/2, 379, 10.5, '#9fb0c8',{mono:true,sw:0}); }
   // grade stamp
   if(game.grade){
-    const gradeCol={S:'#ffd34d',A:'#46e08a',B:'#7ae8ff',C:'#ffb02a',D:'#ff4d5e'}[game.grade];
+    const _g = (!game.playerWon && game.grade==='D')? 'C' : game.grade;   // grades floor at C on screens shown to a LOSER — the drill prompt does the teaching, not a red D stamp
+    const gradeCol={S:'#ffd34d',A:'#46e08a',B:'#7ae8ff',C:'#ffb02a',D:'#ff4d5e'}[_g];
     ctx.save(); ctx.translate(W/2+140,290); ctx.rotate(-0.18);
     ctx.beginPath(); ctx.arc(0,0,52,0,7);
     ctx.strokeStyle=gradeCol; ctx.lineWidth=5; ctx.stroke();
     ctx.beginPath(); ctx.arc(0,0,44,0,7); ctx.lineWidth=1.5; ctx.stroke();
-    txtO(game.grade,0,24,64,gradeCol,{sw:0});
+    txtO(_g,0,24,64,gradeCol,{sw:0});
     ctx.restore();
   }
   if(game.stats.qed) txtO('QED', W/2+140, 352, 12, '#ff3050',{mono:true,sw:3});
@@ -6184,6 +6197,7 @@ function drawMatchEnd(){
     const wpulse=0.65+Math.sin(game.frame*0.1)*0.35; ctx.save(); ctx.globalAlpha=wpulse;
     txtO('WEAKEST: '+game.weakOp.op+' ('+game.weakOp.pct+'%)  —  press D to DRILL it', W/2, 426, 12.5, '#ffb86a',{mono:true,sw:0});
     ctx.restore();
+    if(!game.playerWon && (game.lossStreak||0)>=2) txtO('your rival eases off — prove them wrong', W/2, 410, 11, '#9fdcff',{mono:true,sw:0});
     txtO('⏎ REMATCH   ·   C CHANGE FIGHTER   ·   T TITLE', W/2, 450, 13, '#cabbe0',{mono:true,sw:0});
   } else {
     txtO('⏎ REMATCH   ·   C CHANGE FIGHTER   ·   T TITLE', W/2, 438, 13, '#cabbe0',{mono:true,sw:0});
@@ -6739,10 +6753,10 @@ function tutorTick(){
   if(game.tutorStep===0){                                      // PUNCH FIRST — hit him before any math box appears
     if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }                 // keep the dummy in punch range
     game.tutorT++;
-    if(P.attack || game.tutorT>900){ game.tutorStep=1; game.tutorT=0; announce('OUT OF AURA','#ff8a8a'); }   // he swung → drop the bar and reveal the cost (soft-lock guard: never strand)
+    if(P.attack || game.tutorT>900){ game.tutorStep=1; game.tutorT=0; game._solveBase=game.stats.correct||0; announce('OUT OF AURA','#ff8a8a'); }   // he swung → drop the bar and reveal the cost (soft-lock guard: never strand)
   } else if(game.tutorStep===1){                               // MATH REFUELS — now the empty bar teaches why you answer
     game.tutorT++;
-    if((game.stats.correct||0)>=1 || game.tutorT>1200){ game.tutorStep=2; game.tutorT=0; announce('AURA UP!','#7ae8ff'); }
+    if((game.stats.correct||0)>(game._solveBase||0) || game.tutorT>1200){ game.tutorStep=2; game.tutorT=0; announce('AURA UP!','#7ae8ff'); }   // baseline: a solve typed during step 0 no longer auto-skips the refuel lesson
   } else if(game.tutorStep===2){                       // CANCEL — land a punch, then cancel into a kick
     if(dist>150){ E.x += (P.x>E.x?1:-1)*1.2; }          // keep the dummy in melee range
     game.tutorT++;
@@ -7380,7 +7394,9 @@ function startStoryChapter(ci){
   // STORY DIFFICULTY — the title EASY/NORMAL/HARD pick is a campaign modifier; combat is lifted +1 by default so no chapter is a passive pushover; NEW GAME+ stacks on top.
   const _mod=(game.storyChallenge!=null?game.storyChallenge:1)-1, _ngp=game.ngPlus?1:0;   // EASY −1 / NORMAL 0 / HARD +1
   const _baseTier=(ch.cpuTier!=null?ch.cpuTier:ch.diff);
-  game.cpuTier = clamp(_baseTier + 1 + _mod + _ngp, 0, 3);   // +1 default lift: even the opening foes now actually fight; HARD / NG+ reach the fastest tier
+  const _easy = game.storyChallenge===0;
+  game.cpuTier = clamp(_baseTier + (_easy?0:1) + _mod + _ngp, 0, _easy?1:3);   // +1 lift EXCEPT on EASY (an 8-10yo's campaign runs tier 0-1, never the finale-grade CPU); NORMAL/HARD/NG+ unchanged
+  if(ci===0) game.cpuTier=0; else if(ci===1) game.cpuTier=Math.min(game.cpuTier,1);   // the prologue's JOB is a won first fight — pin it gentle for every pick
   DIFF.level   = clamp(ch.diff + _mod + _ngp, 0, 2);          // math shifts with the chosen challenge; a faster foe also pressures the math (threat-coupled)
   game.chRule = ch.rule || null;                              // per-foe combat philosophy (overflow / subtract / read / zero)
   PROTAG.name=game.heroName||'INITIATE';
@@ -7477,7 +7493,7 @@ function trainSubmit(){
 const net = { ws:null, role:null, seat:-1, room:'', roster:[], status:'offline', err:'', gm:'rumble',
   inEdges:[], pendingSolve:null, guestState:{}, snap:null, snapAt:0, sendAcc:0, bcAcc:0, setW:[0,0],
   name:load('name','PLAYER'), field:'name', input:'', camX:WORLD_W/2, camTz:0.7, lobby:false };
-const PROTO=3;   // netplay protocol version — bump when the snapshot/message shape changes; the server rejects a join whose version != the host's (catches one player on a stale cached build). v3: pickup sync (pk) + guest-side hit FX
+const PROTO=4;   // netplay protocol version — bump when the snapshot/message shape changes; the server rejects a join whose version != the host's (catches one player on a stale cached build). v3: pickup sync (pk) + guest-side hit FX
 const RELAY_HOST='brawlgebra-relay.onrender.com';   // the public relay — static mirrors (GitHub Pages, file:, the desktop wrapper) fall back to it so EVERY shared link can play online
 function netURL(){
   try{ if(new URLSearchParams(location.search).get('relay')==='local') return 'ws://localhost:8080'; }catch(e){}   // dev override
@@ -7754,7 +7770,7 @@ function fSnap(f){
     f.dizzy|0, f.hurtT|0, f.stun|0, f.blocking?1:0, f.grounded?1:0, f.frozenT|0, f.streak|0, f.iframes|0, f.dodgeT|0,
     Math.round(f.vx*10)/10, f.landT|0,
     a?a.type:'', a?(a.kind||'dash'):'', a?a.ph:'', a?a.t|0:0, a?a.def.wind|0:0, a?a.def.act|0:0, a?a.def.rec|0:0,
-    f.ko?1:0, f.gone?1:0, f.dissolveT?Math.round(f.dissolveT*100):0];
+    f.ko?1:0, f.gone?1:0, f.dissolveT?Math.round(f.dissolveT*100):0, f.downed|0];
 }
 function hostSnapshot(){
   if(!game.fighters) return null;
@@ -7797,7 +7813,7 @@ function applySnapshot(d){
     f.dizzy=fs[6]; f.hurtT=fs[7]; f.stun=fs[8]; f.blocking=!!fs[9]; f.grounded=!!fs[10];
     f.frozenT=fs[11]; f.streak=fs[12]; f.iframes=fs[13]; f.dodgeT=fs[14]; f.vx=fs[15]; f.landT=fs[16];
     f.attack = fs[17]? {type:fs[17],kind:fs[18],ph:fs[19],t:fs[20],def:{wind:fs[21],act:fs[22],rec:fs[23]}} : null;
-    f.gone=!!fs[25]; f.dissolveT=(fs[26]||0)/100;   // ko is derived from hp (set above); gone/dissolve aren't, so sync them for a clean downed/dissolving read on the guest
+    f.gone=!!fs[25]; f.dissolveT=(fs[26]||0)/100; f.downed=fs[27]|0;   // knockdowns finally read on the guest — without this, floored fighters stood bolt upright on the other screen   // ko is derived from hp (set above); gone/dissolve aren't, so sync them for a clean downed/dissolving read on the guest
     if(fs[4]<=0) f.eliminated=true;
   }
   projs.length=0; if(d.pj) for(const p of d.pj) projs.push({x:p[0],y:p[1],vx:p[2],life:999,owner:game.player});
