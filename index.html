@@ -125,7 +125,7 @@ function txtO(s,x,y,size,fill,o={}){
 //----------------------------------------------------------------------
 // Audio — tiny synth + a moody half-time loop, all WebAudio.
 //----------------------------------------------------------------------
-let AC=null, masterG=null, sfxG=null, musG=null, noiseB=null;
+let AC=null, masterG=null, sfxG=null, musG=null, noiseB=null, musLP=null;
 let impactBus=null, verbC=null, verbG=null;   // impact send + a short convolution reverb so hits sit in a space, not bone-dry
 // ─── REAL-ART PIPELINE ───────────────────────────────────────────────────────
 // Drop PNGs into an `assets/` folder next to index.html and they're used automatically;
@@ -169,7 +169,9 @@ function audio(){
       AC = new (window.AudioContext||window.webkitAudioContext)();
       masterG = AC.createGain(); masterG.gain.value = 0.85; masterG.connect(AC.destination);
       sfxG = AC.createGain(); sfxG.gain.value = 1; sfxG.connect(masterG);
-      musG = AC.createGain(); musG.gain.value = 0.4; musG.connect(masterG);
+      musG = AC.createGain(); musG.gain.value = 0.4;
+      musLP = AC.createBiquadFilter(); musLP.type='lowpass'; musLP.frequency.value=18000;   // slow-mo muffles the music bed — audio finally follows timeScale into the crawl
+      musG.connect(musLP); musLP.connect(masterG);
       const n = AC.sampleRate*1.2, buf = AC.createBuffer(1,n,AC.sampleRate), d = buf.getChannelData(0);
       for(let i=0;i<n;i++) d[i] = Math.random()*2-1;
       noiseB = buf;
@@ -214,10 +216,13 @@ function hiss(dur,vol,{lo=300,hi=3000,bus}={}){
 const SFX = {
   ui(){ tone('square',540,0.05,0.06); },
   whoosh(){ hiss(0.10,0.05,{lo:500,hi:2400}); },
-  hit(){ const B=impactBus||sfxG, v=frnd(0.92,1.08), g=frnd(0.85,1.0);   // v5 #15 pitch/velocity variance — no two hits sound machine-identical
+  hit(c=0){ const B=impactBus||sfxG, l=1+0.055*Math.min(c,6), v=frnd(0.92,1.08)*l, g=frnd(0.85,1.0);   // v5 #15 variance + COMBO PITCH LADDER — hit 4 audibly climbs above hit 1, the ears track the string growing
     tone('sine',155*v,0.13,0.24*g,{f1:48*v,bus:B}); tone('triangle',300*v,0.07,0.12*g,{f1:150*v,bus:B}); hiss(0.05,0.18*g,{lo:1800,hi:6500,bus:B}); },
-  heavy(){ const B=impactBus||sfxG, v=frnd(0.92,1.08), g=frnd(0.85,1.0); // deeper thud + body + click + a sharper crack (varied)
+  heavy(c=0){ const B=impactBus||sfxG, l=1+0.055*Math.min(c,6), v=frnd(0.92,1.08)*l, g=frnd(0.85,1.0); // deeper thud + body + click + a sharper crack (varied, ladders with the combo)
     tone('sine',120*v,0.26,0.36*g,{f1:38*v,bus:B}); tone('triangle',210*v,0.12,0.18*g,{f1:88*v,bus:B}); tone('square',80*v,0.07,0.10*g,{bus:B}); hiss(0.07,0.24*g,{lo:1500,hi:6000,bus:B}); },
+  detonate(){ const B=impactBus||sfxG;   // a SPECIAL connecting gets its own explosion — the eyes get a ceremony, now the ears do too
+    tone('sine',95,0.55,0.4,{f1:30,bus:B}); tone('square',60,0.1,0.14,{bus:B}); hiss(0.3,0.28,{lo:800,hi:5000,bus:B}); },
+  step(){ hiss(0.035,0.045,{lo:100,hi:420}); tone('sine',75,0.05,0.05,{f1:50}); },
   counter(){ const B=impactBus||sfxG;        // v5 #15 the COUNTER tier — an exclusive metallic CRACK + sub thump you only hear on a whiff-punish or JUST hit
     hiss(0.09,0.30,{lo:3000,hi:9000,bus:B}); tone('square',1200,0.05,0.12,{f1:380,bus:B});
     tone('sine',55,0.30,0.30,{f1:36,bus:B}); tone('sine',150,0.10,0.20,{f1:62,bus:B}); },
@@ -232,11 +237,17 @@ const SFX = {
   charge(){ tone('sawtooth',140,0.45,0.10,{f1:760}); },
   special(){ const B=impactBus||sfxG; hiss(0.3,0.14,{lo:200,hi:1400,bus:B}); tone('sawtooth',180,0.5,0.14,{f1:900,bus:B}); tone('sine',110,0.3,0.20,{f1:48,bus:B}); },
   jump(){ hiss(0.06,0.03,{lo:600,hi:2000}); },
-  land(){ hiss(0.06,0.06,{lo:120,hi:500}); },
+  land(k=0){ hiss(0.06,0.06+0.1*k,{lo:120,hi:500}); if(k>0.3) tone('sine',110,0.09,0.12*k,{f1:55}); },   // the thud scales with fall height — the ears use the data the squash rig already has
   ko(){ const B=impactBus||sfxG; tone('sine',200,0.8,0.36,{f1:38,bus:B}); tone('sine',70,0.7,0.26,{f1:30,bus:B}); hiss(0.5,0.20,{lo:150,hi:1200,bus:B}); duckMusic(); },
   round(){ tone('sine',110,0.3,0.3,{f1:55}); hiss(0.2,0.1,{lo:100,hi:600}); },
   fight(){ tone('sine',130,0.25,0.34,{f1:60}); hiss(0.25,0.16,{lo:400,hi:3000}); },
 };
+function duckHit(){   // micro-duck — a big impact punches THROUGH the music bed for ~half a second instead of fighting it
+  if(!AC||!musG) return;
+  musG.gain.cancelScheduledValues(AC.currentTime);
+  musG.gain.setValueAtTime(0.16, AC.currentTime);
+  musG.gain.linearRampToValueAtTime(musicMuted?0:settings.music*0.8, AC.currentTime+0.45);
+}
 function duckMusic(){
   if(!AC||!musG) return;
   musG.gain.cancelScheduledValues(AC.currentTime);
@@ -1323,7 +1334,7 @@ function resolveThrow(f,a){   // grab check on the throw's active frame — beat
       o.stun=Math.max(o.stun||0, 32); o.hurtT=Math.max(o.hurtT||0, 22); o.attack=null;
       o.vy=-6.5; o.grounded=false; o.streak=0; o.combo=0; o.knockingDown=true;
       { const d=(o.x<f.x?-1:1); o.vx=d*3.2*(((d<0&&o.x<WORLD_W/2)||(d>0&&o.x>WORLD_W/2))?1.3:1); }   // v5 #7 throws CARRY toward the near wall too
-      floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.32); SFX.heavy(); hitstop=Math.max(hitstop,5);
+      floatText(o.x, o.y-186, 'GRABBED', f.char.gi||'#ff9f6a', 18); sparks(o.x, o.y-90, 12, f.char.gi||'#ff9f6a', 6); addTrauma(0.5); SFX.heavy(); hitstop=Math.max(hitstop,13); o._jitT=13; flash(0.1,'#ffd0b0');   // the turtle-cracker lands ABOVE a heavy on the weight ladder (tech stays snappy at 4 by contrast)
       if(f.char.id==='mauler'){ f.overflowT=240; f.addAura(30); floatText(f.x,f.y-206,'OVERFLOW','#ffcf6a',17); ring(f.x,f.y-86,'#ffcf6a',56,4); }   // SIGNATURE · MAXIMILIAN — the grab feeds the BOUNDLESS PRODUCT (cap 70->100 for ~4s: T3 is earnable NOW)
       if((game.throwTechShown||0)<3 && o===game.player){ game.throwTechShown=(game.throwTechShown||0)+1; tip('tech','THROW TECH — press '+keyLabel(KEYS.punch)+'+'+keyLabel(KEYS.kick)+' the instant you are grabbed.'); }   // v8 the lesson fires when the grab LANDS on you
       if(f===game.player) game.stats.dmg+=dmg;
@@ -1894,7 +1905,7 @@ class Fighter {
     sparks(this.x, this.y-88, heavy?16:9, '#ffd9a0', heavy?7:5, dir*2);
     floatText(this.x+frnd(-10,10), this.y-168, dmg, heavy?'#ffd34d':'#fff', heavy?26:19);
     if(this.hp<=0){ this.koP=0; this.koDust=false; SFX.ko(); }
-    else heavy?SFX.heavy():SFX.hit();
+    else { const cIdx=(this.opp&&this.opp.combo)||0; heavy?SFX.heavy(cIdx):SFX.hit(cIdx); }   // combo pitch ladder — the attacker's string index climbs the impact pitch
     return 'hit';
   }
   hitbox(){
@@ -2004,7 +2015,7 @@ class Fighter {
       }
       this.floorY=floorY;
       if(this.y>=floorY){
-        if(!this.grounded){ this.landT=7; dust(this.x,floorY,6,2.2); SFX.land();
+        if(!this.grounded){ this.landT=7; const _fk=clamp((this.vy||0)/13,0,1); dust(this.x,floorY,Math.min(12,4+Math.round(this.vy/2)),2.2); SFX.land(_fk);   // the thud + dust scale with fall energy (vy is still impact velocity here — zeroed just below)
           if(this.knockingDown){ this.downed=30; this.knockingDown=false; this.attack=null; this.landT=0; this.vx*=0.4; dust(this.x,floorY,12,3.6); addTrauma(0.22); }   // KNOCKDOWN — land into a DOWNED state (getup + a wakeup window), not straight back to neutral
           // only cut the airkick's RECOVERY tail on touchdown — never its wind/act. Otherwise a player
           // who paid airkick aura then landed mid-windup gets no swing (paid cost, no hitbox ever goes live).
@@ -2012,11 +2023,25 @@ class Fighter {
           if(this.attack&&this.attack.type==='airkick'&&this.attack.ph==='rec') this.attack=null; }
         this.y=floorY; this.vy=0; this.grounded=true;
       } else this.grounded=false;
+      const preVx=this.vx;
       this.x += this.vx;
       if(this.slideT>0){ this.slideT--; this.vx *= 0.95; }   // knockback slide-tail: skip the hard grounded damp briefly so hits have spatial follow-through
       else this.vx *= this.grounded?0.8:0.965;
       this.x = clamp(this.x, 70, WORLD_W-70);
+      // WALL SPLAT — every system carries toward the corner (launcher/throw carry, corner chip, corner punish pay); the arrival finally IS a moment: crack, bounce-off, brief stagger
+      if(this._splatCd>0) this._splatCd--;
+      if((this.x<=70||this.x>=WORLD_W-70) && Math.abs(preVx)>8.5 && (this.slideT>0||this.knockingDown||this.stun>0) && !this._splatCd && !this.ko){   // 8.5 gate: light knockback (vx 8) never splats — only heavies (13), launchers, and juggle carries earn the wall
+        this._splatCd=30; this.vx=-Math.sign(preVx)*3.5;
+        if(!this.grounded) this.vy=Math.min(this.vy,-3.5);   // airborne arrival bounces off the wall — feeds the existing juggle for a free extension
+        this.stun=Math.max(this.stun||0,14); this._jitT=10;
+        hitstop=Math.max(hitstop,10); addTrauma(0.45); SFX.heavy();
+        sparks(this.x,this.y-90,12,'#fff',5,-Math.sign(preVx)); dust(this.x,this.floorY||GROUND,8,3);
+        ring(this.x,this.y-90,'#ffd34d',48,5); floatText(this.x,this.y-200,'WALL!','#ff8a8a',16);
+      }
       if(this.grounded) this.walkPh += Math.abs(this.vx)*0.085;
+      { const _s=Math.sin(this.walkPh);   // FOOTSTEPS — sound-on-motion; neutral footsies stop being acoustically dead
+        if(this.grounded && Math.abs(this.vx)>2 && (_s>0)!==((this._lstS||0)>0)){ SFX.step(); if(Math.random()<0.4) dust(this.x,this.floorY||GROUND,1,1); }
+        this._lstS=_s; }
       // face the opponent
       if(this.opp && !this.attack && this.grounded && !this.ko)
         this.facing = this.opp.x>this.x?1:-1;
@@ -2025,8 +2050,8 @@ class Fighter {
       if(this.spReady() && game.frame%5===0) ember(this.x+frnd(-15,15), this.y-frnd(0,30), this.accent);
     }
     this.updatePose();
-    // afterimage trail
-    const trailing = this.dodgeT>0 || (this.attack&&this.attack.type==='special'&&this.attack.ph==='act');
+    // afterimage trail — dodges, special actives, and the dash burst (the fastest movement in the game finally smears)
+    const trailing = this.dodgeT>0 || (this.dashCd>16) || (this.attack&&this.attack.type==='special'&&this.attack.ph==='act');
     if(trailing) this.trail.push({x:this.x,y:this.y,facing:this.facing,P:{...this.P},a:0.38});
     for(let i=this.trail.length-1;i>=0;i--){ this.trail[i].a-=0.03; if(this.trail[i].a<=0) this.trail.splice(i,1); }
   }
@@ -2864,7 +2889,7 @@ function resolveHits(att,def){
     // clean hit
     if(punish){ att.addAura(14 + (inCorner(def)?6:0)); def.stun=(def.stun||0)+6;   // punishing a foe's recovery = your neutral REFUEL + a confirm window (v5 #7: a CORNER punish pays +6 more — the wall compounds won exchanges)
       floatText(att.x, att.y-198, 'PUNISH ▸', '#ffd34d', 18); sparks(def.x,def.y-90,10,'#ffd34d',5); addTrauma(0.18); }
-    if(punish || (att.attack&&att.attack.just)){ hitstop=Math.max(hitstop,18); SFX.counter(); ring(cx,cy,'#ff5a5a',34,3); }   // v4/v5 COUNTER-TIER CRUNCH — a whiff-punish or JUST hit freezes HARDEST (audit #12: 12->18, top of the weight ladder) + its own exclusive crack + red ring
+    if(punish || (att.attack&&att.attack.just)){ hitstop=Math.max(hitstop,18); SFX.counter(); duckHit(); ring(cx,cy,'#ff5a5a',34,3); }   // v4/v5 COUNTER-TIER CRUNCH — a whiff-punish or JUST hit freezes HARDEST (audit #12: 12->18, top of the weight ladder) + its exclusive crack punches through the music
     def._jitT=Math.max(def._jitT||0, Math.max(4,hitstop));   // v5 #15 the defender vibrates through the freeze (render-side)
     if(ambush) floatText(def.x,def.y-206,'AMBUSH!','#b48cff',20);
     if(att===game.player){ game.stats.dmg+=Math.round(dmg); game.rushMeter=Math.min(RUSH_MAX,(game.rushMeter||0)+6+((att.attack&&att.attack.just)?4:0)); }  // landing hits charges FOCUS (+JUST credit only on a clean hit)
@@ -2913,6 +2938,7 @@ function resolveHits(att,def){
     if(hb.type==='special'){
       // audit #11 — the big 260ms/0.35× crawl is reserved for the moments that EARN it (a KO-adjacent hit or a tier-3 special); a routine special is a snappier ~130ms/0.55× punch so a special-fishing HARD zoner can't turn the fight into a stutter.
       const bigCrawl = def.hp<=30 || (att.attack.tier||0)>=2;
+      SFX.detonate(); duckHit();   // the connect gets its own explosion AND punches through the music bed
       slowmo(bigCrawl?260:130, bigCrawl?0.35:0.55); flash(bigCrawl?0.3:0.2,'#ffe9b0'); addTrauma(bigCrawl?0.6:0.4);
       ring(cx,cy,'#ffd34d',bigCrawl?90:70,7);
       if(bigCrawl) floatText(def.x,def.y-188,'CRITICAL!','#ffd34d',26);
@@ -7847,6 +7873,7 @@ function loop(now){
     pollGamepad();   // controller → synthetic key events, before this frame's input is read
     const target = (now<slowUntil? slowScale : 1) * (game.cinemaSlow?0.45:1);   // SHOWCASE slow-mo stacks a sustained 0.45× for cinematic capture
     timeScale += (target-timeScale)*0.25;
+    if(musLP && AC) musLP.frequency.setTargetAtTime(timeScale<0.85? 650:18000, AC.currentTime, 0.08);   // the crawl muffles the music — audio and time slow TOGETHER
     acc += Math.min(64, now-last)*timeScale; last=now;
     let n=0;
     while(acc>=STEP && n++<4){ step(); acc-=STEP; }
